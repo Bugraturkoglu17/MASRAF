@@ -1,0 +1,394 @@
+// Masraf Yönetim Sistemi - Prisma Şeması
+// Karar: UUID birincil anahtar, organizationId ile multi-tenant izolasyon,
+// para alanlarında Decimal(14,2), soft delete için deletedAt.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Organizasyon ve departman
+// ---------------------------------------------------------------------------
+
+model Organization {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String?  @db.Uuid
+  updatedBy String?  @db.Uuid
+  deletedAt DateTime?
+
+  departments       Department[]
+  users             User[]
+  roles             Role[]
+  expenseCategories ExpenseCategory[]
+  expenses          Expense[]
+  attachments       Attachment[]
+  notifications     Notification[]
+  auditLogs         AuditLog[]
+
+  @@map("organizations")
+}
+
+model Department {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  name           String
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  createdBy      String?  @db.Uuid
+  updatedBy      String?  @db.Uuid
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  users        User[]
+  expenses     Expense[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("departments")
+}
+
+// ---------------------------------------------------------------------------
+// Kullanıcı, rol, yetki (RBAC)
+// ---------------------------------------------------------------------------
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+model User {
+  id             String     @id @default(uuid()) @db.Uuid
+  organizationId String     @db.Uuid
+  departmentId   String?    @db.Uuid
+  email          String     @unique
+  passwordHash   String
+  firstName      String
+  lastName       String
+  phone          String?
+  status         UserStatus @default(ACTIVE)
+  lastLoginAt    DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  createdBy      String?    @db.Uuid
+  updatedBy      String?    @db.Uuid
+  deletedAt      DateTime?
+
+  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  department      Department?       @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  userRoles       UserRole[]
+  expenses        Expense[]         @relation("ExpenseOwner")
+  approvals       Approval[]        @relation("ApprovalActor")
+  comments        Comment[]
+  notifications   Notification[]
+  refreshTokens   RefreshToken[]
+  statusHistories ExpenseStatusHistory[] @relation("StatusChangedBy")
+
+  @@index([organizationId])
+  @@index([departmentId])
+  @@map("users")
+}
+
+model Role {
+  id             String  @id @default(uuid()) @db.Uuid
+  organizationId String? @db.Uuid
+  name           String
+  description    String?
+  isSystem       Boolean @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization    Organization?    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userRoles       UserRole[]
+  rolePermissions RolePermission[]
+
+  @@unique([organizationId, name])
+  @@map("roles")
+}
+
+enum PermissionAction {
+  CREATE
+  READ
+  UPDATE
+  DELETE
+  APPROVE
+  REJECT
+  EXPORT
+  MANAGE
+}
+
+enum PermissionResource {
+  USER
+  ORGANIZATION
+  DEPARTMENT
+  ROLE
+  EXPENSE
+  EXPENSE_CATEGORY
+  ATTACHMENT
+  REPORT
+  AUDIT_LOG
+  SYSTEM_SETTING
+}
+
+model Permission {
+  id       String              @id @default(uuid()) @db.Uuid
+  action   PermissionAction
+  resource PermissionResource
+
+  rolePermissions RolePermission[]
+
+  @@unique([action, resource])
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String @db.Uuid
+  permissionId String @db.Uuid
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  userId String @db.Uuid
+  roleId String @db.Uuid
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+// ---------------------------------------------------------------------------
+// Kimlik doğrulama oturumları
+// ---------------------------------------------------------------------------
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  replacedByTokenHash String?
+  createdByIp String?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Masraf
+// ---------------------------------------------------------------------------
+
+enum ExpenseStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model ExpenseCategory {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  name           String
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  expenses     Expense[]
+
+  @@unique([organizationId, name])
+  @@map("expense_categories")
+}
+
+model Expense {
+  id                   String        @id @default(uuid()) @db.Uuid
+  organizationId       String        @db.Uuid
+  departmentId         String?       @db.Uuid
+  userId               String        @db.Uuid
+  categoryId           String        @db.Uuid
+  title                String
+  description          String?
+  amount               Decimal       @db.Decimal(14, 2)
+  currency             String        @default("TRY") @db.Char(3)
+  expenseDate          DateTime      @db.Date
+  documentDate         DateTime?     @db.Date
+  status               ExpenseStatus @default(DRAFT)
+  currentApprovalOrder Int           @default(0)
+  rejectionReason      String?
+  submittedAt          DateTime?
+  decidedAt            DateTime?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  createdBy            String?       @db.Uuid
+  updatedBy            String?       @db.Uuid
+  deletedAt            DateTime?
+
+  organization    Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  department      Department?            @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  user            User                   @relation("ExpenseOwner", fields: [userId], references: [id], onDelete: Restrict)
+  category        ExpenseCategory        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  attachments      Attachment[]
+  approvals        Approval[]
+  comments         Comment[]
+  statusHistories  ExpenseStatusHistory[]
+
+  @@index([organizationId, status])
+  @@index([userId])
+  @@map("expenses")
+}
+
+model ExpenseStatusHistory {
+  id           String        @id @default(uuid()) @db.Uuid
+  expenseId    String        @db.Uuid
+  fromStatus   ExpenseStatus?
+  toStatus     ExpenseStatus
+  changedById  String?       @db.Uuid
+  reason       String?
+  createdAt    DateTime      @default(now())
+
+  expense   Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  changedBy User?   @relation("StatusChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@index([expenseId])
+  @@map("expense_status_histories")
+}
+
+enum ApprovalDecision {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Approval {
+  id        String           @id @default(uuid()) @db.Uuid
+  expenseId String           @db.Uuid
+  approverId String          @db.Uuid
+  order      Int             @default(1)
+  decision   ApprovalDecision @default(PENDING)
+  comment    String?
+  decidedAt  DateTime?
+  createdAt  DateTime         @default(now())
+
+  expense  Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  approver User    @relation("ApprovalActor", fields: [approverId], references: [id], onDelete: Restrict)
+
+  @@index([expenseId])
+  @@map("approvals")
+}
+
+// ---------------------------------------------------------------------------
+// Ekler (metadata yalnızca; dosya ikili verisi S3 uyumlu depoda tutulur)
+// ---------------------------------------------------------------------------
+
+model Attachment {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  expenseId      String?  @db.Uuid
+  fileKey        String   @unique
+  fileName       String
+  mimeType       String
+  sizeBytes      Int
+  sha256         String
+  uploadedById   String?  @db.Uuid
+  createdAt      DateTime @default(now())
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  expense      Expense?     @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([expenseId])
+  @@map("attachments")
+}
+
+// ---------------------------------------------------------------------------
+// Yorumlar, bildirimler, audit log
+// ---------------------------------------------------------------------------
+
+model Comment {
+  id        String   @id @default(uuid()) @db.Uuid
+  expenseId String   @db.Uuid
+  userId    String   @db.Uuid
+  body      String
+  createdAt DateTime @default(now())
+  deletedAt DateTime?
+
+  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([expenseId])
+  @@map("comments")
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+}
+
+model Notification {
+  id             String              @id @default(uuid()) @db.Uuid
+  organizationId String              @db.Uuid
+  userId         String              @db.Uuid
+  channel        NotificationChannel @default(IN_APP)
+  title          String
+  body           String
+  readAt         DateTime?
+  createdAt      DateTime            @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  APPROVE
+  REJECT
+  LOGIN
+  LOGOUT
+  UPLOAD
+}
+
+model AuditLog {
+  id             String      @id @default(uuid()) @db.Uuid
+  organizationId String?     @db.Uuid
+  actorId        String?     @db.Uuid
+  action         AuditAction
+  resource       String
+  resourceId     String?
+  metadata       Json?
+  ipAddress      String?
+  createdAt      DateTime    @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, resource])
+  @@index([actorId])
+  @@map("audit_logs")
+}
