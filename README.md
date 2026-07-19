@@ -190,6 +190,8 @@ container. Gerekli CI/CD değişkenleri için [docs/deployment.md](docs/deployme
 ## Northflank Deployment
 
 Adım adım panel talimatları: [docs/northflank-setup.md](docs/northflank-setup.md).
+Northflank'in ücretsiz katmanı yoktur (~$30-36/ay); tamamen ücretsiz bir alternatif için
+[docs/free-tier-deployment.md](docs/free-tier-deployment.md) (Neon + Cloudflare R2 + Render).
 
 ## Dosya Depolama
 
