@@ -1,0 +1,15 @@
+{
+  "extends": "@masraf/tsconfig/node.json",
+  "compilerOptions": {
+    "baseUrl": "./",
+    "rootDir": "src",
+    "outDir": "dist",
+    "incremental": true,
+    "strictNullChecks": true,
+    "noImplicitAny": true,
+    "noUnusedLocals": false,
+    "types": ["node", "jest", "express", "multer"]
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist", "test"]
+}
