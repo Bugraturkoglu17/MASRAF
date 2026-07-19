@@ -37,11 +37,10 @@
     "typescript": "^5.6.2"
   },
   "lint-staged": {
-    "*.{ts,tsx}": [
-      "eslint --fix"
-    ],
-    "*.{ts,tsx,js,jsx,json,md}": [
-      "prettier --write"
-    ]
+    "apps/api/**/*.ts": "eslint --fix -c apps/api/eslint.config.js",
+    "apps/web/**/*.{ts,tsx}": "eslint --fix -c apps/web/eslint.config.cjs",
+    "packages/shared-types/**/*.ts": "eslint --fix -c packages/shared-types/eslint.config.js",
+    "packages/shared-validation/**/*.ts": "eslint --fix -c packages/shared-validation/eslint.config.js",
+    "*.{ts,tsx,js,jsx,cjs,json,md}": "prettier --write"
   }
 }

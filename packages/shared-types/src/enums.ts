@@ -1,0 +1,60 @@
+export enum ExpenseStatus {
+  DRAFT = 'DRAFT',
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum UserStatus {
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
+  SUSPENDED = 'SUSPENDED',
+}
+
+export enum SystemRole {
+  OWNER = 'OWNER',
+  ADMIN = 'ADMIN',
+  MANAGER = 'MANAGER',
+  ACCOUNTANT = 'ACCOUNTANT',
+  EMPLOYEE = 'EMPLOYEE',
+}
+
+export enum PermissionAction {
+  CREATE = 'CREATE',
+  READ = 'READ',
+  UPDATE = 'UPDATE',
+  DELETE = 'DELETE',
+  APPROVE = 'APPROVE',
+  REJECT = 'REJECT',
+  EXPORT = 'EXPORT',
+  MANAGE = 'MANAGE',
+}
+
+export enum PermissionResource {
+  USER = 'USER',
+  ORGANIZATION = 'ORGANIZATION',
+  DEPARTMENT = 'DEPARTMENT',
+  ROLE = 'ROLE',
+  EXPENSE = 'EXPENSE',
+  EXPENSE_CATEGORY = 'EXPENSE_CATEGORY',
+  ATTACHMENT = 'ATTACHMENT',
+  REPORT = 'REPORT',
+  AUDIT_LOG = 'AUDIT_LOG',
+  SYSTEM_SETTING = 'SYSTEM_SETTING',
+}
+
+export enum StorageProviderType {
+  S3 = 's3',
+}
+
+export enum AuditAction {
+  CREATE = 'CREATE',
+  UPDATE = 'UPDATE',
+  DELETE = 'DELETE',
+  APPROVE = 'APPROVE',
+  REJECT = 'REJECT',
+  LOGIN = 'LOGIN',
+  LOGOUT = 'LOGOUT',
+  UPLOAD = 'UPLOAD',
+}
