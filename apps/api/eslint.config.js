@@ -10,7 +10,8 @@ module.exports = [
     // "Nest can't resolve dependencies" hatasına yol açar; bu yüzden bu
     // kural NestJS kaynak kodunda kapalıdır (import stili tercihi, çalışma
     // zamanı doğruluğundan önemli değildir).
-    files: ['src/**/*.ts'],
+    files: ['**/*.ts'],
+    ignores: ['**/*.spec.ts', 'prisma/**'],
     rules: {
       '@typescript-eslint/consistent-type-imports': 'off',
     },
@@ -18,7 +19,7 @@ module.exports = [
   {
     // Seed betiği bir CLI aracıdır; operatöre ilerleme bilgisi vermek için
     // console.log kullanımı burada meşrudur.
-    files: ['prisma/seed.ts'],
+    files: ['**/prisma/seed.ts'],
     rules: {
       'no-console': 'off',
     },

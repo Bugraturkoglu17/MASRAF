@@ -6,7 +6,7 @@ import {
   type AuthenticatedUser,
 } from '../../common/decorators/current-user.decorator';
 
-import type { OrganizationsService } from './organizations.service';
+import { OrganizationsService } from './organizations.service';
 
 @ApiTags('organizations')
 @ApiBearerAuth()

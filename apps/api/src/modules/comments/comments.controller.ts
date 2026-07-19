@@ -7,7 +7,7 @@ import {
 } from '../../common/decorators/current-user.decorator';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 
-import type { CommentsService } from './comments.service';
+import { CommentsService } from './comments.service';
 import { createCommentSchema, type CreateCommentInput } from './comments.service';
 
 @ApiTags('comments')

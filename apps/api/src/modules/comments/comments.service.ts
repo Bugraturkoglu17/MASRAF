@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 
 import { NotFoundAppException } from '../../common/exceptions/app.exception';
-import type { PrismaService } from '../../database/prisma.service';
+import { PrismaService } from '../../database/prisma.service';
 
 export const createCommentSchema = z.object({
   body: z.string().trim().min(1, 'Yorum boş olamaz.').max(1000),

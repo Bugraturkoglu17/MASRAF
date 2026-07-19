@@ -16,7 +16,7 @@ import {
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 
-import type { ExpensesService } from './expenses.service';
+import { ExpensesService } from './expenses.service';
 
 @ApiTags('expenses')
 @ApiBearerAuth()

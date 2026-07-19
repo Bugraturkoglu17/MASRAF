@@ -6,7 +6,7 @@ import {
   type AuthenticatedUser,
 } from '../../common/decorators/current-user.decorator';
 
-import type { ExpenseCategoriesService } from './expense-categories.service';
+import { ExpenseCategoriesService } from './expense-categories.service';
 
 @ApiTags('expense-categories')
 @ApiBearerAuth()

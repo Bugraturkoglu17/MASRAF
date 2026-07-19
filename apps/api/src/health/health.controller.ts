@@ -1,12 +1,11 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import type { HealthCheckService } from '@nestjs/terminus';
-import { HealthCheck } from '@nestjs/terminus';
+import { HealthCheck, HealthCheckService } from '@nestjs/terminus';
 
 import { Public } from '../common/decorators/public.decorator';
 
-import type { DatabaseHealthIndicator } from './prisma.health-indicator';
-import type { StorageHealthIndicator } from './storage.health-indicator';
+import { DatabaseHealthIndicator } from './prisma.health-indicator';
+import { StorageHealthIndicator } from './storage.health-indicator';
 
 /**
  * Northflank ve diğer platformların health check probe'ları için.

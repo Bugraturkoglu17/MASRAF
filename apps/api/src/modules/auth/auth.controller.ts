@@ -9,7 +9,7 @@ import {
   UnauthorizedException,
   UsePipes,
 } from '@nestjs/common';
-import type { ConfigService } from '@nestjs/config';
+import { ConfigService } from '@nestjs/config';
 import { ApiTags } from '@nestjs/swagger';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
@@ -18,7 +18,7 @@ import { Public } from '../../common/decorators/public.decorator';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import type { AppConfig } from '../../config/configuration';
 
-import type { AuthService } from './auth.service';
+import { AuthService } from './auth.service';
 
 const REFRESH_COOKIE_NAME = 'masraf_refresh_token';
 

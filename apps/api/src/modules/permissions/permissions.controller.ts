@@ -4,7 +4,7 @@ import { PermissionAction, PermissionResource } from '@prisma/client';
 
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 
-import type { PermissionsService } from './permissions.service';
+import { PermissionsService } from './permissions.service';
 
 @ApiTags('permissions')
 @ApiBearerAuth()

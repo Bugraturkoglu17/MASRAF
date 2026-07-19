@@ -10,7 +10,7 @@ import {
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { MAX_ATTACHMENT_SIZE_BYTES } from '../../storage/file-validation';
 
-import type { AttachmentsService } from './attachments.service';
+import { AttachmentsService } from './attachments.service';
 
 @ApiTags('attachments')
 @ApiBearerAuth()

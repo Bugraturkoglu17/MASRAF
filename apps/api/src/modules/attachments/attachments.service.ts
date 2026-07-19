@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 
 import { ForbiddenAppException, NotFoundAppException } from '../../common/exceptions/app.exception';
-import type { PrismaService } from '../../database/prisma.service';
-import type { StorageService } from '../../storage/storage.service';
-import type { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { PrismaService } from '../../database/prisma.service';
+import { StorageService } from '../../storage/storage.service';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 
 @Injectable()
 export class AttachmentsService {

@@ -8,9 +8,9 @@ import {
   NotFoundAppException,
 } from '../../common/exceptions/app.exception';
 import { buildPaginatedResult, toPrismaSkipTake } from '../../common/utils/pagination.util';
-import type { PrismaService } from '../../database/prisma.service';
-import type { AuditLogsService } from '../audit-logs/audit-logs.service';
-import type { NotificationsService } from '../notifications/notifications.service';
+import { PrismaService } from '../../database/prisma.service';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class ExpensesService {

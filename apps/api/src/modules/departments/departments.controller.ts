@@ -6,7 +6,7 @@ import {
   type AuthenticatedUser,
 } from '../../common/decorators/current-user.decorator';
 
-import type { DepartmentsService } from './departments.service';
+import { DepartmentsService } from './departments.service';
 
 @ApiTags('departments')
 @ApiBearerAuth()

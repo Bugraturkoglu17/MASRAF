@@ -8,7 +8,7 @@ import {
 } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 
-import type { RolesService } from './roles.service';
+import { RolesService } from './roles.service';
 
 @ApiTags('roles')
 @ApiBearerAuth()

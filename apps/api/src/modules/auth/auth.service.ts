@@ -1,13 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import { Injectable, UnauthorizedException } from '@nestjs/common';
-import type { ConfigService } from '@nestjs/config';
-import type { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 
 import type { AppConfig } from '../../config/configuration';
-import type { PrismaService } from '../../database/prisma.service';
-import type { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { PrismaService } from '../../database/prisma.service';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 
 import type { AccessTokenPayload } from './token.types';
 

@@ -6,7 +6,7 @@ import {
   type AuthenticatedUser,
 } from '../../common/decorators/current-user.decorator';
 
-import type { NotificationsService } from './notifications.service';
+import { NotificationsService } from './notifications.service';
 
 @ApiTags('notifications')
 @ApiBearerAuth()
