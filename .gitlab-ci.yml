@@ -1,0 +1,138 @@
+stages:
+  - install
+  - lint
+  - typecheck
+  - test
+  - build
+  - container
+
+variables:
+  PNPM_CACHE_DIR: '$CI_PROJECT_DIR/.pnpm-store'
+  # Test aşamasında kullanılan değerler yalnızca CI'ya özeldir; üretimde
+  # kullanılmaz. Gerçek secret'lar asla burada tutulmaz, GitLab CI/CD
+  # Variables bölümünden sağlanır (bkz. docs/deployment.md).
+  DATABASE_URL: 'postgresql://postgres:postgres@postgres:5432/masraf_test?schema=public'
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+  POSTGRES_DB: masraf_test
+  JWT_ACCESS_SECRET: 'ci-test-access-secret-please-change-32chars'
+  JWT_REFRESH_SECRET: 'ci-test-refresh-secret-please-change-32chars'
+  COOKIE_SECRET: 'ci-test-cookie-secret-please-change-32chars'
+  WEB_URL: 'http://localhost:3000'
+  API_URL: 'http://localhost:4000'
+  VITE_API_URL: 'http://localhost:4000/api/v1'
+  CORS_ORIGINS: 'http://localhost:3000'
+  S3_ENDPOINT: 'http://minio:9000'
+  S3_BUCKET: 'masraf-attachments-test'
+  S3_ACCESS_KEY_ID: 'minioadmin'
+  S3_SECRET_ACCESS_KEY: 'minioadmin'
+
+default:
+  image: node:20-alpine
+  cache:
+    key:
+      files:
+        - pnpm-lock.yaml
+    paths:
+      - .pnpm-store
+    policy: pull
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@9.12.0 --activate
+    - pnpm config set store-dir $PNPM_CACHE_DIR
+
+install:
+  stage: install
+  cache:
+    key:
+      files:
+        - pnpm-lock.yaml
+    paths:
+      - .pnpm-store
+      - node_modules
+    policy: pull-push
+  script:
+    - pnpm install --frozen-lockfile
+  artifacts:
+    paths:
+      - node_modules
+    expire_in: 1 hour
+
+lint:
+  stage: lint
+  needs: ['install']
+  script:
+    - pnpm lint
+
+typecheck:
+  stage: typecheck
+  needs: ['install']
+  script:
+    - pnpm typecheck
+
+test:api:
+  stage: test
+  needs: ['install']
+  services:
+    - name: postgres:16-alpine
+      alias: postgres
+  variables:
+    POSTGRES_HOST_AUTH_METHOD: trust
+  script:
+    - pnpm --filter @masraf/api db:generate
+    - pnpm --filter @masraf/api test:cov
+  coverage: '/All files[^|]*\|[^|]*\s+([\d\.]+)/'
+  artifacts:
+    paths:
+      - apps/api/coverage
+    expire_in: 1 week
+
+test:web:
+  stage: test
+  needs: ['install']
+  script:
+    - pnpm --filter @masraf/web test:cov
+  artifacts:
+    paths:
+      - apps/web/coverage
+    expire_in: 1 week
+
+build:
+  stage: build
+  needs: ['install', 'lint', 'typecheck']
+  script:
+    - pnpm --filter @masraf/api db:generate
+    - pnpm build
+  artifacts:
+    paths:
+      - apps/api/dist
+      - apps/web/dist
+    expire_in: 1 week
+
+# Container image'ları yalnızca varsayılan (main/master) dalda oluşturulur.
+# GitLab Container Registry'yi kullanır; Northflank'in doğrudan GitLab
+# repository'sinden build alması tercih edilirse bu job'lar devre dışı
+# bırakılabilir (bkz. docs/northflank-setup.md).
+.container_build:
+  stage: container
+  image: docker:27
+  services:
+    - docker:27-dind
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+
+container:api:
+  extends: .container_build
+  script:
+    - docker build -f apps/api/Dockerfile -t "$CI_REGISTRY_IMAGE/api:$CI_COMMIT_SHORT_SHA" -t "$CI_REGISTRY_IMAGE/api:latest" .
+    - docker push "$CI_REGISTRY_IMAGE/api:$CI_COMMIT_SHORT_SHA"
+    - docker push "$CI_REGISTRY_IMAGE/api:latest"
+
+container:web:
+  extends: .container_build
+  script:
+    - docker build -f apps/web/Dockerfile -t "$CI_REGISTRY_IMAGE/web:$CI_COMMIT_SHORT_SHA" -t "$CI_REGISTRY_IMAGE/web:latest" .
+    - docker push "$CI_REGISTRY_IMAGE/web:$CI_COMMIT_SHORT_SHA"
+    - docker push "$CI_REGISTRY_IMAGE/web:latest"
