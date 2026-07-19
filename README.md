@@ -1,93 +1,244 @@
-# MASRAF SUNUCU
+# Masraf Yönetim Sistemi
 
+Şirket içi masraf oluşturma, onay ve takip süreçlerini yönetmek için geliştirilen, çok
+kiracılı (multi-tenant) mimariye açık, TypeScript tabanlı bir monorepo.
 
+Bu sürüm **altyapı iskeletidir**: kimlik doğrulama, yetkilendirme (RBAC), dosya depolama,
+loglama, health check, test ve CI/CD altyapısı çalışır durumdadır. Masraf ekranlarının
+tamamı (raporlama, gelişmiş filtreler, bildirim merkezi vb.) sonraki geliştirme
+aşamalarında eklenecektir — bkz. [Gelecek Geliştirmeler](#gelecek-geliştirmeler).
 
-## Getting started
+## İçindekiler
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+- [Mimari Özeti](#mimari-özeti)
+- [Teknoloji Listesi](#teknoloji-listesi)
+- [Gereksinimler](#gereksinimler)
+- [Kurulum](#kurulum)
+- [Environment Variables](#environment-variables)
+- [Development Çalıştırma](#development-çalıştırma)
+- [Docker ile Çalıştırma](#docker-ile-çalıştırma)
+- [Veritabanı Migration](#veritabanı-migration)
+- [Seed](#seed)
+- [Test](#test)
+- [Lint / Typecheck](#lint--typecheck)
+- [Build](#build)
+- [Swagger](#swagger)
+- [PWA Testi](#pwa-testi)
+- [GitLab Kullanımı](#gitlab-kullanımı)
+- [Northflank Deployment](#northflank-deployment)
+- [Dosya Depolama](#dosya-depolama)
+- [Güvenlik Notları](#güvenlik-notları)
+- [Sorun Giderme](#sorun-giderme)
+- [Klasör Yapısı](#klasör-yapısı)
+- [Gelecek Geliştirmeler](#gelecek-geliştirmeler)
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+## Mimari Özeti
 
 ```
-cd existing_repo
+Kullanıcı → PWA Frontend (React) → REST API (NestJS) → PostgreSQL (Prisma)
+                                                       → S3 uyumlu depolama
+```
+
+Detaylı mimari kararlar ve diyagramlar için [docs/architecture.md](docs/architecture.md).
+
+## Teknoloji Listesi
+
+| Katman | Teknoloji |
+| --- | --- |
+| Monorepo | pnpm workspaces + Turborepo |
+| Frontend | React 18 + Vite + TypeScript, vite-plugin-pwa |
+| Backend | NestJS 10 + TypeScript |
+| Veritabanı | PostgreSQL 16 + Prisma ORM |
+| API dokümantasyonu | Swagger / OpenAPI |
+| Frontend veri yönetimi | TanStack Query |
+| Form | React Hook Form + Zod |
+| Test | Vitest (web), Jest + Supertest (api) |
+| Kod kalitesi | ESLint 9 (flat config), Prettier, TypeScript strict |
+| Konteyner | Docker (multi-stage), Docker Compose |
+| Depolama | S3 uyumlu (AWS S3 / Cloudflare R2 / Backblaze B2 / MinIO) |
+| Loglama | nestjs-pino (yapılandırılmış JSON) |
+| Kimlik doğrulama | JWT access + refresh token rotasyonu |
+
+## Gereksinimler
+
+- Node.js >= 20
+- pnpm >= 9 (`corepack enable` ile gelir)
+- Docker + Docker Compose (lokal PostgreSQL/MinIO için)
+
+## Kurulum
+
+```bash
+git clone https://gitlab.com/bugraturkoglu441/masraf-sunucu.git
+cd masraf-sunucu
+cp .env.example .env
+pnpm install
+```
+
+`.env` dosyasındaki `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` ve `COOKIE_SECRET`
+değerlerini en az 32 karakterlik rastgele değerlerle değiştirin:
+
+```bash
+openssl rand -base64 48
+```
+
+## Environment Variables
+
+Tüm değişkenler [docs/environment-variables.md](docs/environment-variables.md) içinde
+açıklanmıştır. Kaynak dosya: [.env.example](.env.example).
+
+## Development Çalıştırma
+
+PostgreSQL ve MinIO'yu Docker ile ayağa kaldırıp API/web'i lokalde çalıştırmak en hızlı yol:
+
+```bash
+docker compose up -d postgres minio minio-init
+pnpm db:migrate
+pnpm db:seed
+pnpm dev
+```
+
+- Web: http://localhost:3000
+- API: http://localhost:4000/api/v1
+- Swagger: http://localhost:4000/api/docs
+- MinIO konsolu: http://localhost:9001 (kullanıcı/şifre: `.env` içindeki `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`)
+
+## Docker ile Çalıştırma
+
+```bash
+docker compose up --build
+docker compose down
+```
+
+Üretime yakın bir çalıştırma için:
+
+```bash
+docker compose -f docker-compose.production.yml up --build
+```
+
+## Veritabanı Migration
+
+```bash
+pnpm db:generate   # Prisma client üret
+pnpm db:migrate    # development migration oluştur/uygula
+pnpm db:deploy     # production'da bekleyen migration'ları uygula (yalnızca deploy)
+pnpm db:studio     # Prisma Studio
+```
+
+Production'da migration'ın ne zaman çalıştırılacağı için
+[docs/deployment.md](docs/deployment.md#migration-stratejisi).
+
+## Seed
+
+```bash
+pnpm db:seed
+```
+
+Demo organizasyon, roller/izinler ve `owner@demo.local` / `ChangeMe123!` kullanıcısı
+oluşturur. **Yalnızca development/staging için kullanın.**
+
+## Test
+
+```bash
+pnpm test          # tüm workspace'lerde unit test
+pnpm test:cov       # coverage ile
+pnpm --filter @masraf/api test:e2e   # API e2e (gerçek PostgreSQL/MinIO gerektirir)
+```
+
+Test veritabanı `docker-compose.yml` / CI pipeline'ında ayrı bir veritabanı adıyla
+(`masraf_test`) production'dan tamamen izole tutulur.
+
+## Lint / Typecheck
+
+```bash
+pnpm lint
+pnpm typecheck
+```
+
+## Build
+
+```bash
+pnpm build
+```
+
+## Swagger
+
+API ayaktayken: http://localhost:4000/api/docs
+
+## PWA Testi
+
+1. `pnpm build && pnpm --filter @masraf/web preview` (PWA özellikleri yalnızca prod
+   build'te aktiftir; `pnpm dev` sırasında service worker devre dışıdır).
+2. Chrome DevTools → Application → Manifest ve Service Workers sekmelerinden kaydı
+   doğrulayın.
+3. Network sekmesinden "Offline" seçeneğini işaretleyip sayfayı yenileyerek
+   `offline.html` yedek sayfasını görün.
+4. Yeni bir build ile service worker güncellemesi tetiklendiğinde uygulama içi
+   "Güncelle" bildirimini test edin.
+
+## GitLab Kullanımı
+
+```bash
 git remote add origin https://gitlab.com/bugraturkoglu441/masraf-sunucu.git
-git branch -M main
-git push -uf origin main
+git add .
+git commit -m "chore: initialize expense management application architecture"
+git push -u origin main
 ```
 
-## Integrate with your tools
+Pipeline: [.gitlab-ci.yml](.gitlab-ci.yml) — install → lint → typecheck → test → build →
+container. Gerekli CI/CD değişkenleri için [docs/deployment.md](docs/deployment.md).
 
-* [Set up project integrations](https://gitlab.com/bugraturkoglu441/masraf-sunucu/-/settings/integrations)
+## Northflank Deployment
 
-## Collaborate with your team
+Adım adım panel talimatları: [docs/northflank-setup.md](docs/northflank-setup.md).
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+## Dosya Depolama
 
-## Test and Deploy
+Sağlayıcıdan bağımsız `StorageProvider` arayüzü ve güvenlik önlemleri için
+[docs/storage.md](docs/storage.md).
 
-Use the built-in continuous integration in GitLab.
+## Güvenlik Notları
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+Özet: JWT access token bellekte (frontend), refresh token httpOnly cookie'de tutulur;
+şifreler argon2 ile hash'lenir; RBAC + organizasyon izolasyonu her istekte doğrulanır.
+Detaylar: [docs/security.md](docs/security.md).
 
-***
+## Sorun Giderme
 
-# Editing this README
+| Belirti | Olası neden | Çözüm |
+| --- | --- | --- |
+| API başlarken "Ortam değişkenleri doğrulaması başarısız" hatası | `.env` eksik/hatalı alan | Hata mesajındaki alan listesini `.env.example` ile karşılaştırın |
+| `pnpm db:migrate` bağlantı hatası veriyor | PostgreSQL ayakta değil | `docker compose up -d postgres` |
+| Dosya yükleme 500 hatası | MinIO/S3 erişilemiyor | `docker compose up -d minio minio-init`, bucket'ın oluştuğunu doğrulayın |
+| `/health/ready` 503 dönüyor | DB veya storage erişilemiyor | Terminus yanıtındaki `details` alanına bakın |
+| Frontend'de CORS hatası | `CORS_ORIGINS` frontend adresini içermiyor | `.env` içinde `CORS_ORIGINS` değerini güncelleyin |
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+## Klasör Yapısı
 
-## Suggestions for a good README
+```text
+masraf-sunucu/
+├── apps/
+│   ├── web/     # React + Vite PWA
+│   └── api/     # NestJS REST API
+├── packages/
+│   ├── shared-types/       # Ortak TypeScript tipleri
+│   ├── shared-validation/  # Ortak Zod şemaları
+│   ├── eslint-config/      # Paylaşılan ESLint flat config
+│   └── tsconfig/           # Paylaşılan tsconfig taban dosyaları
+├── infrastructure/
+│   └── nginx/   # Web container için nginx yapılandırması
+├── docs/        # Teknik dokümantasyon
+├── .gitlab-ci.yml
+├── docker-compose.yml
+├── docker-compose.production.yml
+└── .env.example
+```
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+## Gelecek Geliştirmeler
 
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+- Masraf oluşturma/onay ekranlarının frontend'e bağlanması (backend uçları hazır)
+- Raporlama ve dışa aktarma (CSV/Excel/PDF)
+- Departman/rol yönetimi ekranları
+- Tam çevrimdışı senkronizasyon (bugün yalnızca uygulama kabuğu önbelleklenir)
+- E-posta bildirimleri (SMTP altyapısı `.env` içinde tanımlı, servis entegrasyonu yapılmadı)
+- Şifre sıfırlama akışının uçtan uca tamamlanması
+- Çoklu onay sırası (bugün tek aşamalı onay/red uygulanmıştır)
