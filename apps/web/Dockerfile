@@ -28,6 +28,8 @@ ARG VITE_API_URL=/api/v1
 ENV VITE_API_URL=$VITE_API_URL
 COPY packages ./packages
 COPY apps/web ./apps/web
+RUN pnpm --filter @masraf/shared-types build
+RUN pnpm --filter @masraf/shared-validation build
 RUN pnpm --filter @masraf/web build
 
 # ---------------------------------------------------------------------------

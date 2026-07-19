@@ -43,15 +43,26 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       status = exception.getStatus();
       const body = exception.getResponse();
       code = HttpStatus[status] ?? 'HTTP_ERROR';
+      message = exception.message || message;
       if (typeof body === 'string') {
         message = body;
       } else if (typeof body === 'object' && body !== null) {
-        const objBody = body as { message?: string | string[]; error?: string };
-        message = Array.isArray(objBody.message)
-          ? 'Gönderilen bilgiler geçersiz.'
-          : (objBody.message ?? message);
-        details = Array.isArray(objBody.message) ? objBody.message : undefined;
-        code = objBody.error ?? code;
+        // NestJS'in kendi HttpException'ları { message, error } döner;
+        // @nestjs/terminus gibi kütüphaneler farklı bir gövde (ör. { status,
+        // info, error: {...checks} }) üretebilir — `error` orada string
+        // olmayabilir, bu yüzden yalnızca string ise code olarak kullanılır.
+        const objBody = body as { message?: string | string[]; error?: unknown; details?: unknown };
+        if (Array.isArray(objBody.message)) {
+          message = 'Gönderilen bilgiler geçersiz.';
+          details = objBody.message;
+        } else if (typeof objBody.message === 'string') {
+          message = objBody.message;
+        }
+        if (typeof objBody.error === 'string') {
+          code = objBody.error;
+        } else if (objBody.error && typeof objBody.error === 'object') {
+          details = [objBody.error];
+        }
       }
     } else if (exception instanceof Error) {
       this.logger.error(exception.message, exception.stack, requestId);

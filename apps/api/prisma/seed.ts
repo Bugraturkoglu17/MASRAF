@@ -72,7 +72,7 @@ async function main() {
   const employeePermissions = permissions.filter(
     (p) =>
       p.resource === PermissionResource.EXPENSE &&
-      [PermissionAction.CREATE, PermissionAction.READ].includes(p.action),
+      ([PermissionAction.CREATE, PermissionAction.READ] as PermissionAction[]).includes(p.action),
   );
   for (const permission of employeePermissions) {
     await prisma.rolePermission.upsert({

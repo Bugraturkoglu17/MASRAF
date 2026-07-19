@@ -25,6 +25,12 @@ RUN pnpm install --frozen-lockfile --filter @masraf/api...
 FROM deps AS build
 COPY packages ./packages
 COPY apps/api ./apps/api
+# @masraf/shared-types ve @masraf/shared-validation ham TypeScript kaynağı
+# değil, derlenmiş JS/d.ts (dist/) sunar; apps/api bunlara node_modules
+# üzerinden çalışma zamanında (düz `node`, bundler yok) bağımlı olduğu için
+# önce onların derlenmesi gerekir.
+RUN pnpm --filter @masraf/shared-types build
+RUN pnpm --filter @masraf/shared-validation build
 RUN pnpm --filter @masraf/api db:generate
 RUN pnpm --filter @masraf/api build
 RUN pnpm deploy --filter @masraf/api --prod /repo/deploy/api

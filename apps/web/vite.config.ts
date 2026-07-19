@@ -67,6 +67,15 @@ export default defineConfig({
   server: {
     port: Number(process.env.WEB_PORT ?? 3000),
   },
+  build: {
+    commonjsOptions: {
+      // packages/shared-* pnpm workspace symlinkleri gerçek yol çözümünde
+      // node_modules dışında kalır; Rollup'ın varsayılan commonjs eklentisi
+      // bu yüzden onları CJS olarak tanımayıp named export'ları statik
+      // çözemez ("X is not exported" hatası). Burada açıkça dahil ediyoruz.
+      include: [/packages\/shared-.*\/dist/, /node_modules/],
+    },
+  },
   test: {
     environment: 'jsdom',
     globals: true,
