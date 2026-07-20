@@ -7,8 +7,11 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // DATABASE_URL: Neon pooler bağlantısı (runtime, PgBouncer transaction mode)
+  url       = env("DATABASE_URL")
+  // DIRECT_URL: Neon doğrudan bağlantısı (prisma migrate / generate)
+  directUrl = env("DIRECT_URL")
 }
 
 // ---------------------------------------------------------------------------

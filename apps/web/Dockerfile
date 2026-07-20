@@ -1,46 +1,60 @@
-# syntax=docker/dockerfile:1
+# ─────────────────────────────────────────────────────────────────────────────
+# Aşama 1: Bağımlılıkları kur
+# ─────────────────────────────────────────────────────────────────────────────
+FROM node:20-alpine AS deps
 
-# ---------------------------------------------------------------------------
-# 1) base
-# ---------------------------------------------------------------------------
-FROM node:20-alpine AS base
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
-WORKDIR /repo
 
-# ---------------------------------------------------------------------------
-# 2) deps
-# ---------------------------------------------------------------------------
-FROM base AS deps
-COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
-COPY apps/web/package.json apps/web/package.json
-COPY packages/shared-types/package.json packages/shared-types/package.json
-COPY packages/shared-validation/package.json packages/shared-validation/package.json
-COPY packages/eslint-config/package.json packages/eslint-config/package.json
-COPY packages/tsconfig/package.json packages/tsconfig/package.json
-RUN pnpm install --frozen-lockfile --filter @masraf/web...
+WORKDIR /app
 
-# ---------------------------------------------------------------------------
-# 3) build: derleme zamanı VITE_API_URL build arg olarak alınır (Vite,
-# ortam değişkenlerini build anında gömer, çalışma zamanında değiştirilemez).
-# ---------------------------------------------------------------------------
-FROM deps AS build
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/web/package.json                   ./apps/web/
+COPY packages/shared-types/package.json      ./packages/shared-types/
+COPY packages/shared-validation/package.json ./packages/shared-validation/
+COPY packages/eslint-config/package.json     ./packages/eslint-config/
+COPY packages/tsconfig/package.json          ./packages/tsconfig/
+
+RUN pnpm install --frozen-lockfile --ignore-scripts
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Aşama 2: Vite build
+# VITE_API_URL build-time ARG olarak alınır; tarayıcıya gömülür.
+# Northflank'te bu değer Build Arguments olarak verilir.
+# ─────────────────────────────────────────────────────────────────────────────
+FROM deps AS builder
+
+# Northflank / Prod: VITE_API_URL=/api/v1 (relative — Nginx proxy üzerinden)
+# Lokal dev: VITE_API_URL=http://localhost:4000/api/v1
 ARG VITE_API_URL=/api/v1
-ENV VITE_API_URL=$VITE_API_URL
-COPY packages ./packages
-COPY apps/web ./apps/web
-RUN pnpm --filter @masraf/shared-types build
-RUN pnpm --filter @masraf/shared-validation build
+ENV VITE_API_URL=${VITE_API_URL}
+
+WORKDIR /app
+
+COPY packages/ ./packages/
+COPY apps/web/ ./apps/web/
+
 RUN pnpm --filter @masraf/web build
 
-# ---------------------------------------------------------------------------
-# 4) runtime: statik dosyalar nginx ile, non-root
-# ---------------------------------------------------------------------------
-FROM nginxinc/nginx-unprivileged:1.27-alpine AS runtime
-COPY --chown=nginx:nginx infrastructure/nginx/web.conf /etc/nginx/conf.d/default.conf
-COPY --from=build --chown=nginx:nginx /repo/apps/web/dist /usr/share/nginx/html
+# ─────────────────────────────────────────────────────────────────────────────
+# Aşama 3: Nginx — PWA dosyalarını sun, /api isteklerini backend'e proxy et
+# Non-root kullanıcı ile çalışır.
+# ─────────────────────────────────────────────────────────────────────────────
+FROM nginx:1.27-alpine AS production
+
+# Non-root için Nginx'in yazma ihtiyacı duyduğu dizinleri hazırla
+RUN chown -R nginx:nginx /var/cache/nginx /var/log/nginx /etc/nginx/conf.d && \
+    touch /var/run/nginx.pid && \
+    chown nginx:nginx /var/run/nginx.pid
+
+COPY infrastructure/nginx/web.conf /etc/nginx/conf.d/default.conf
+
+COPY --from=builder /app/apps/web/dist /usr/share/nginx/html
+
+USER nginx
 
 EXPOSE 8080
+
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget -qO- http://127.0.0.1:8080/ >/dev/null || exit 1
+  CMD wget -qO- http://localhost:8080/ || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]

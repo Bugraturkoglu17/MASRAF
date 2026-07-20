@@ -1,58 +1,67 @@
-# syntax=docker/dockerfile:1
+# ─────────────────────────────────────────────────────────────────────────────
+# Aşama 1: Bağımlılıkları kur (workspace symlink'leri dahil)
+# ─────────────────────────────────────────────────────────────────────────────
+FROM node:20-alpine AS deps
 
-# ---------------------------------------------------------------------------
-# 1) base: pnpm kurulu, ortak temel katman
-# ---------------------------------------------------------------------------
-FROM node:20-alpine AS base
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
-WORKDIR /repo
 
-# ---------------------------------------------------------------------------
-# 2) deps: yalnızca manifest dosyaları ile bağımlılıkları kur (cache dostu)
-# ---------------------------------------------------------------------------
-FROM base AS deps
-COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
-COPY apps/api/package.json apps/api/package.json
-COPY packages/shared-types/package.json packages/shared-types/package.json
-COPY packages/shared-validation/package.json packages/shared-validation/package.json
-COPY packages/eslint-config/package.json packages/eslint-config/package.json
-COPY packages/tsconfig/package.json packages/tsconfig/package.json
-RUN pnpm install --frozen-lockfile --filter @masraf/api...
-
-# ---------------------------------------------------------------------------
-# 3) build: kaynak kodu ekle, Prisma client üret, derle
-# ---------------------------------------------------------------------------
-FROM deps AS build
-COPY packages ./packages
-COPY apps/api ./apps/api
-# @masraf/shared-types ve @masraf/shared-validation ham TypeScript kaynağı
-# değil, derlenmiş JS/d.ts (dist/) sunar; apps/api bunlara node_modules
-# üzerinden çalışma zamanında (düz `node`, bundler yok) bağımlı olduğu için
-# önce onların derlenmesi gerekir.
-RUN pnpm --filter @masraf/shared-types build
-RUN pnpm --filter @masraf/shared-validation build
-RUN pnpm --filter @masraf/api db:generate
-RUN pnpm --filter @masraf/api build
-RUN pnpm deploy --filter @masraf/api --prod /repo/deploy/api
-
-# ---------------------------------------------------------------------------
-# 4) runtime: küçük, non-root, yalnızca üretim bağımlılıkları
-# ---------------------------------------------------------------------------
-FROM node:20-alpine AS runtime
-ENV NODE_ENV=production
 WORKDIR /app
+
+# Workspace manifest'lerini kopyala (önbellek katmanını maksimize eder)
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json                 ./apps/api/
+COPY packages/shared-types/package.json    ./packages/shared-types/
+COPY packages/shared-validation/package.json ./packages/shared-validation/
+COPY packages/eslint-config/package.json   ./packages/eslint-config/
+COPY packages/tsconfig/package.json        ./packages/tsconfig/
+
+RUN pnpm install --frozen-lockfile --ignore-scripts
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Aşama 2: Prisma client üret + TypeScript derle + prod deploy
+# ─────────────────────────────────────────────────────────────────────────────
+FROM deps AS builder
+
+WORKDIR /app
+
+COPY packages/ ./packages/
+COPY apps/api/ ./apps/api/
+
+# Prisma şemasını generate et
+RUN pnpm --filter @masraf/api db:generate
+
+# NestJS build
+RUN pnpm --filter @masraf/api build
+
+# Üretim bağımlılıklarını izole et (pnpm deploy, workspace symlink'lerini çözer)
+RUN pnpm --filter @masraf/api --prod deploy /prod/api
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Aşama 3: Üretim imajı (minimal, non-root)
+# ─────────────────────────────────────────────────────────────────────────────
+FROM node:20-alpine AS production
 
 RUN addgroup -S masraf && adduser -S masraf -G masraf
 
-COPY --from=build /repo/deploy/api/node_modules ./node_modules
-COPY --from=build /repo/apps/api/dist ./dist
-COPY --from=build /repo/apps/api/prisma ./prisma
-COPY --from=build /repo/apps/api/package.json ./package.json
+WORKDIR /app
+
+# Üretim node_modules (pnpm deploy çıktısı)
+COPY --from=builder /prod/api/node_modules ./node_modules
+
+# Derleme çıktısı
+COPY --from=builder /app/apps/api/dist ./dist
+
+# Prisma migration dosyaları (production'da migrate deploy için gerekli)
+COPY --from=builder /app/apps/api/prisma ./prisma
+
+RUN chown -R masraf:masraf /app
 
 USER masraf
 
+ENV NODE_ENV=production
 EXPOSE 4000
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD node -e "require('node:http').get('http://127.0.0.1:4000/health/live',res=>process.exit(res.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD wget -qO- http://localhost:4000/health/live || exit 1
 
 CMD ["node", "dist/main.js"]

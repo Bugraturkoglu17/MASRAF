@@ -1,48 +1,88 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 
-import { assertValidAttachment, generateStorageKey } from './file-validation';
-import { STORAGE_PROVIDER, type StorageProvider } from './storage.interface';
+import type { AppConfig } from '../config/configuration';
 
-export interface StoredAttachmentMetadata {
-  fileKey: string;
-  fileName: string;
-  mimeType: string;
-  sizeBytes: number;
-  sha256: string;
-}
+import { generateStorageKey } from './file-validation';
+import type { StoredFile, StorageProvider } from './storage.interface';
+import { STORAGE_PROVIDER } from './storage.interface';
 
 /**
- * Kontrolör/servislerin doğrudan StorageProvider ile değil bu servisle
- * konuşmasını sağlar: dosya doğrulama, anahtar üretimi ve provider çağrısı
- * tek yerde birleşir.
+ * Uygulama katmanı depolama servisi.
+ * StorageProvider'ı sararak key üretimi ve metadata yönetimi sağlar.
+ * Dosya türü ve boyut doğrulaması (assertValidAttachment) çağıran katmanda yapılmalıdır.
  */
 @Injectable()
 export class StorageService {
-  constructor(@Inject(STORAGE_PROVIDER) private readonly provider: StorageProvider) {}
+  private readonly signedUrlTtlSeconds: number;
 
+  constructor(
+    @Inject(STORAGE_PROVIDER) private readonly provider: StorageProvider,
+    private readonly configService: ConfigService,
+  ) {
+    const cfg = this.configService.get<AppConfig['storage']>('app.storage')!;
+    this.signedUrlTtlSeconds = cfg.signedUrlTtlSeconds;
+  }
+
+  /**
+   * Dosyayı depoya yükler ve veritabanında saklanacak metadata'yı döndürür.
+   * Binary veri veritabanında tutulmaz; yalnızca key ve metadata saklanır.
+   */
   async storeAttachment(
     organizationId: string,
-    fileName: string,
+    originalName: string,
     mimeType: string,
-    body: Buffer,
-  ): Promise<StoredAttachmentMetadata> {
-    assertValidAttachment(fileName, mimeType, body.byteLength);
-    const key = generateStorageKey(organizationId, fileName);
-    const result = await this.provider.upload({ key, body, contentType: mimeType });
+    buffer: Buffer,
+  ): Promise<StoredFile> {
+    const fileKey = generateStorageKey(organizationId, originalName);
+
+    const result = await this.provider.upload({
+      key: fileKey,
+      body: buffer,
+      contentType: mimeType,
+    });
+
     return {
       fileKey: result.key,
-      fileName,
+      fileName: originalName,
       mimeType,
       sizeBytes: result.sizeBytes,
       sha256: result.sha256,
     };
   }
 
-  async getSignedDownloadUrl(fileKey: string, expiresInSeconds = 300): Promise<string> {
-    return this.provider.getSignedUrl(fileKey, expiresInSeconds);
+  /** Kısa ömürlü indirme URL'i üretir; URL yalnızca backend'den istemciye iletilir. */
+  async getSignedDownloadUrl(fileKey: string): Promise<string> {
+    return this.provider.getSignedDownloadUrl(fileKey, this.signedUrlTtlSeconds);
   }
 
-  async deleteAttachment(fileKey: string): Promise<void> {
-    await this.provider.delete(fileKey);
+  /**
+   * Tarayıcının doğrudan R2'ye yüklemesi için imzalı yükleme URL'i üretir.
+   * Yükleme tamamlandıktan sonra fileKey backend'e gönderilmeli ve doğrulanmalıdır.
+   */
+  async getSignedUploadUrl(
+    organizationId: string,
+    originalName: string,
+    mimeType: string,
+  ): Promise<{ fileKey: string; uploadUrl: string }> {
+    const fileKey = generateStorageKey(organizationId, originalName);
+    const uploadUrl = await this.provider.getSignedUploadUrl(
+      fileKey,
+      mimeType,
+      this.signedUrlTtlSeconds,
+    );
+    return { fileKey, uploadUrl };
+  }
+
+  async deleteFile(fileKey: string): Promise<void> {
+    return this.provider.delete(fileKey);
+  }
+
+  async fileExists(fileKey: string): Promise<boolean> {
+    return this.provider.exists(fileKey);
+  }
+
+  async ping(): Promise<void> {
+    return this.provider.ping();
   }
 }

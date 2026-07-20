@@ -21,7 +21,7 @@ export interface AppConfig {
     accessKeyId: string;
     secretAccessKey: string;
     forcePathStyle: boolean;
-    publicUrl?: string;
+    signedUrlTtlSeconds: number;
   };
   rateLimit: {
     ttlMs: number;
@@ -50,13 +50,13 @@ export default (): { app: AppConfig } => {
       },
       storage: {
         provider: 's3',
-        endpoint: env.S3_ENDPOINT,
-        region: env.S3_REGION,
-        bucket: env.S3_BUCKET,
-        accessKeyId: env.S3_ACCESS_KEY_ID,
-        secretAccessKey: env.S3_SECRET_ACCESS_KEY,
-        forcePathStyle: Boolean(env.S3_FORCE_PATH_STYLE),
-        publicUrl: env.S3_PUBLIC_URL,
+        endpoint: env.R2_ENDPOINT,
+        region: env.R2_REGION,
+        bucket: env.R2_BUCKET,
+        accessKeyId: env.R2_ACCESS_KEY_ID,
+        secretAccessKey: env.R2_SECRET_ACCESS_KEY,
+        forcePathStyle: Boolean(env.R2_FORCE_PATH_STYLE),
+        signedUrlTtlSeconds: Number(env.R2_SIGNED_URL_TTL_SECONDS),
       },
       rateLimit: {
         ttlMs: Number(env.RATE_LIMIT_TTL_MS),

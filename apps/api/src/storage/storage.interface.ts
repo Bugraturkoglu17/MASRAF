@@ -1,4 +1,4 @@
-export const STORAGE_PROVIDER = Symbol('STORAGE_PROVIDER');
+export const STORAGE_PROVIDER = 'STORAGE_PROVIDER';
 
 export interface UploadFileInput {
   key: string;
@@ -12,18 +12,42 @@ export interface UploadFileResult {
   sha256: string;
 }
 
+export interface StoredFile {
+  fileKey: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  sha256: string;
+}
+
 /**
- * Sağlayıcıdan bağımsız dosya depolama sözleşmesi. Bugün S3 uyumlu bir
- * implementasyon (AWS S3, Cloudflare R2, Backblaze B2, MinIO) kullanılır;
- * ileride farklı bir sağlayıcı eklenirse yalnızca bu arayüzü uygulayan yeni
- * bir provider yazılır, tüketen kod değişmez.
+ * Bağımsız depolama sağlayıcı sözleşmesi.
+ * Cloudflare R2, AWS S3 veya MinIO bu arayüzü uygulayabilir.
  */
 export interface StorageProvider {
   upload(input: UploadFileInput): Promise<UploadFileResult>;
   delete(key: string): Promise<void>;
   exists(key: string): Promise<boolean>;
-  /** İndirme/erişim için süreli, imzalı URL üretir (private bucket varsayımıyla). */
-  getSignedUrl(key: string, expiresInSeconds?: number): Promise<string>;
-  /** Health check için minimal bağlantı doğrulaması. */
+
+  /**
+   * Tarayıcının doğrudan depoya yüklemesi için kısa ömürlü imzalı PUT URL üretir.
+   * Yükleme sonrası backend'e fileKey iletilmeli ve doğrulanmalıdır.
+   */
+  getSignedUploadUrl(key: string, contentType: string, expiresInSeconds?: number): Promise<string>;
+
+  /**
+   * Özel nesneye geçici okuma erişimi sağlayan imzalı GET URL üretir.
+   */
+  getSignedDownloadUrl(key: string, expiresInSeconds?: number): Promise<string>;
+
+  /**
+   * Depolama servisine erişilebilirlik kontrolü yapar.
+   * Hata fırlatırsa sağlayıcı erişilemez demektir.
+   */
+  healthCheck(): Promise<void>;
+
+  /**
+   * @deprecated healthCheck() ile aynıdır; NestJS health indicator uyumluluğu için korundu.
+   */
   ping(): Promise<void>;
 }
