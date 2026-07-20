@@ -67,6 +67,9 @@ export default defineConfig({
   server: {
     port: Number(process.env.WEB_PORT ?? 3000),
   },
+  optimizeDeps: {
+    include: ['@masraf/shared-validation', '@masraf/shared-types'],
+  },
   build: {
     commonjsOptions: {
       // packages/shared-* pnpm workspace symlinkleri gerçek yol çözümünde
