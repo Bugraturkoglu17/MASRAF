@@ -72,8 +72,10 @@ export class AuthService {
       sub: user.id,
       organizationId: user.organizationId,
       email: user.email,
+      role: user.role as import('./token.types').AppRole,
       roles,
       permissions,
+      profileCompleted: user.profileCompleted,
     });
   }
 
@@ -118,7 +120,15 @@ export class AuthService {
     ];
 
     const pair = await this.issueTokenPair(
-      { sub: user.id, organizationId: user.organizationId, email: user.email, roles, permissions },
+      {
+        sub: user.id,
+        organizationId: user.organizationId,
+        email: user.email,
+        role: user.role as import('./token.types').AppRole,
+        roles,
+        permissions,
+        profileCompleted: user.profileCompleted,
+      },
       ip,
     );
 

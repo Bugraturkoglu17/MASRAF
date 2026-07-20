@@ -71,22 +71,31 @@ enum UserStatus {
   SUSPENDED
 }
 
+enum AppRole {
+  USER
+  MANAGER
+  ADMIN
+}
+
 model User {
-  id             String     @id @default(uuid()) @db.Uuid
-  organizationId String     @db.Uuid
-  departmentId   String?    @db.Uuid
-  email          String     @unique
-  passwordHash   String
-  firstName      String
-  lastName       String
-  phone          String?
-  status         UserStatus @default(ACTIVE)
-  lastLoginAt    DateTime?
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
-  createdBy      String?    @db.Uuid
-  updatedBy      String?    @db.Uuid
-  deletedAt      DateTime?
+  id               String     @id @default(uuid()) @db.Uuid
+  organizationId   String     @db.Uuid
+  departmentId     String?    @db.Uuid
+  email            String     @unique
+  passwordHash     String
+  firstName        String
+  lastName         String
+  phone            String?
+  iban             String?
+  role             AppRole    @default(USER)
+  profileCompleted Boolean    @default(false)
+  status           UserStatus @default(ACTIVE)
+  lastLoginAt      DateTime?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  createdBy        String?    @db.Uuid
+  updatedBy        String?    @db.Uuid
+  deletedAt        DateTime?
 
   organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   department      Department?       @relation(fields: [departmentId], references: [id], onDelete: SetNull)
@@ -231,11 +240,13 @@ model Expense {
   departmentId         String?       @db.Uuid
   userId               String        @db.Uuid
   categoryId           String        @db.Uuid
+  expenseNumber        String?       @unique
   title                String
   description          String?
   amount               Decimal       @db.Decimal(14, 2)
   currency             String        @default("TRY") @db.Char(3)
   expenseDate          DateTime      @db.Date
+  dueDate              DateTime?     @db.Date
   documentDate         DateTime?     @db.Date
   status               ExpenseStatus @default(DRAFT)
   currentApprovalOrder Int           @default(0)

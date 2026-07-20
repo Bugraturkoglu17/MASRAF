@@ -10,11 +10,19 @@ import {
 
 import { apiFetch, setAccessToken } from '@/lib/api-client';
 
+export type AppRole = 'USER' | 'MANAGER' | 'ADMIN';
+
 export interface CurrentUser {
   id: string;
   email: string;
   firstName: string;
   lastName: string;
+  phone?: string;
+  iban?: string;
+  role: AppRole;
+  profileCompleted: boolean;
+  organizationId: string;
+  organization?: { name: string };
 }
 
 interface LoginResponse {
@@ -28,6 +36,7 @@ interface AuthContextValue {
   isInitializing: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -40,9 +49,6 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
 
-  // Sayfa açılışında httpOnly refresh cookie'si üzerinden sessiz oturum
-  // geri yüklemesi denenir. Cookie yoksa/süresi dolmuşsa kullanıcı giriş
-  // ekranında kalır; bu bir hata değildir.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -81,9 +87,14 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
     setUser(null);
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    const me = await fetchCurrentUser();
+    setUser(me);
+  }, []);
+
   const value = useMemo<AuthContextValue>(
-    () => ({ user, isAuthenticated: user !== null, isInitializing, login, logout }),
-    [user, isInitializing, login, logout],
+    () => ({ user, isAuthenticated: user !== null, isInitializing, login, logout, refreshUser }),
+    [user, isInitializing, login, logout, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -91,8 +102,6 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
 
 export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error('useAuth, AuthProvider içinde kullanılmalıdır.');
-  }
+  if (!ctx) throw new Error('useAuth, AuthProvider içinde kullanılmalıdır.');
   return ctx;
 }

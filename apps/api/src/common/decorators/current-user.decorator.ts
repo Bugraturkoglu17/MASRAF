@@ -1,11 +1,15 @@
 import { createParamDecorator, type ExecutionContext } from '@nestjs/common';
 
+import type { AppRole } from '../../modules/auth/token.types';
+
 export interface AuthenticatedUser {
   id: string;
   organizationId: string;
   email: string;
+  role: AppRole;
   roles: string[];
   permissions: string[];
+  profileCompleted: boolean;
 }
 
 export const CurrentUser = createParamDecorator(

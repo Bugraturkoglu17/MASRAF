@@ -1,17 +1,70 @@
+import { lazy, Suspense } from 'react';
 import { createBrowserRouter } from 'react-router-dom';
 
+import { ProfileGuard } from './ProfileGuard';
 import { ProtectedRoute } from './ProtectedRoute';
+import { RoleRoute } from './RoleRoute';
 
+import { FullScreenLoader } from '@/components/feedback/FullScreenLoader';
 import { AuthLayout } from '@/layouts/AuthLayout';
-import { MainLayout } from '@/layouts/MainLayout';
-import { DashboardPage } from '@/pages/DashboardPage';
 import { ErrorPage } from '@/pages/ErrorPage';
-import { ExpensesPlaceholderPage } from '@/pages/ExpensesPlaceholderPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
-import { NotificationsPlaceholderPage } from '@/pages/NotificationsPlaceholderPage';
-import { ProfilePlaceholderPage } from '@/pages/ProfilePlaceholderPage';
 import { UnauthorizedPage } from '@/pages/UnauthorizedPage';
+
+
+const ProfileCompletePage = lazy(() =>
+  import('@/pages/ProfileCompletePage').then((m) => ({ default: m.ProfileCompletePage })),
+);
+
+// USER pages
+const UserLayout = lazy(() =>
+  import('@/layouts/UserLayout').then((m) => ({ default: m.UserLayout })),
+);
+const UserDashboard = lazy(() =>
+  import('@/pages/user/UserDashboard').then((m) => ({ default: m.UserDashboard })),
+);
+const UserExpensesPage = lazy(() =>
+  import('@/pages/user/UserExpensesPage').then((m) => ({ default: m.UserExpensesPage })),
+);
+const CreateExpensePage = lazy(() =>
+  import('@/pages/user/CreateExpensePage').then((m) => ({ default: m.CreateExpensePage })),
+);
+const UserProfilePage = lazy(() =>
+  import('@/pages/user/UserProfilePage').then((m) => ({ default: m.UserProfilePage })),
+);
+
+// MANAGER pages
+const ManagerLayout = lazy(() =>
+  import('@/layouts/ManagerLayout').then((m) => ({ default: m.ManagerLayout })),
+);
+const ManagerDashboard = lazy(() =>
+  import('@/pages/manager/ManagerDashboard').then((m) => ({ default: m.ManagerDashboard })),
+);
+const ManagerPendingPage = lazy(() =>
+  import('@/pages/manager/ManagerPendingPage').then((m) => ({ default: m.ManagerPendingPage })),
+);
+const ManagerApprovedPage = lazy(() =>
+  import('@/pages/manager/ManagerApprovedPage').then((m) => ({ default: m.ManagerApprovedPage })),
+);
+const ManagerRejectedPage = lazy(() =>
+  import('@/pages/manager/ManagerRejectedPage').then((m) => ({ default: m.ManagerRejectedPage })),
+);
+
+// ADMIN pages
+const AdminLayout = lazy(() =>
+  import('@/layouts/AdminLayout').then((m) => ({ default: m.AdminLayout })),
+);
+const AdminDashboard = lazy(() =>
+  import('@/pages/admin/AdminDashboard').then((m) => ({ default: m.AdminDashboard })),
+);
+const AdminUsersPage = lazy(() =>
+  import('@/pages/admin/AdminUsersPage').then((m) => ({ default: m.AdminUsersPage })),
+);
+
+function S({ children }: { children: React.ReactNode }) {
+  return <Suspense fallback={<FullScreenLoader />}>{children}</Suspense>;
+}
 
 export const router = createBrowserRouter([
   {
@@ -19,21 +72,200 @@ export const router = createBrowserRouter([
     errorElement: <ErrorPage />,
     children: [{ path: '/login', element: <LoginPage /> }],
   },
+
+  // Profil tamamlama — giriş zorunlu ama profil tamamlanmamış
   {
     element: <ProtectedRoute />,
     errorElement: <ErrorPage />,
     children: [
       {
-        element: <MainLayout />,
+        path: '/complete-profile',
+        element: (
+          <S>
+            <ProfileCompletePage />
+          </S>
+        ),
+      },
+    ],
+  },
+
+  // USER paneli
+  {
+    element: <ProtectedRoute />,
+    errorElement: <ErrorPage />,
+    children: [
+      {
+        element: <ProfileGuard />,
         children: [
-          { path: '/', element: <DashboardPage /> },
-          { path: '/expenses', element: <ExpensesPlaceholderPage /> },
-          { path: '/notifications', element: <NotificationsPlaceholderPage /> },
-          { path: '/profile', element: <ProfilePlaceholderPage /> },
+          {
+            element: <RoleRoute allowed={['USER', 'ADMIN']} />,
+            children: [
+              {
+                element: (
+                  <S>
+                    <UserLayout />
+                  </S>
+                ),
+                children: [
+                  {
+                    path: '/',
+                    element: (
+                      <S>
+                        <UserDashboard />
+                      </S>
+                    ),
+                  },
+                  {
+                    path: '/expenses',
+                    element: (
+                      <S>
+                        <UserExpensesPage />
+                      </S>
+                    ),
+                  },
+                  {
+                    path: '/expenses/new',
+                    element: (
+                      <S>
+                        <CreateExpensePage />
+                      </S>
+                    ),
+                  },
+                  {
+                    path: '/profile',
+                    element: (
+                      <S>
+                        <UserProfilePage />
+                      </S>
+                    ),
+                  },
+                ],
+              },
+            ],
+          },
         ],
       },
     ],
   },
+
+  // MANAGER paneli
+  {
+    element: <ProtectedRoute />,
+    errorElement: <ErrorPage />,
+    children: [
+      {
+        element: <ProfileGuard />,
+        children: [
+          {
+            element: <RoleRoute allowed={['MANAGER']} />,
+            children: [
+              {
+                element: (
+                  <S>
+                    <ManagerLayout />
+                  </S>
+                ),
+                children: [
+                  {
+                    path: '/manager',
+                    element: (
+                      <S>
+                        <ManagerDashboard />
+                      </S>
+                    ),
+                  },
+                  {
+                    path: '/manager/pending',
+                    element: (
+                      <S>
+                        <ManagerPendingPage />
+                      </S>
+                    ),
+                  },
+                  {
+                    path: '/manager/approved',
+                    element: (
+                      <S>
+                        <ManagerApprovedPage />
+                      </S>
+                    ),
+                  },
+                  {
+                    path: '/manager/rejected',
+                    element: (
+                      <S>
+                        <ManagerRejectedPage />
+                      </S>
+                    ),
+                  },
+                  {
+                    path: '/manager/profile',
+                    element: (
+                      <S>
+                        <UserProfilePage />
+                      </S>
+                    ),
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+
+  // ADMIN paneli
+  {
+    element: <ProtectedRoute />,
+    errorElement: <ErrorPage />,
+    children: [
+      {
+        element: <ProfileGuard />,
+        children: [
+          {
+            element: <RoleRoute allowed={['ADMIN']} />,
+            children: [
+              {
+                element: (
+                  <S>
+                    <AdminLayout />
+                  </S>
+                ),
+                children: [
+                  {
+                    path: '/admin',
+                    element: (
+                      <S>
+                        <AdminDashboard />
+                      </S>
+                    ),
+                  },
+                  {
+                    path: '/admin/users',
+                    element: (
+                      <S>
+                        <AdminUsersPage />
+                      </S>
+                    ),
+                  },
+                  {
+                    path: '/admin/profile',
+                    element: (
+                      <S>
+                        <UserProfilePage />
+                      </S>
+                    ),
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+
   { path: '/403', element: <UnauthorizedPage /> },
   { path: '*', element: <NotFoundPage /> },
 ]);

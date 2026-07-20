@@ -1,16 +1,30 @@
 import type { PaginationQuery } from '@masraf/shared-types';
-import type { CreateExpenseInput } from '@masraf/shared-validation';
 import { Injectable } from '@nestjs/common';
 
-import {
-  ConflictAppException,
-  ForbiddenAppException,
-  NotFoundAppException,
-} from '../../common/exceptions/app.exception';
+import { ConflictAppException, NotFoundAppException } from '../../common/exceptions/app.exception';
 import { buildPaginatedResult, toPrismaSkipTake } from '../../common/utils/pagination.util';
 import { PrismaService } from '../../database/prisma.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { NotificationsService } from '../notifications/notifications.service';
+
+export interface CreateExpenseInput {
+  categoryId: string;
+  title: string;
+  description?: string;
+  amount: number;
+  currency?: string;
+  expenseDate: string;
+  dueDate?: string;
+}
+
+export interface UpdateExpenseInput {
+  categoryId?: string;
+  title?: string;
+  description?: string;
+  amount?: number;
+  expenseDate?: string;
+  dueDate?: string;
+}
 
 @Injectable()
 export class ExpensesService {
@@ -20,39 +34,43 @@ export class ExpensesService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  async createAndSubmit(organizationId: string, userId: string, input: CreateExpenseInput) {
+  private async generateExpenseNumber(organizationId: string): Promise<string> {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const count = await this.prisma.expense.count({ where: { organizationId } });
+    const seq = String(count + 1).padStart(4, '0');
+    return `EXP-${year}${month}-${seq}`;
+  }
+
+  async createDraft(organizationId: string, userId: string, input: CreateExpenseInput) {
     const category = await this.prisma.expenseCategory.findFirst({
       where: { id: input.categoryId, organizationId, deletedAt: null },
     });
-    if (!category) {
-      throw new NotFoundAppException('Masraf kategorisi');
-    }
+    if (!category) throw new NotFoundAppException('Masraf kategorisi');
+
+    const expenseNumber = await this.generateExpenseNumber(organizationId);
 
     const expense = await this.prisma.$transaction(async (tx) => {
       const created = await tx.expense.create({
         data: {
           organizationId,
           userId,
-          departmentId: input.departmentId,
           categoryId: input.categoryId,
+          expenseNumber,
           title: input.title,
           description: input.description,
           amount: input.amount,
-          currency: input.currency,
+          currency: input.currency ?? 'TRY',
           expenseDate: new Date(input.expenseDate),
-          documentDate: input.documentDate ? new Date(input.documentDate) : null,
-          status: 'PENDING',
-          submittedAt: new Date(),
+          dueDate: input.dueDate ? new Date(input.dueDate) : null,
+          status: 'DRAFT',
           createdBy: userId,
         },
+        include: { category: true },
       });
       await tx.expenseStatusHistory.create({
-        data: {
-          expenseId: created.id,
-          fromStatus: null,
-          toStatus: 'PENDING',
-          changedById: userId,
-        },
+        data: { expenseId: created.id, fromStatus: null, toStatus: 'DRAFT', changedById: userId },
       });
       return created;
     });
@@ -68,9 +86,75 @@ export class ExpensesService {
     return expense;
   }
 
-  async listOwn(organizationId: string, userId: string, query: PaginationQuery) {
+  async updateDraft(id: string, organizationId: string, userId: string, input: UpdateExpenseInput) {
+    const expense = await this.prisma.expense.findFirst({
+      where: { id, organizationId, userId, deletedAt: null },
+    });
+    if (!expense) throw new NotFoundAppException('Masraf');
+    if (expense.status !== 'DRAFT')
+      throw new ConflictAppException('Yalnızca taslak masraflar düzenlenebilir.');
+
+    return this.prisma.expense.update({
+      where: { id },
+      data: {
+        ...(input.categoryId && { categoryId: input.categoryId }),
+        ...(input.title && { title: input.title }),
+        description: input.description,
+        ...(input.amount !== undefined && { amount: input.amount }),
+        ...(input.expenseDate && { expenseDate: new Date(input.expenseDate) }),
+        dueDate: input.dueDate ? new Date(input.dueDate) : expense.dueDate,
+        updatedBy: userId,
+      },
+      include: { category: true },
+    });
+  }
+
+  async deleteDraft(id: string, organizationId: string, userId: string) {
+    const expense = await this.prisma.expense.findFirst({
+      where: { id, organizationId, userId, deletedAt: null },
+    });
+    if (!expense) throw new NotFoundAppException('Masraf');
+    if (expense.status !== 'DRAFT')
+      throw new ConflictAppException('Yalnızca taslak masraflar silinebilir.');
+
+    await this.prisma.expense.update({ where: { id }, data: { deletedAt: new Date() } });
+  }
+
+  async submitDraft(id: string, organizationId: string, userId: string) {
+    const expense = await this.prisma.expense.findFirst({
+      where: { id, organizationId, userId, deletedAt: null },
+    });
+    if (!expense) throw new NotFoundAppException('Masraf');
+    if (expense.status !== 'DRAFT')
+      throw new ConflictAppException('Yalnızca taslak masraflar onaya gönderilebilir.');
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.expense.update({
+        where: { id },
+        data: { status: 'PENDING', submittedAt: new Date(), updatedBy: userId },
+        include: { category: true },
+      });
+      await tx.expenseStatusHistory.create({
+        data: { expenseId: id, fromStatus: 'DRAFT', toStatus: 'PENDING', changedById: userId },
+      });
+      return updated;
+    });
+  }
+
+  async listOwn(
+    organizationId: string,
+    userId: string,
+    query: PaginationQuery & { status?: string },
+  ) {
     const { skip, take } = toPrismaSkipTake(query);
-    const where = { organizationId, userId, deletedAt: null };
+    const where = {
+      organizationId,
+      userId,
+      deletedAt: null as null,
+      ...(query.status
+        ? { status: query.status as 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' }
+        : {}),
+    };
     const [items, totalItems] = await Promise.all([
       this.prisma.expense.findMany({
         where,
@@ -84,6 +168,24 @@ export class ExpensesService {
     return buildPaginatedResult(items, totalItems, query);
   }
 
+  async listOwnCounts(organizationId: string, userId: string) {
+    const [draft, pending, approved, rejected] = await Promise.all([
+      this.prisma.expense.count({
+        where: { organizationId, userId, status: 'DRAFT', deletedAt: null },
+      }),
+      this.prisma.expense.count({
+        where: { organizationId, userId, status: 'PENDING', deletedAt: null },
+      }),
+      this.prisma.expense.count({
+        where: { organizationId, userId, status: 'APPROVED', deletedAt: null },
+      }),
+      this.prisma.expense.count({
+        where: { organizationId, userId, status: 'REJECTED', deletedAt: null },
+      }),
+    ]);
+    return { draft, pending, approved, rejected };
+  }
+
   async listPendingForOrganization(organizationId: string, query: PaginationQuery) {
     const { skip, take } = toPrismaSkipTake(query);
     const where = { organizationId, status: 'PENDING' as const, deletedAt: null };
@@ -92,15 +194,56 @@ export class ExpensesService {
         where,
         skip,
         take,
-        orderBy: { createdAt: 'asc' },
+        orderBy: { submittedAt: 'asc' },
         include: {
           category: true,
-          user: { select: { id: true, firstName: true, lastName: true, phone: true, email: true } },
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              phone: true,
+              email: true,
+              iban: true,
+            },
+          },
         },
       }),
       this.prisma.expense.count({ where }),
     ]);
     return buildPaginatedResult(items, totalItems, query);
+  }
+
+  async listForOrganizationByStatus(
+    organizationId: string,
+    status: 'APPROVED' | 'REJECTED',
+    query: PaginationQuery,
+  ) {
+    const { skip, take } = toPrismaSkipTake(query);
+    const where = { organizationId, status, deletedAt: null };
+    const [items, totalItems] = await Promise.all([
+      this.prisma.expense.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { decidedAt: 'desc' },
+        include: {
+          category: true,
+          user: { select: { id: true, firstName: true, lastName: true } },
+        },
+      }),
+      this.prisma.expense.count({ where }),
+    ]);
+    return buildPaginatedResult(items, totalItems, query);
+  }
+
+  async managerCounts(organizationId: string) {
+    const [pending, approved, rejected] = await Promise.all([
+      this.prisma.expense.count({ where: { organizationId, status: 'PENDING', deletedAt: null } }),
+      this.prisma.expense.count({ where: { organizationId, status: 'APPROVED', deletedAt: null } }),
+      this.prisma.expense.count({ where: { organizationId, status: 'REJECTED', deletedAt: null } }),
+    ]);
+    return { pending, approved, rejected };
   }
 
   async findByIdScoped(id: string, organizationId: string) {
@@ -111,12 +254,19 @@ export class ExpensesService {
         attachments: true,
         comments: { orderBy: { createdAt: 'asc' } },
         statusHistories: { orderBy: { createdAt: 'asc' } },
-        user: { select: { id: true, firstName: true, lastName: true, phone: true, email: true } },
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+            email: true,
+            iban: true,
+          },
+        },
       },
     });
-    if (!expense) {
-      throw new NotFoundAppException('Masraf');
-    }
+    if (!expense) throw new NotFoundAppException('Masraf');
     return expense;
   }
 
@@ -213,18 +363,9 @@ export class ExpensesService {
     const expense = await this.prisma.expense.findFirst({
       where: { id, organizationId, deletedAt: null },
     });
-    if (!expense) {
-      throw new NotFoundAppException('Masraf');
-    }
-    if (expense.status !== 'PENDING') {
+    if (!expense) throw new NotFoundAppException('Masraf');
+    if (expense.status !== 'PENDING')
       throw new ConflictAppException('Yalnızca bekleyen masraflar üzerinde karar verilebilir.');
-    }
     return expense;
-  }
-
-  assertOwnerOrThrow(expenseUserId: string, requestingUserId: string): void {
-    if (expenseUserId !== requestingUserId) {
-      throw new ForbiddenAppException();
-    }
   }
 }

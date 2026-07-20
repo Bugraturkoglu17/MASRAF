@@ -18,6 +18,26 @@
   --color-warning: #d97706;
   --color-warning-bg: #fffbeb;
 
+  /* Masraf durum renkleri */
+  --color-draft: #7c3aed;
+  --color-draft-bg: #f5f3ff;
+  --color-draft-border: #c4b5fd;
+  --color-pending: #d97706;
+  --color-pending-bg: #fffbeb;
+  --color-pending-border: #fcd34d;
+  --color-approved: #16a34a;
+  --color-approved-bg: #f0fdf4;
+  --color-approved-border: #86efac;
+  --color-rejected: #dc2626;
+  --color-rejected-bg: #fef2f2;
+  --color-rejected-border: #fca5a5;
+
+  /* Sidebar */
+  --color-sidebar-bg: #1e293b;
+  --color-sidebar-text: #cbd5e1;
+  --color-sidebar-active: #3b82f6;
+  --color-sidebar-active-bg: rgba(59,130,246,0.12);
+
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 16px;

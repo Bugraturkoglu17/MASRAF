@@ -1,9 +1,7 @@
-import { PermissionAction, PermissionResource, PrismaClient } from '@prisma/client';
+import { AppRole, PermissionAction, PermissionResource, PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
 
 const prisma = new PrismaClient();
-
-const SYSTEM_ROLES = ['OWNER', 'ADMIN', 'MANAGER', 'ACCOUNTANT', 'EMPLOYEE'] as const;
 
 const ALL_PERMISSIONS: { action: PermissionAction; resource: PermissionResource }[] = Object.values(
   PermissionResource,
@@ -23,103 +21,134 @@ async function main() {
   );
 
   const organization = await prisma.organization.upsert({
-    where: { slug: 'demo-organizasyon' },
+    where: { slug: 'masraf-demo' },
     update: {},
-    create: {
-      name: 'Demo Organizasyon',
-      slug: 'demo-organizasyon',
-    },
+    create: { name: 'Masraf Demo Şirketi', slug: 'masraf-demo' },
   });
 
   const department = await prisma.department.upsert({
     where: { organizationId_name: { organizationId: organization.id, name: 'Genel' } },
     update: {},
-    create: {
-      organizationId: organization.id,
-      name: 'Genel',
-    },
+    create: { organizationId: organization.id, name: 'Genel' },
   });
 
+  // System roles for RBAC
+  const systemRoleNames = ['ADMIN_ROLE', 'MANAGER_ROLE', 'USER_ROLE'] as const;
   const roleRecords = new Map<string, string>();
-  for (const roleName of SYSTEM_ROLES) {
+  for (const roleName of systemRoleNames) {
     const role = await prisma.role.upsert({
       where: { organizationId_name: { organizationId: organization.id, name: roleName } },
       update: {},
-      create: {
-        organizationId: organization.id,
-        name: roleName,
-        isSystem: true,
-        description: `${roleName} sistem rolü`,
-      },
+      create: { organizationId: organization.id, name: roleName, isSystem: true },
     });
     roleRecords.set(roleName, role.id);
   }
 
-  // OWNER ve ADMIN tüm izinlere sahip; diğer roller ileride ihtiyaca göre daraltılabilir.
-  const ownerRoleId = roleRecords.get('OWNER')!;
-  const adminRoleId = roleRecords.get('ADMIN')!;
+  const adminRoleId = roleRecords.get('ADMIN_ROLE')!;
   for (const permission of permissions) {
-    for (const roleId of [ownerRoleId, adminRoleId]) {
-      await prisma.rolePermission.upsert({
-        where: { roleId_permissionId: { roleId, permissionId: permission.id } },
-        update: {},
-        create: { roleId, permissionId: permission.id },
-      });
-    }
-  }
-
-  const employeeRoleId = roleRecords.get('EMPLOYEE')!;
-  const employeePermissions = permissions.filter(
-    (p) =>
-      p.resource === PermissionResource.EXPENSE &&
-      ([PermissionAction.CREATE, PermissionAction.READ] as PermissionAction[]).includes(p.action),
-  );
-  for (const permission of employeePermissions) {
     await prisma.rolePermission.upsert({
-      where: { roleId_permissionId: { roleId: employeeRoleId, permissionId: permission.id } },
+      where: { roleId_permissionId: { roleId: adminRoleId, permissionId: permission.id } },
       update: {},
-      create: { roleId: employeeRoleId, permissionId: permission.id },
+      create: { roleId: adminRoleId, permissionId: permission.id },
     });
   }
 
-  const passwordHash = await argon2.hash('ChangeMe123!');
-  const owner = await prisma.user.upsert({
-    where: { email: 'owner@demo.local' },
+  // Admin kullanıcı
+  const adminHash = await argon2.hash('Admin123!');
+  const admin = await prisma.user.upsert({
+    where: { email: 'admin@masraf.local' },
     update: {},
     create: {
       organizationId: organization.id,
       departmentId: department.id,
-      email: 'owner@demo.local',
-      passwordHash,
-      firstName: 'Demo',
-      lastName: 'Yönetici',
+      email: 'admin@masraf.local',
+      passwordHash: adminHash,
+      firstName: 'Admin',
+      lastName: 'Kullanıcı',
+      role: AppRole.ADMIN,
+      profileCompleted: true,
+      phone: '+905001234567',
+      iban: 'TR000000000000000000000001',
     },
   });
-
   await prisma.userRole.upsert({
-    where: { userId_roleId: { userId: owner.id, roleId: ownerRoleId } },
+    where: { userId_roleId: { userId: admin.id, roleId: adminRoleId } },
     update: {},
-    create: { userId: owner.id, roleId: ownerRoleId },
+    create: { userId: admin.id, roleId: adminRoleId },
   });
 
-  await prisma.expenseCategory.upsert({
-    where: { organizationId_name: { organizationId: organization.id, name: 'Ulaşım' } },
+  // Manager kullanıcı
+  const managerHash = await argon2.hash('Manager123!');
+  const manager = await prisma.user.upsert({
+    where: { email: 'manager@masraf.local' },
     update: {},
-    create: { organizationId: organization.id, name: 'Ulaşım' },
+    create: {
+      organizationId: organization.id,
+      departmentId: department.id,
+      email: 'manager@masraf.local',
+      passwordHash: managerHash,
+      firstName: 'Ahmet',
+      lastName: 'Yönetici',
+      role: AppRole.MANAGER,
+      profileCompleted: true,
+      phone: '+905001234568',
+      iban: 'TR000000000000000000000002',
+    },
   });
-  await prisma.expenseCategory.upsert({
-    where: { organizationId_name: { organizationId: organization.id, name: 'Konaklama' } },
+  const managerRoleId = roleRecords.get('MANAGER_ROLE')!;
+  await prisma.userRole.upsert({
+    where: { userId_roleId: { userId: manager.id, roleId: managerRoleId } },
     update: {},
-    create: { organizationId: organization.id, name: 'Konaklama' },
-  });
-  await prisma.expenseCategory.upsert({
-    where: { organizationId_name: { organizationId: organization.id, name: 'Yemek' } },
-    update: {},
-    create: { organizationId: organization.id, name: 'Yemek' },
+    create: { userId: manager.id, roleId: managerRoleId },
   });
 
-  console.log('Seed tamamlandı.');
-  console.log(`Demo giriş: owner@demo.local / ChangeMe123! (yalnızca development)`);
+  // Normal kullanıcı
+  const userHash = await argon2.hash('User123!');
+  const user = await prisma.user.upsert({
+    where: { email: 'user@masraf.local' },
+    update: {},
+    create: {
+      organizationId: organization.id,
+      departmentId: department.id,
+      email: 'user@masraf.local',
+      passwordHash: userHash,
+      firstName: 'Ayşe',
+      lastName: 'Çalışan',
+      role: AppRole.USER,
+      profileCompleted: true,
+      phone: '+905001234569',
+      iban: 'TR000000000000000000000003',
+    },
+  });
+  const userRoleId = roleRecords.get('USER_ROLE')!;
+  await prisma.userRole.upsert({
+    where: { userId_roleId: { userId: user.id, roleId: userRoleId } },
+    update: {},
+    create: { userId: user.id, roleId: userRoleId },
+  });
+
+  // Expense categories
+  const categories = [
+    'Ulaşım',
+    'Konaklama',
+    'Yemek',
+    'Temsil & Ağırlama',
+    'Ofis Malzemeleri',
+    'Eğitim',
+  ];
+  for (const name of categories) {
+    await prisma.expenseCategory.upsert({
+      where: { organizationId_name: { organizationId: organization.id, name } },
+      update: {},
+      create: { organizationId: organization.id, name },
+    });
+  }
+
+  console.log('\n✅ Seed tamamlandı.\n');
+  console.log('Test hesapları (YALNIZCA development):');
+  console.log('  ADMIN   → admin@masraf.local   / Admin123!');
+  console.log('  MANAGER → manager@masraf.local / Manager123!');
+  console.log('  USER    → user@masraf.local    / User123!');
 }
 
 main()
