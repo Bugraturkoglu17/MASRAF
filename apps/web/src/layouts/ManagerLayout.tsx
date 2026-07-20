@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 
 import { useToast } from '@/components/feedback/toast-context';
 import { useAuth } from '@/features/auth/auth-context';
+import { useManagerSse } from '@/lib/use-manager-sse';
 
 const navItems = [
   { to: '/manager', label: 'Ana Sayfa', icon: Home, exact: true },
@@ -16,6 +17,7 @@ export function ManagerLayout(): JSX.Element {
   const { user, logout } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
+  useManagerSse();
 
   const handleLogout = async () => {
     await logout();

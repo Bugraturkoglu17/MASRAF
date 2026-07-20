@@ -1,4 +1,4 @@
-type Status = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED';
+type Status = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
 
 const config: Record<Status, { label: string; color: string; bg: string; border: string }> = {
   DRAFT: {
@@ -24,6 +24,12 @@ const config: Record<Status, { label: string; color: string; bg: string; border:
     color: 'var(--color-rejected)',
     bg: 'var(--color-rejected-bg)',
     border: 'var(--color-rejected-border)',
+  },
+  CANCELLED: {
+    label: 'İptal Edildi',
+    color: '#6b7280',
+    bg: '#f3f4f6',
+    border: '#d1d5db',
   },
 };
 

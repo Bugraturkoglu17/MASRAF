@@ -21,6 +21,7 @@ import { ExpensesModule } from './modules/expenses/expenses.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { PermissionsModule } from './modules/permissions/permissions.module';
+import { RealtimeModule } from './modules/realtime/realtime.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { UsersModule } from './modules/users/users.module';
 import { StorageModule } from './storage/storage.module';
@@ -47,6 +48,7 @@ import { StorageModule } from './storage/storage.module';
     AttachmentsModule,
     CommentsModule,
     NotificationsModule,
+    RealtimeModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },

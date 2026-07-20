@@ -128,21 +128,37 @@ async function main() {
   });
 
   // Expense categories
-  const categories = [
-    'Ulaşım',
-    'Konaklama',
-    'Yemek',
-    'Temsil & Ağırlama',
-    'Ofis Malzemeleri',
-    'Eğitim',
+  const categories: { name: string; requiresDueDate: boolean }[] = [
+    { name: 'Taşeron', requiresDueDate: true },
+    { name: 'Menlift', requiresDueDate: true },
+    { name: 'Malzeme', requiresDueDate: true },
+    { name: 'Yakıt', requiresDueDate: false },
+    { name: 'Yemek', requiresDueDate: false },
+    { name: 'Konaklama', requiresDueDate: false },
+    { name: 'Ulaşım', requiresDueDate: false },
+    { name: 'Diğer', requiresDueDate: false },
+    { name: 'Temsil & Ağırlama', requiresDueDate: false },
+    { name: 'Ofis Malzemeleri', requiresDueDate: false },
+    { name: 'Eğitim', requiresDueDate: false },
   ];
-  for (const name of categories) {
+  for (const cat of categories) {
     await prisma.expenseCategory.upsert({
-      where: { organizationId_name: { organizationId: organization.id, name } },
-      update: {},
-      create: { organizationId: organization.id, name },
+      where: { organizationId_name: { organizationId: organization.id, name: cat.name } },
+      update: { requiresDueDate: cat.requiresDueDate },
+      create: {
+        organizationId: organization.id,
+        name: cat.name,
+        requiresDueDate: cat.requiresDueDate,
+      },
     });
   }
+
+  // Expense counter (8-digit sequential numbers)
+  await prisma.expenseCounter.upsert({
+    where: { id: 'global' },
+    update: {},
+    create: { id: 'global', nextVal: 10000000 },
+  });
 
   console.log('\n✅ Seed tamamlandı.\n');
   console.log('Test hesapları (YALNIZCA development):');

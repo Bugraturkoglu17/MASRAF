@@ -6,6 +6,7 @@ import { buildPaginatedResult, toPrismaSkipTake } from '../../common/utils/pagin
 import { PrismaService } from '../../database/prisma.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { RealtimeService } from '../realtime/realtime.service';
 
 export interface CreateExpenseInput {
   categoryId: string;
@@ -32,15 +33,15 @@ export class ExpensesService {
     private readonly prisma: PrismaService,
     private readonly auditLogs: AuditLogsService,
     private readonly notifications: NotificationsService,
+    private readonly realtime: RealtimeService,
   ) {}
 
-  private async generateExpenseNumber(organizationId: string): Promise<string> {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const count = await this.prisma.expense.count({ where: { organizationId } });
-    const seq = String(count + 1).padStart(4, '0');
-    return `EXP-${year}${month}-${seq}`;
+  private async generateExpenseNumber(): Promise<string> {
+    const counter = await this.prisma.expenseCounter.update({
+      where: { id: 'global' },
+      data: { nextVal: { increment: 1 } },
+    });
+    return String(counter.nextVal);
   }
 
   async createDraft(organizationId: string, userId: string, input: CreateExpenseInput) {
@@ -49,7 +50,7 @@ export class ExpensesService {
     });
     if (!category) throw new NotFoundAppException('Masraf kategorisi');
 
-    const expenseNumber = await this.generateExpenseNumber(organizationId);
+    const expenseNumber = await this.generateExpenseNumber();
 
     const expense = await this.prisma.$transaction(async (tx) => {
       const created = await tx.expense.create({
@@ -128,17 +129,32 @@ export class ExpensesService {
     if (expense.status !== 'DRAFT')
       throw new ConflictAppException('Yalnızca taslak masraflar onaya gönderilebilir.');
 
-    return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.expense.update({
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.expense.update({
         where: { id },
         data: { status: 'PENDING', submittedAt: new Date(), updatedBy: userId },
-        include: { category: true },
+        include: { category: true, user: { select: { firstName: true, lastName: true } } },
       });
       await tx.expenseStatusHistory.create({
         data: { expenseId: id, fromStatus: 'DRAFT', toStatus: 'PENDING', changedById: userId },
       });
-      return updated;
+      return result;
     });
+
+    this.realtime.emit({
+      type: 'EXPENSE_SUBMITTED',
+      organizationId,
+      payload: {
+        expenseId: updated.id,
+        expenseNumber: updated.expenseNumber,
+        title: updated.title,
+        amount: updated.amount.toString(),
+        userName: `${updated.user.firstName} ${updated.user.lastName}`,
+        submittedAt: updated.submittedAt?.toISOString(),
+      },
+    });
+
+    return updated;
   }
 
   async listOwn(
@@ -251,9 +267,12 @@ export class ExpensesService {
       where: { id, organizationId, deletedAt: null },
       include: {
         category: true,
-        attachments: true,
+        attachments: { where: { deletedAt: null }, orderBy: { createdAt: 'asc' } },
         comments: { orderBy: { createdAt: 'asc' } },
-        statusHistories: { orderBy: { createdAt: 'asc' } },
+        statusHistories: {
+          orderBy: { createdAt: 'asc' },
+          include: { changedBy: { select: { id: true, firstName: true, lastName: true } } },
+        },
         user: {
           select: {
             id: true,
@@ -263,6 +282,11 @@ export class ExpensesService {
             email: true,
             iban: true,
           },
+        },
+        approvals: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          include: { approver: { select: { id: true, firstName: true, lastName: true } } },
         },
       },
     });

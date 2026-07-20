@@ -1,12 +1,13 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
-import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useEffect, useState } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 
 import { useToast } from '@/components/feedback/toast-context';
+import { AttachmentUploader } from '@/components/ui/AttachmentUploader';
 import { apiFetch } from '@/lib/api-client';
 
 const schema = z.object({
@@ -23,10 +24,26 @@ type FormValues = z.infer<typeof schema>;
 interface Category {
   id: string;
   name: string;
+  requiresDueDate: boolean;
 }
-interface Expense extends FormValues {
+
+interface Expense {
   id: string;
+  categoryId: string;
+  title: string;
+  description?: string;
+  amount: string;
+  expenseDate: string;
+  dueDate?: string | null;
   status: string;
+}
+
+interface UploadedFile {
+  id: string;
+  fileKey: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
 }
 
 export function CreateExpensePage(): JSX.Element {
@@ -35,6 +52,8 @@ export function CreateExpensePage(): JSX.Element {
   const editId = params.get('edit');
   const { showToast } = useToast();
   const qc = useQueryClient();
+  const [savedExpenseId, setSavedExpenseId] = useState<string | null>(editId);
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
 
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ['categories'],
@@ -50,9 +69,14 @@ export function CreateExpensePage(): JSX.Element {
   const {
     register,
     handleSubmit,
+    control,
     reset,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
+
+  const selectedCategoryId = useWatch({ control, name: 'categoryId' });
+  const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
+  const requiresDueDate = selectedCategory?.requiresDueDate ?? false;
 
   useEffect(() => {
     if (editingExpense) {
@@ -60,7 +84,7 @@ export function CreateExpensePage(): JSX.Element {
         categoryId: editingExpense.categoryId,
         title: editingExpense.title,
         description: editingExpense.description,
-        amount: editingExpense.amount,
+        amount: Number(editingExpense.amount),
         expenseDate: editingExpense.expenseDate?.split('T')[0] ?? '',
         dueDate: editingExpense.dueDate?.split('T')[0] ?? '',
       });
@@ -68,12 +92,12 @@ export function CreateExpensePage(): JSX.Element {
   }, [editingExpense, reset]);
 
   const createMut = useMutation({
-    mutationFn: (data: FormValues) => apiFetch('/expenses', { method: 'POST', body: data }),
-    onSuccess: () => {
+    mutationFn: (data: FormValues) =>
+      apiFetch<{ id: string }>('/expenses', { method: 'POST', body: data }),
+    onSuccess: (expense) => {
+      setSavedExpenseId(expense.id);
       qc.invalidateQueries({ queryKey: ['expenses'] });
       qc.invalidateQueries({ queryKey: ['expense-counts'] });
-      showToast('Masraf taslak olarak kaydedildi.', 'success');
-      navigate('/expenses?status=DRAFT');
     },
     onError: () => showToast('Kaydedilemedi.', 'error'),
   });
@@ -83,33 +107,96 @@ export function CreateExpensePage(): JSX.Element {
       apiFetch(`/expenses/${editId}`, { method: 'PATCH', body: data }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['expenses'] });
-      showToast('Masraf güncellendi.', 'success');
-      navigate('/expenses?status=DRAFT');
     },
     onError: () => showToast('Güncellenemedi.', 'error'),
   });
 
-  const onSubmit = handleSubmit((values) => {
-    if (editId) updateMut.mutate(values);
-    else createMut.mutate(values);
+  const onSubmit = handleSubmit(async (values) => {
+    if (!values.dueDate || values.dueDate === '') {
+      delete (values as Partial<FormValues>).dueDate;
+    }
+
+    if (editId) {
+      await updateMut.mutateAsync(values);
+      showToast('Masraf güncellendi.', 'success');
+      navigate('/expenses?status=DRAFT');
+    } else {
+      const created = await createMut.mutateAsync(values);
+      showToast('Masraf taslak olarak kaydedildi. Belge ekleyebilirsiniz.', 'success');
+      setSavedExpenseId(created.id);
+    }
   });
 
+  const handleDone = () => {
+    navigate('/expenses?status=DRAFT');
+  };
+
   const loading = isSubmitting || createMut.isPending || updateMut.isPending;
+  const isSaved = Boolean(savedExpenseId);
+
+  const inp = (hasErr: boolean): React.CSSProperties => ({
+    width: '100%',
+    padding: '12px 14px',
+    borderRadius: 10,
+    border: `1.5px solid ${hasErr ? 'var(--color-danger)' : 'var(--color-border)'}`,
+    background: 'var(--color-bg)',
+    color: 'var(--color-text)',
+    fontSize: 15,
+    boxSizing: 'border-box',
+    WebkitAppearance: 'none',
+    appearance: 'none',
+  });
 
   return (
-    <div style={pageStyle}>
-      <div style={headerStyle}>
-        <button onClick={() => navigate(-1)} style={backBtnStyle}>
-          <ArrowLeft size={16} /> Geri
+    <div style={{ padding: '0 0 80px', maxWidth: 480, margin: '0 auto' }}>
+      {/* Header */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: '16px 16px 12px',
+          borderBottom: '1px solid var(--color-border)',
+          background: 'var(--color-surface)',
+          position: 'sticky',
+          top: 0,
+          zIndex: 10,
+        }}
+      >
+        <button
+          onClick={() => navigate(-1)}
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: '50%',
+            border: '1px solid var(--color-border)',
+            background: 'var(--color-bg)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            flexShrink: 0,
+          }}
+        >
+          <ArrowLeft size={16} color="var(--color-text)" />
         </button>
-        <h1 style={titleStyle}>{editId ? 'Masrafı Düzenle' : 'Yeni Masraf'}</h1>
+        <h1 style={{ fontSize: 17, fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>
+          {editId ? 'Masrafı Düzenle' : 'Yeni Masraf'}
+        </h1>
       </div>
 
-      <div style={cardStyle}>
+      <div style={{ padding: '16px' }}>
+        {/* Form */}
         <form onSubmit={onSubmit} noValidate>
-          <div style={gridStyle}>
-            <Field label="Kategori" error={errors.categoryId?.message} span={2}>
-              <select {...register('categoryId')} style={inputStyle(Boolean(errors.categoryId))}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {/* Category */}
+            <div>
+              <label style={labelSt}>Kategori *</label>
+              <select
+                {...register('categoryId')}
+                style={inp(Boolean(errors.categoryId))}
+                disabled={isSaved && !editId}
+              >
                 <option value="">Kategori seçiniz</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -117,159 +204,187 @@ export function CreateExpensePage(): JSX.Element {
                   </option>
                 ))}
               </select>
-            </Field>
+              {errors.categoryId && <p style={errSt}>{errors.categoryId.message}</p>}
+            </div>
 
-            <Field label="Başlık" error={errors.title?.message} span={2}>
+            {/* Title */}
+            <div>
+              <label style={labelSt}>Başlık *</label>
               <input
                 {...register('title')}
                 placeholder="Masraf başlığı"
-                style={inputStyle(Boolean(errors.title))}
+                style={inp(Boolean(errors.title))}
+                disabled={isSaved && !editId}
               />
-            </Field>
+              {errors.title && <p style={errSt}>{errors.title.message}</p>}
+            </div>
 
-            <Field label="Tutar (₺)" error={errors.amount?.message}>
+            {/* Amount */}
+            <div>
+              <label style={labelSt}>Tutar (₺) *</label>
               <input
                 {...register('amount')}
                 type="number"
                 step="0.01"
-                placeholder="0.00"
-                style={inputStyle(Boolean(errors.amount))}
+                inputMode="decimal"
+                placeholder="0,00"
+                style={inp(Boolean(errors.amount))}
+                disabled={isSaved && !editId}
               />
-            </Field>
+              {errors.amount && <p style={errSt}>{errors.amount.message}</p>}
+            </div>
 
-            <Field label="Masraf Tarihi" error={errors.expenseDate?.message}>
+            {/* Expense date */}
+            <div>
+              <label style={labelSt}>Masraf Tarihi *</label>
               <input
                 {...register('expenseDate')}
                 type="date"
-                style={inputStyle(Boolean(errors.expenseDate))}
+                style={inp(Boolean(errors.expenseDate))}
+                disabled={isSaved && !editId}
               />
-            </Field>
+              {errors.expenseDate && <p style={errSt}>{errors.expenseDate.message}</p>}
+            </div>
 
-            <Field label="Vade Tarihi (opsiyonel)">
-              <input {...register('dueDate')} type="date" style={inputStyle(false)} />
-            </Field>
+            {/* Due date — only shown when requiresDueDate */}
+            {requiresDueDate && (
+              <div>
+                <label style={labelSt}>
+                  Vade Tarihi *{' '}
+                  <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--color-text-muted)' }}>
+                    ({selectedCategory?.name} için zorunlu)
+                  </span>
+                </label>
+                <input
+                  {...register('dueDate')}
+                  type="date"
+                  style={inp(false)}
+                  disabled={isSaved && !editId}
+                />
+              </div>
+            )}
 
-            <Field label="Açıklama (opsiyonel)" span={2}>
+            {/* Description */}
+            <div>
+              <label style={labelSt}>Açıklama</label>
               <textarea
                 {...register('description')}
                 rows={3}
                 placeholder="Masraf hakkında not ekleyin..."
-                style={{ ...inputStyle(false), resize: 'vertical', fontFamily: 'inherit' }}
+                style={{
+                  ...inp(false),
+                  resize: 'vertical',
+                  fontFamily: 'inherit',
+                  lineHeight: 1.5,
+                }}
+                disabled={isSaved && !editId}
               />
-            </Field>
-          </div>
+            </div>
 
-          <div style={actionsStyle}>
-            <button type="button" onClick={() => navigate(-1)} style={cancelBtnStyle}>
-              İptal
-            </button>
-            <button type="submit" disabled={loading} style={submitBtnStyle}>
-              {loading ? 'Kaydediliyor...' : editId ? 'Güncelle' : 'Taslak Kaydet'}
-            </button>
+            {/* Save button — only if not yet saved */}
+            {!isSaved && (
+              <button
+                type="submit"
+                disabled={loading}
+                style={{
+                  padding: '14px',
+                  borderRadius: 12,
+                  border: 'none',
+                  background: loading ? 'var(--color-border)' : 'var(--color-primary)',
+                  color: '#fff',
+                  fontWeight: 700,
+                  fontSize: 16,
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  width: '100%',
+                }}
+              >
+                {loading ? 'Kaydediliyor...' : editId ? 'Güncelle' : 'Taslak Kaydet'}
+              </button>
+            )}
+
+            {/* Edit (already saved) */}
+            {editId && isSaved && (
+              <button
+                type="submit"
+                disabled={loading}
+                style={{
+                  padding: '14px',
+                  borderRadius: 12,
+                  border: 'none',
+                  background: loading ? 'var(--color-border)' : 'var(--color-primary)',
+                  color: '#fff',
+                  fontWeight: 700,
+                  fontSize: 16,
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  width: '100%',
+                }}
+              >
+                {loading ? 'Kaydediliyor...' : 'Güncelle'}
+              </button>
+            )}
           </div>
         </form>
+
+        {/* Attachment uploader — shown after expense is saved */}
+        {isSaved && savedExpenseId && !editId && (
+          <div style={{ marginTop: 24 }}>
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 700,
+                color: 'var(--color-text-muted)',
+                letterSpacing: '0.05em',
+                marginBottom: 12,
+              }}
+            >
+              BELGELER (opsiyonel)
+            </div>
+            <AttachmentUploader
+              expenseId={savedExpenseId}
+              onFilesChange={setUploadedFiles}
+              maxFiles={5}
+            />
+          </div>
+        )}
+
+        {/* Done button */}
+        {isSaved && !editId && (
+          <button
+            type="button"
+            onClick={handleDone}
+            style={{
+              marginTop: 20,
+              padding: '14px',
+              borderRadius: 12,
+              border: '2px solid var(--color-approved)',
+              background: 'var(--color-approved-bg)',
+              color: 'var(--color-approved)',
+              fontWeight: 700,
+              fontSize: 16,
+              cursor: 'pointer',
+              width: '100%',
+            }}
+          >
+            {uploadedFiles.length > 0
+              ? `Taslağa Git (${uploadedFiles.length} belge)`
+              : 'Taslağa Git'}
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
-function Field({
-  label,
-  error,
-  children,
-  span,
-}: {
-  label: string;
-  error?: string;
-  children: React.ReactNode;
-  span?: number;
-}): JSX.Element {
-  return (
-    <div style={{ gridColumn: span ? `span ${span}` : undefined, marginBottom: 0 }}>
-      <label style={labelStyle}>{label}</label>
-      {children}
-      {error && <p style={errStyle}>{error}</p>}
-    </div>
-  );
-}
-
-const pageStyle: React.CSSProperties = { padding: '28px 32px', maxWidth: 720 };
-const headerStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 16,
-  marginBottom: 24,
-};
-const backBtnStyle: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 6,
-  padding: '8px 14px',
-  borderRadius: 6,
-  border: '1px solid var(--color-border)',
-  background: 'transparent',
-  color: 'var(--color-text)',
-  fontSize: 13,
-  cursor: 'pointer',
-};
-const titleStyle: React.CSSProperties = {
-  fontSize: 20,
-  fontWeight: 700,
-  color: 'var(--color-text)',
-  margin: 0,
-};
-const cardStyle: React.CSSProperties = {
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-md)',
-  padding: '28px 24px',
-  boxShadow: 'var(--shadow-sm)',
-};
-const gridStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '1fr 1fr',
-  gap: '16px 20px',
-  marginBottom: 24,
-};
-const labelStyle: React.CSSProperties = {
+const labelSt: React.CSSProperties = {
   display: 'block',
   fontSize: 13,
-  fontWeight: 500,
+  fontWeight: 600,
   color: 'var(--color-text)',
   marginBottom: 6,
 };
-const inputStyle = (hasErr: boolean): React.CSSProperties => ({
-  width: '100%',
-  padding: '10px 12px',
-  borderRadius: 'var(--radius-sm)',
-  border: `1px solid ${hasErr ? 'var(--color-danger)' : 'var(--color-border)'}`,
-  background: 'var(--color-bg)',
-  color: 'var(--color-text)',
-  fontSize: 14,
-  boxSizing: 'border-box',
-});
-const errStyle: React.CSSProperties = {
+
+const errSt: React.CSSProperties = {
   color: 'var(--color-danger)',
   fontSize: 12,
   margin: '4px 0 0',
-};
-const actionsStyle: React.CSSProperties = { display: 'flex', justifyContent: 'flex-end', gap: 12 };
-const cancelBtnStyle: React.CSSProperties = {
-  padding: '10px 20px',
-  borderRadius: 6,
-  border: '1px solid var(--color-border)',
-  background: 'transparent',
-  color: 'var(--color-text)',
-  fontSize: 14,
-  cursor: 'pointer',
-};
-const submitBtnStyle: React.CSSProperties = {
-  padding: '10px 24px',
-  borderRadius: 6,
-  border: 'none',
-  background: 'var(--color-primary)',
-  color: '#fff',
-  fontWeight: 600,
-  fontSize: 14,
-  cursor: 'pointer',
 };

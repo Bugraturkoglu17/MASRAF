@@ -12,7 +12,6 @@ import { LoginPage } from '@/pages/LoginPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { UnauthorizedPage } from '@/pages/UnauthorizedPage';
 
-
 const ProfileCompletePage = lazy(() =>
   import('@/pages/ProfileCompletePage').then((m) => ({ default: m.ProfileCompletePage })),
 );
@@ -62,6 +61,7 @@ const AdminUsersPage = lazy(() =>
   import('@/pages/admin/AdminUsersPage').then((m) => ({ default: m.AdminUsersPage })),
 );
 
+// eslint-disable-next-line react-refresh/only-export-components
 function S({ children }: { children: React.ReactNode }) {
   return <Suspense fallback={<FullScreenLoader />}>{children}</Suspense>;
 }
