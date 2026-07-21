@@ -1012,6 +1012,180 @@ textarea {
   object-fit: cover;
 }
 
+/* ============================================================
+   USER HOME PAGE
+   ============================================================ */
+.user-home-page {
+  min-height: calc(100dvh - 70px);
+  background: #f6f7fb;
+  display: flex;
+  flex-direction: column;
+}
+
+.user-home-hero {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 44px 18px 22px;
+  background: linear-gradient(135deg, #6f55e5, #8a70f5);
+  color: #fff;
+}
+
+.user-home-avatar {
+  width: 48px;
+  height: 48px;
+  min-height: 48px;
+  flex: 0 0 48px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.22);
+  border: 2px solid rgba(255, 255, 255, 0.38);
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+}
+
+.user-home-greeting {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.user-home-greeting strong {
+  font-size: 17px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-home-greeting strong span {
+  font-weight: 800;
+}
+
+.user-home-greeting em {
+  font-style: normal;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.user-home-hero-icons {
+  display: flex;
+  gap: 6px;
+}
+
+.user-home-hero-icons button {
+  width: 38px;
+  height: 38px;
+  min-height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.user-home-hero-icons button:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.user-home-hero-icons svg {
+  width: 18px;
+  height: 18px;
+}
+
+.user-home-tabs-wrap {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.user-home-tabs {
+  flex: 1;
+  display: flex;
+  overflow-x: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  padding: 0 4px;
+}
+
+.user-home-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.user-home-tabs button {
+  flex-shrink: 0;
+  padding: 14px 10px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: unset;
+}
+
+.user-home-tabs button.active {
+  border-bottom-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.user-home-tabs button small {
+  padding: 2px 6px;
+  border-radius: 99px;
+  background: var(--color-border);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.user-home-tabs button.active small {
+  background: rgba(114, 87, 232, 0.12);
+  color: var(--color-primary);
+}
+
+.user-home-tab-toolbar {
+  padding: 0 12px 0 4px;
+}
+
+.user-home-tab-toolbar button {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 18px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.user-home-list {
+  flex: 1;
+  padding: 16px 14px 24px;
+}
+
+/* ============================================================
+   MANAGER EXPENSE PAGES
+   ============================================================ */
 .manager-expenses-page {
   padding: 28px 32px 100px;
 }
