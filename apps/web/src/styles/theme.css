@@ -1482,6 +1482,8 @@ textarea {
 }
 
 .page-view {
+  width: 100%;
+  min-height: 100%;
   animation: page-enter 0.15s ease-out both;
 }
 
