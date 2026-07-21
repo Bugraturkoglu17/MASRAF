@@ -371,24 +371,48 @@ export function CreateExpensePage(): JSX.Element {
               )}
             </div>
 
-            {/* Due date — only shown when requiresDueDate */}
-            {requiresDueDate && (
-              <div>
-                <label htmlFor="expense-due-date" style={labelSt}>
-                  Vade Tarihi *{' '}
-                  <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--color-text-muted)' }}>
+            {/* Due date — always shown, required only when category requires it */}
+            <div>
+              <label htmlFor="expense-due-date" style={labelSt}>
+                Vade Tarihi{requiresDueDate ? ' *' : ''}
+                {requiresDueDate && (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 400,
+                      color: 'var(--color-text-muted)',
+                      marginLeft: 4,
+                    }}
+                  >
                     ({selectedCategory?.name} için zorunlu)
                   </span>
-                </label>
-                <input
-                  id="expense-due-date"
-                  {...register('dueDate')}
-                  type="date"
-                  style={inp(false)}
-                  disabled={isSaved && !editId}
-                />
-              </div>
-            )}
+                )}
+                {!requiresDueDate && (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 400,
+                      color: 'var(--color-text-muted)',
+                      marginLeft: 4,
+                    }}
+                  >
+                    (opsiyonel)
+                  </span>
+                )}
+              </label>
+              <input
+                id="expense-due-date"
+                {...register('dueDate')}
+                type="date"
+                style={inp(Boolean(errors.dueDate))}
+                disabled={isSaved && !editId}
+              />
+              {errors.dueDate && (
+                <p role="alert" style={errSt}>
+                  {errors.dueDate.message}
+                </p>
+              )}
+            </div>
 
             {/* Description */}
             <div>

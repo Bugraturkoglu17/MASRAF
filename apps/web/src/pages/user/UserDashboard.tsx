@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { BarChart2, Bell, MessageSquare } from 'lucide-react';
+import { BarChart2, Bell, MessageSquare, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
@@ -45,7 +45,7 @@ export function UserDashboard(): JSX.Element {
     refetchInterval: 10000,
   });
 
-  const { data, isLoading, refetch } = useQuery<PagedResult>({
+  const { data, isLoading, isFetching, refetch } = useQuery<PagedResult>({
     queryKey: ['expenses-home', activeStatus],
     queryFn: () => apiFetch(`/expenses?status=${activeStatus}&limit=30`),
     refetchInterval: 15000,
@@ -100,8 +100,17 @@ export function UserDashboard(): JSX.Element {
           ))}
         </div>
         <div className="user-home-tab-toolbar">
-          <button type="button" aria-label="Yenile" onClick={() => void refetch()}>
-            ↻
+          <button
+            type="button"
+            aria-label="Yenile"
+            disabled={isFetching}
+            onClick={() => void refetch()}
+            style={{ opacity: isFetching ? 0.6 : 1 }}
+          >
+            <RefreshCw
+              size={16}
+              style={isFetching ? { animation: 'spin 0.8s linear infinite' } : undefined}
+            />
           </button>
         </div>
       </div>

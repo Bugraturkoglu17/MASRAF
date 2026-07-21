@@ -64,6 +64,12 @@ const statusQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100).optional(),
 });
 
+const managerQuerySchema = z.object({
+  page: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().positive().max(100).optional(),
+  sort: z.enum(['due-nearest', 'due-farthest', 'most-overdue', 'newest', 'oldest']).optional(),
+});
+
 @ApiTags('expenses')
 @ApiBearerAuth()
 @Controller('expenses')
@@ -137,13 +143,35 @@ export class ExpensesController {
   @UseGuards(RolesGuard)
   @Roles('MANAGER', 'ADMIN')
   async listPending(
-    @Query(new ZodValidationPipe(statusQuerySchema)) query: z.infer<typeof statusQuerySchema>,
+    @Query(new ZodValidationPipe(managerQuerySchema)) query: z.infer<typeof managerQuerySchema>,
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.expensesService.listPendingForOrganization(user.organizationId, {
       page: query.page ?? 1,
-      pageSize: query.limit ?? 20,
+      pageSize: query.limit ?? 50,
+      sort: query.sort,
     });
+  }
+
+  @Get('manager/due-soon')
+  @UseGuards(RolesGuard)
+  @Roles('MANAGER', 'ADMIN')
+  async listDueSoon(@CurrentUser() user: AuthenticatedUser) {
+    return this.expensesService.listDueSoon(user.organizationId);
+  }
+
+  @Get('manager/due-today')
+  @UseGuards(RolesGuard)
+  @Roles('MANAGER', 'ADMIN')
+  async listDueToday(@CurrentUser() user: AuthenticatedUser) {
+    return this.expensesService.listDueToday(user.organizationId);
+  }
+
+  @Get('manager/overdue')
+  @UseGuards(RolesGuard)
+  @Roles('MANAGER', 'ADMIN')
+  async listOverdue(@CurrentUser() user: AuthenticatedUser) {
+    return this.expensesService.listOverdue(user.organizationId);
   }
 
   @Get('manager/counts')

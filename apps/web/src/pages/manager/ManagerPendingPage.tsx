@@ -13,15 +13,25 @@ interface PagedResult {
 }
 type Decision = { kind: 'approve' | 'reject' | 'cancel'; expense: ManagerExpense };
 
+type SortOption = 'due-nearest' | 'due-farthest' | 'most-overdue' | 'newest' | 'oldest';
+const SORT_LABELS: Record<SortOption, string> = {
+  'due-nearest': 'Vadeye en yakın',
+  'due-farthest': 'Vadeye en uzak',
+  'most-overdue': 'En çok gecikmiş',
+  newest: 'En yeni',
+  oldest: 'En eski',
+};
+
 export function ManagerPendingPage(): JSX.Element {
   const qc = useQueryClient();
   const { showToast } = useToast();
   const [detailId, setDetailId] = useState<string | null>(null);
   const [decision, setDecision] = useState<Decision | null>(null);
   const [reason, setReason] = useState('');
+  const [sort, setSort] = useState<SortOption>('due-nearest');
   const { data, isLoading } = useQuery<PagedResult>({
-    queryKey: ['manager-pending'],
-    queryFn: () => apiFetch('/expenses/manager/pending?limit=50'),
+    queryKey: ['manager-pending', sort],
+    queryFn: () => apiFetch(`/expenses/manager/pending?limit=50&sort=${sort}`),
     refetchInterval: 10000,
   });
 
@@ -73,6 +83,18 @@ export function ManagerPendingPage(): JSX.Element {
           <h1>Onayda Bekleyenler</h1>
           <p>{data?.meta.totalItems ?? 0} masraf kararınızı bekliyor</p>
         </div>
+        <select
+          className="manager-sort-select"
+          value={sort}
+          onChange={(e) => setSort(e.target.value as SortOption)}
+          aria-label="Sıralama"
+        >
+          {(Object.keys(SORT_LABELS) as SortOption[]).map((key) => (
+            <option key={key} value={key}>
+              {SORT_LABELS[key]}
+            </option>
+          ))}
+        </select>
       </header>
       <main className="manager-expense-list">
         {isLoading ? (

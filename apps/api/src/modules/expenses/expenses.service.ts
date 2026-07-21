@@ -45,6 +45,20 @@ export class ExpensesService {
     return String(counter.nextVal);
   }
 
+  private async generateExpenseCode(
+    client: Pick<Prisma.TransactionClient, 'expense'>,
+  ): Promise<string> {
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      const existing = await client.expense.findUnique({
+        where: { expenseCode: code },
+        select: { id: true },
+      });
+      if (!existing) return code;
+    }
+    throw new ConflictAppException('Masraf kodu üretilemedi. Lütfen tekrar deneyin.');
+  }
+
   async createDraft(organizationId: string, userId: string, input: CreateExpenseInput) {
     const category = await this.prisma.expenseCategory.findFirst({
       where: { id: input.categoryId, organizationId, deletedAt: null },
@@ -56,12 +70,14 @@ export class ExpensesService {
 
     const expense = await this.prisma.$transaction(async (tx) => {
       const expenseNumber = await this.generateExpenseNumber(tx);
+      const expenseCode = await this.generateExpenseCode(tx);
       const created = await tx.expense.create({
         data: {
           organizationId,
           userId,
           categoryId: input.categoryId,
           expenseNumber,
+          expenseCode,
           title: input.title,
           description: input.description,
           amount: input.amount,
@@ -272,36 +288,108 @@ export class ExpensesService {
     return { draft, pending, approved, rejected };
   }
 
-  async listPendingForOrganization(organizationId: string, query: PaginationQuery) {
+  async listPendingForOrganization(
+    organizationId: string,
+    query: PaginationQuery & { sort?: string },
+  ) {
     const { skip, take } = toPrismaSkipTake(query);
     const where = { organizationId, status: 'PENDING' as const, deletedAt: null };
+    const orderByMap: Record<string, Prisma.ExpenseOrderByWithRelationInput> = {
+      'due-nearest': { dueDate: 'asc' },
+      'due-farthest': { dueDate: 'desc' },
+      'most-overdue': { dueDate: 'asc' },
+      newest: { submittedAt: 'desc' },
+      oldest: { submittedAt: 'asc' },
+    };
+    const orderBy = orderByMap[query.sort ?? 'due-nearest'] ?? { dueDate: 'asc' };
+    const managerSelect = {
+      category: true,
+      user: { select: { id: true, firstName: true, lastName: true, email: true } },
+      attachments: {
+        where: { deletedAt: null as null },
+        orderBy: { createdAt: 'asc' as const },
+        take: 1,
+        select: { id: true, fileName: true, mimeType: true, sizeBytes: true },
+      },
+    } satisfies Prisma.ExpenseInclude;
     const [items, totalItems] = await Promise.all([
-      this.prisma.expense.findMany({
-        where,
-        skip,
-        take,
-        orderBy: { submittedAt: 'asc' },
-        include: {
-          category: true,
-          user: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-            },
-          },
-          attachments: {
-            where: { deletedAt: null },
-            orderBy: { createdAt: 'asc' },
-            take: 1,
-            select: { id: true, fileName: true, mimeType: true, sizeBytes: true },
-          },
-        },
-      }),
+      this.prisma.expense.findMany({ where, skip, take, orderBy, include: managerSelect }),
       this.prisma.expense.count({ where }),
     ]);
     return buildPaginatedResult(items, totalItems, query);
+  }
+
+  async listDueSoon(organizationId: string) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const in7Days = new Date(today);
+    in7Days.setDate(in7Days.getDate() + 7);
+    return this.prisma.expense.findMany({
+      where: {
+        organizationId,
+        status: 'PENDING',
+        deletedAt: null,
+        dueDate: { gte: today, lte: in7Days },
+      },
+      orderBy: { dueDate: 'asc' },
+      include: {
+        category: true,
+        user: { select: { id: true, firstName: true, lastName: true, email: true } },
+        attachments: {
+          where: { deletedAt: null },
+          take: 1,
+          select: { id: true, fileName: true, mimeType: true, sizeBytes: true },
+        },
+      },
+    });
+  }
+
+  async listDueToday(organizationId: string) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return this.prisma.expense.findMany({
+      where: {
+        organizationId,
+        status: 'PENDING',
+        deletedAt: null,
+        dueDate: { gte: today, lt: tomorrow },
+      },
+      orderBy: { dueDate: 'asc' },
+      include: {
+        category: true,
+        user: { select: { id: true, firstName: true, lastName: true, email: true } },
+        attachments: {
+          where: { deletedAt: null },
+          take: 1,
+          select: { id: true, fileName: true, mimeType: true, sizeBytes: true },
+        },
+      },
+    });
+  }
+
+  async listOverdue(organizationId: string) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return this.prisma.expense.findMany({
+      where: {
+        organizationId,
+        status: 'PENDING',
+        deletedAt: null,
+        dueDate: { lt: today },
+      },
+      orderBy: { dueDate: 'asc' },
+      include: {
+        category: true,
+        user: { select: { id: true, firstName: true, lastName: true, email: true } },
+        attachments: {
+          where: { deletedAt: null },
+          take: 1,
+          select: { id: true, fileName: true, mimeType: true, sizeBytes: true },
+        },
+      },
+    });
   }
 
   async listForOrganizationByStatus(

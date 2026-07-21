@@ -1,7 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { CheckCircle, Clock, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Clock, XCircle } from 'lucide-react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { type ManagerExpense } from '@/components/expenses/ExpenseCards';
+import { DueDateBadge } from '@/components/ui/DueDateBadge';
 import { useAuth } from '@/features/auth/auth-context';
 import { apiFetch } from '@/lib/api-client';
 
@@ -46,6 +49,24 @@ export function ManagerDashboard(): JSX.Element {
     queryKey: ['manager-counts'],
     queryFn: () => apiFetch('/expenses/manager/counts'),
     refetchInterval: 10000,
+  });
+
+  const { data: overdue } = useQuery<ManagerExpense[]>({
+    queryKey: ['manager-overdue'],
+    queryFn: () => apiFetch('/expenses/manager/overdue'),
+    refetchInterval: 30000,
+  });
+
+  const { data: dueToday } = useQuery<ManagerExpense[]>({
+    queryKey: ['manager-due-today'],
+    queryFn: () => apiFetch('/expenses/manager/due-today'),
+    refetchInterval: 30000,
+  });
+
+  const { data: dueSoon } = useQuery<ManagerExpense[]>({
+    queryKey: ['manager-due-soon'],
+    queryFn: () => apiFetch('/expenses/manager/due-soon'),
+    refetchInterval: 30000,
   });
 
   return (
@@ -117,6 +138,7 @@ export function ManagerDashboard(): JSX.Element {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
+            marginBottom: 20,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -147,6 +169,148 @@ export function ManagerDashboard(): JSX.Element {
           </button>
         </div>
       )}
+
+      {overdue && overdue.length > 0 && (
+        <DueSection
+          title="Gecikmiş Masraflar"
+          icon={<AlertTriangle size={16} />}
+          color="var(--color-rejected)"
+          bg="var(--color-rejected-bg)"
+          border="var(--color-rejected-border)"
+          items={overdue}
+          onNavigate={() => navigate('/manager/pending?sort=most-overdue')}
+        />
+      )}
+
+      {dueToday && dueToday.length > 0 && (
+        <DueSection
+          title="Bugün Vadesi Dolan"
+          icon={<Clock size={16} />}
+          color="var(--color-warning, #e67e22)"
+          bg="var(--color-warning-bg, rgba(230,126,34,0.08))"
+          border="var(--color-warning-border, rgba(230,126,34,0.25))"
+          items={dueToday}
+          onNavigate={() => navigate('/manager/pending?sort=due-nearest')}
+        />
+      )}
+
+      {dueSoon && dueSoon.length > 0 && (
+        <DueSection
+          title="Yakında Vadesi Dolacak (7 gün)"
+          icon={<Clock size={16} />}
+          color="var(--color-primary)"
+          bg="rgba(100,80,200,0.06)"
+          border="rgba(100,80,200,0.18)"
+          items={dueSoon}
+          onNavigate={() => navigate('/manager/pending?sort=due-nearest')}
+        />
+      )}
+    </div>
+  );
+}
+
+function DueSection({
+  title,
+  icon,
+  color,
+  bg,
+  border,
+  items,
+  onNavigate,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  color: string;
+  bg: string;
+  border: string;
+  items: ManagerExpense[];
+  onNavigate: () => void;
+}) {
+  const money = (amount: string | number) =>
+    new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(Number(amount));
+  return (
+    <div
+      style={{
+        background: bg,
+        border: `1px solid ${border}`,
+        borderRadius: 'var(--radius-md)',
+        padding: '14px 18px',
+        marginBottom: 16,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 12,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, color }}>
+          {icon}
+          {title}
+          <span
+            style={{
+              background: color,
+              color: '#fff',
+              borderRadius: 10,
+              padding: '1px 7px',
+              fontSize: 12,
+              fontWeight: 700,
+            }}
+          >
+            {items.length}
+          </span>
+        </div>
+        <button
+          onClick={onNavigate}
+          style={{
+            fontSize: 12,
+            color,
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            fontWeight: 600,
+            padding: '2px 6px',
+          }}
+        >
+          Tümünü gör →
+        </button>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {items.slice(0, 5).map((exp) => (
+          <div
+            key={exp.id}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              background: 'var(--color-surface)',
+              borderRadius: 8,
+              padding: '8px 12px',
+              fontSize: 13,
+            }}
+          >
+            <span
+              style={{ color: 'var(--color-text-muted)', fontFamily: 'monospace', fontSize: 11 }}
+            >
+              #{exp.expenseCode}
+            </span>
+            <span
+              style={{
+                flex: 1,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {exp.user.firstName} {exp.user.lastName} — {exp.title}
+            </span>
+            <strong style={{ whiteSpace: 'nowrap', color }}>{money(exp.amount)}</strong>
+            {exp.dueDate && <DueDateBadge dueDate={exp.dueDate} />}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

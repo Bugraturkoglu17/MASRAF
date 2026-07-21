@@ -25,6 +25,7 @@ export interface ExpenseAttachmentSummary {
 export interface ExpenseListItem {
   id: string;
   expenseNumber?: string | null;
+  expenseCode?: string | null;
   title: string;
   description?: string | null;
   amount: string;
@@ -65,7 +66,12 @@ export function MobileReceiptExpenseCard({
         <time>{date(expense.expenseDate)}</time>
         <strong>{expense.category.name}</strong>
         <span title={expense.title}>{expense.title}</span>
-        <StatusBadge status={expense.status} />
+        <div className="receipt-badges">
+          <StatusBadge status={expense.status} />
+          {expense.expenseCode && (
+            <span className="expense-code-badge">#{expense.expenseCode}</span>
+          )}
+        </div>
       </div>
       <div className="receipt-separator" aria-hidden="true" />
       <div className="receipt-aside">
@@ -238,6 +244,9 @@ export function ManagerExpenseCard({
         </div>
         <div className="manager-expense-meta">
           <StatusBadge status={expense.status} />
+          {expense.expenseCode && (
+            <span className="expense-code-badge">#{expense.expenseCode}</span>
+          )}
           {expense.dueDate && <DueDateBadge dueDate={expense.dueDate} />}
         </div>
       </button>
