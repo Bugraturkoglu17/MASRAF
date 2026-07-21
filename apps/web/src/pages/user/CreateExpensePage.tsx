@@ -124,7 +124,15 @@ export function CreateExpensePage(): JSX.Element {
   }, [isDirty, isSaved]);
 
   useEffect(() => {
-    if (editId || isSaved || !isDirty || !user) return;
+    const hasContent = Boolean(
+      formValues.categoryId ||
+      formValues.title ||
+      formValues.description ||
+      formValues.amount ||
+      formValues.expenseDate ||
+      formValues.dueDate,
+    );
+    if (editId || isSaved || !isDirty || !user || !hasContent) return;
     const timeout = window.setTimeout(() => {
       void saveDraft({
         categoryId: formValues.categoryId,
@@ -201,6 +209,7 @@ export function CreateExpensePage(): JSX.Element {
 
   const deleteLocalDraft = () => {
     void clearDraft();
+    reset();
     setDraftHandled(true);
   };
 
@@ -493,7 +502,20 @@ export function CreateExpensePage(): JSX.Element {
         )}
       </div>
       <LocalDraftRecoverySheet
-        draft={!editId && !isDraftLoading && !draftHandled ? draft : null}
+        draft={
+          !editId &&
+          !isDraftLoading &&
+          !draftHandled &&
+          draft &&
+          (draft.categoryId ||
+            draft.title ||
+            draft.description ||
+            draft.amount ||
+            draft.expenseDate ||
+            draft.dueDate)
+            ? draft
+            : null
+        }
         onRecover={recoverLocalDraft}
         onDelete={deleteLocalDraft}
       />

@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### fix: local draft recovery loop and neon stage-14 prep (2026-07-21)
+
+- `apps/web/src/pages/user/CreateExpensePage.tsx` icinde local draft autosave kosulu guclendirildi; bos icerikte taslak yeniden olusmasi engellendi.
+- Taslak silme aksiyonunda `reset()` cagrisi eklendi; form state temizligi ve tekrar acilista recovery sheet dongusu duzeltildi.
+- Recovery sheet sadece gercek icerigi olan taslaklarda acilacak sekilde filtrelendi.
+- `apps/api/prisma/schema.prisma` dosyasinda Stage-14 alanlari icin `expenseCode` ve `AttachmentStatus/status` modeli guncellendi.
+- Prisma driver adapter denemesi icin `apps/api/src/database/prisma.service.ts` ve API bagimliliklari (`@prisma/adapter-neon`, `@neondatabase/serverless`, `ws`) eklendi.
+- Neon ortami icin migration/dogrulama yardimci scriptleri eklendi: `apps/api/apply-stage14-migration.js`, `apps/api/verify-stage14-migration.js`, `apps/api/check-expenses.js`, `apps/api/check-attachments-cols.js`, `scripts/check-expenses.js`, `test-neon-conn.js`, `grant.sql`.
+
 ## [da0e541] feat: ASAMA 13 - redesign mobile expense home, approvals and manager history cards
 
 ### Kullanıcı masraf girişi, mobil onaylar ve yönetici kartları (2026-07-21)

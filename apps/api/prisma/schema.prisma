@@ -3,7 +3,8 @@
 // para alanlarında Decimal(14,2), soft delete için deletedAt.
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
@@ -249,6 +250,7 @@ model Expense {
   userId               String        @db.Uuid
   categoryId           String        @db.Uuid
   expenseNumber        String?       @unique
+  expenseCode          String        @unique @db.VarChar(6)
   title                String
   description          String?
   amount               Decimal       @db.Decimal(14, 2)
@@ -324,17 +326,25 @@ model Approval {
 // Ekler (metadata yalnızca; dosya ikili verisi S3 uyumlu depoda tutulur)
 // ---------------------------------------------------------------------------
 
+enum AttachmentStatus {
+  PENDING_UPLOAD
+  ACTIVE
+  FAILED
+  DELETED
+}
+
 model Attachment {
-  id             String   @id @default(uuid()) @db.Uuid
-  organizationId String   @db.Uuid
-  expenseId      String?  @db.Uuid
-  fileKey        String   @unique
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @db.Uuid
+  expenseId      String?          @db.Uuid
+  fileKey        String           @unique
   fileName       String
   mimeType       String
   sizeBytes      Int
   sha256         String
-  uploadedById   String?  @db.Uuid
-  createdAt      DateTime @default(now())
+  status         AttachmentStatus @default(ACTIVE)
+  uploadedById   String?          @db.Uuid
+  createdAt      DateTime         @default(now())
   deletedAt      DateTime?
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
