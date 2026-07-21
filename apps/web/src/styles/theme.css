@@ -1322,6 +1322,25 @@ textarea {
   color: var(--color-primary);
   white-space: nowrap;
 }
+.manager-due-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 0 2px;
+  flex-wrap: wrap;
+}
+.manager-due-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.manager-due-date {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text);
+}
 .manager-card-actions {
   padding: 10px 12px;
   border-top: 1px solid var(--color-border);

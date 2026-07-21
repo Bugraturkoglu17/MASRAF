@@ -4,6 +4,7 @@ import { DueDateBadge } from './DueDateBadge';
 import { StatusBadge } from './StatusBadge';
 
 type Status = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+type DueUrgency = 'overdue' | 'today' | 'soon' | 'upcoming';
 
 interface Expense {
   id: string;
@@ -13,6 +14,8 @@ interface Expense {
   currency?: string;
   expenseDate: string;
   dueDate?: string | null;
+  dueDaysRemaining?: number | null;
+  dueUrgency?: DueUrgency | null;
   status: Status;
   category: { name: string };
 }
@@ -108,7 +111,12 @@ export function ExpenseCard({
         <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
           {new Date(expense.expenseDate).toLocaleDateString('tr-TR')}
         </span>
-        <DueDateBadge dueDate={expense.dueDate} />
+        <DueDateBadge
+          dueDate={expense.dueDate}
+          dueDaysRemaining={expense.dueDaysRemaining}
+          dueUrgency={expense.dueUrgency}
+          showMissing
+        />
       </div>
 
       {/* Bottom row: status + actions */}

@@ -1,45 +1,49 @@
 import { calcDaysRemaining } from '@/lib/date-utils';
 
+type DueUrgency = 'overdue' | 'today' | 'soon' | 'upcoming';
+
 interface DueDateBadgeProps {
   dueDate?: string | null;
+  dueDaysRemaining?: number | null;
+  dueUrgency?: DueUrgency | null;
+  showMissing?: boolean;
 }
 
-export function DueDateBadge({ dueDate }: DueDateBadgeProps): JSX.Element {
-  if (!dueDate) {
+const URGENCY_STYLE: Record<DueUrgency, { color: string; bg: string }> = {
+  overdue: { color: '#991b1b', bg: '#fef2f2' },
+  today: { color: '#dc2626', bg: '#fef2f2' },
+  soon: { color: '#c2410c', bg: '#fff7ed' },
+  upcoming: { color: '#b45309', bg: '#fffbeb' },
+};
+
+export function DueDateBadge({
+  dueDate,
+  dueDaysRemaining: precomputedDays,
+  dueUrgency: precomputedUrgency,
+  showMissing = false,
+}: DueDateBadgeProps): JSX.Element | null {
+  const hasDue = Boolean(dueDate || precomputedDays != null);
+
+  if (!hasDue) {
+    if (!showMissing) return null;
     return (
       <span style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 400 }}>
-        Vade Yok
+        Vade belirtilmedi
       </span>
     );
   }
 
-  const days = calcDaysRemaining(dueDate);
+  const days = precomputedDays ?? (dueDate ? calcDaysRemaining(dueDate) : 0);
+  const urgency: DueUrgency =
+    precomputedUrgency ??
+    (days < 0 ? 'overdue' : days === 0 ? 'today' : days <= 3 ? 'soon' : 'upcoming');
 
   let label: string;
-  let color: string;
-  let bg: string;
+  if (urgency === 'today') label = 'Bugün';
+  else if (urgency === 'overdue') label = `${Math.abs(days)} Gün Geçti`;
+  else label = `${days} Gün Kaldı`;
 
-  if (days > 7) {
-    label = `${days} Gün`;
-    color = 'var(--color-text-muted)';
-    bg = 'transparent';
-  } else if (days >= 3) {
-    label = `${days} Gün`;
-    color = '#b45309';
-    bg = '#fffbeb';
-  } else if (days >= 1) {
-    label = `${days} Gün`;
-    color = '#c2410c';
-    bg = '#fff7ed';
-  } else if (days === 0) {
-    label = 'Bugün';
-    color = '#dc2626';
-    bg = '#fef2f2';
-  } else {
-    label = `${Math.abs(days)} Gün Gecikti`;
-    color = '#991b1b';
-    bg = '#fef2f2';
-  }
+  const { color, bg } = URGENCY_STYLE[urgency];
 
   return (
     <span
@@ -49,7 +53,7 @@ export function DueDateBadge({ dueDate }: DueDateBadgeProps): JSX.Element {
         fontWeight: 600,
         color,
         background: bg,
-        padding: bg !== 'transparent' ? '2px 7px' : '0',
+        padding: '2px 7px',
         borderRadius: 10,
         whiteSpace: 'nowrap',
       }}

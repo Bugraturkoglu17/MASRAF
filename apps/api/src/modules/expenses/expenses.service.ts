@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 
 import { ConflictAppException, NotFoundAppException } from '../../common/exceptions/app.exception';
+import { computeDueInfo } from '../../common/utils/due-date.util';
 import { buildPaginatedResult, toPrismaSkipTake } from '../../common/utils/pagination.util';
 import { PrismaService } from '../../database/prisma.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
@@ -36,6 +37,10 @@ export class ExpensesService {
     private readonly notifications: NotificationsService,
     private readonly realtime: RealtimeService,
   ) {}
+
+  private withDue<T extends { dueDate: Date | null }>(item: T) {
+    return { ...item, ...computeDueInfo(item.dueDate) };
+  }
 
   private async generateExpenseNumber(client: Pick<Prisma.TransactionClient, 'expenseCounter'>) {
     const counter = await client.expenseCounter.update({
@@ -113,7 +118,7 @@ export class ExpensesService {
       return created;
     });
 
-    return expense;
+    return this.withDue(expense);
   }
 
   async updateDraft(id: string, organizationId: string, userId: string, input: UpdateExpenseInput) {
@@ -161,7 +166,7 @@ export class ExpensesService {
         { organizationId, actorId: userId, action: 'UPDATE', resource: 'EXPENSE', resourceId: id },
         tx,
       );
-      return updated;
+      return this.withDue(updated);
     });
   }
 
@@ -267,7 +272,11 @@ export class ExpensesService {
       }),
       this.prisma.expense.count({ where }),
     ]);
-    return buildPaginatedResult(items, totalItems, query);
+    return buildPaginatedResult(
+      items.map((i) => this.withDue(i)),
+      totalItems,
+      query,
+    );
   }
 
   async listOwnCounts(organizationId: string, userId: string) {
@@ -316,7 +325,11 @@ export class ExpensesService {
       this.prisma.expense.findMany({ where, skip, take, orderBy, include: managerSelect }),
       this.prisma.expense.count({ where }),
     ]);
-    return buildPaginatedResult(items, totalItems, query);
+    return buildPaginatedResult(
+      items.map((i) => this.withDue(i)),
+      totalItems,
+      query,
+    );
   }
 
   async listDueSoon(organizationId: string) {
@@ -324,7 +337,7 @@ export class ExpensesService {
     today.setHours(0, 0, 0, 0);
     const in7Days = new Date(today);
     in7Days.setDate(in7Days.getDate() + 7);
-    return this.prisma.expense.findMany({
+    const items = await this.prisma.expense.findMany({
       where: {
         organizationId,
         status: 'PENDING',
@@ -342,6 +355,7 @@ export class ExpensesService {
         },
       },
     });
+    return items.map((i) => this.withDue(i));
   }
 
   async listDueToday(organizationId: string) {
@@ -349,7 +363,7 @@ export class ExpensesService {
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    return this.prisma.expense.findMany({
+    const items = await this.prisma.expense.findMany({
       where: {
         organizationId,
         status: 'PENDING',
@@ -367,12 +381,13 @@ export class ExpensesService {
         },
       },
     });
+    return items.map((i) => this.withDue(i));
   }
 
   async listOverdue(organizationId: string) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    return this.prisma.expense.findMany({
+    const items = await this.prisma.expense.findMany({
       where: {
         organizationId,
         status: 'PENDING',
@@ -390,6 +405,7 @@ export class ExpensesService {
         },
       },
     });
+    return items.map((i) => this.withDue(i));
   }
 
   async listForOrganizationByStatus(
@@ -418,7 +434,11 @@ export class ExpensesService {
       }),
       this.prisma.expense.count({ where }),
     ]);
-    return buildPaginatedResult(items, totalItems, query);
+    return buildPaginatedResult(
+      items.map((i) => this.withDue(i)),
+      totalItems,
+      query,
+    );
   }
 
   async managerCounts(organizationId: string) {
@@ -461,7 +481,7 @@ export class ExpensesService {
       },
     });
     if (!expense) throw new NotFoundAppException('Masraf');
-    return expense;
+    return this.withDue(expense);
   }
 
   async findByIdForActor(

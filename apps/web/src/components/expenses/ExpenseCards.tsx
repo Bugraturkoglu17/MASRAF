@@ -16,6 +16,7 @@ import { DueDateBadge } from '@/components/ui/DueDateBadge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 
 export type ExpenseStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+export type DueUrgency = 'overdue' | 'today' | 'soon' | 'upcoming';
 export interface ExpenseAttachmentSummary {
   id: string;
   fileName: string;
@@ -32,6 +33,8 @@ export interface ExpenseListItem {
   currency?: string;
   expenseDate: string;
   dueDate?: string | null;
+  dueDaysRemaining?: number | null;
+  dueUrgency?: DueUrgency | null;
   status: ExpenseStatus;
   category: { name: string };
   attachments?: ExpenseAttachmentSummary[];
@@ -76,7 +79,12 @@ export function MobileReceiptExpenseCard({
       <div className="receipt-separator" aria-hidden="true" />
       <div className="receipt-aside">
         <strong>{money(expense.amount)}</strong>
-        {expense.dueDate && <DueDateBadge dueDate={expense.dueDate} />}
+        <DueDateBadge
+          dueDate={expense.dueDate}
+          dueDaysRemaining={expense.dueDaysRemaining}
+          dueUrgency={expense.dueUrgency}
+          showMissing
+        />
       </div>
       {(onSubmit || onEdit || onDelete || onDetail) && (
         <div className="receipt-actions" onClick={(e) => e.stopPropagation()}>
@@ -247,7 +255,24 @@ export function ManagerExpenseCard({
           {expense.expenseCode && (
             <span className="expense-code-badge">#{expense.expenseCode}</span>
           )}
-          {expense.dueDate && <DueDateBadge dueDate={expense.dueDate} />}
+        </div>
+        <div className="manager-due-row">
+          <span className="manager-due-label">Vade:</span>
+          {expense.dueDate ? (
+            <span className="manager-due-date">
+              {new Date(expense.dueDate).toLocaleDateString('tr-TR')}
+            </span>
+          ) : (
+            <span className="manager-due-date" style={{ color: 'var(--color-text-muted)' }}>
+              —
+            </span>
+          )}
+          <DueDateBadge
+            dueDate={expense.dueDate}
+            dueDaysRemaining={expense.dueDaysRemaining}
+            dueUrgency={expense.dueUrgency}
+            showMissing
+          />
         </div>
       </button>
       {(onApprove || onReject || onCancel) && (
