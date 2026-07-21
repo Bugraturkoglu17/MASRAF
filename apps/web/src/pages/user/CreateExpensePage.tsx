@@ -1,13 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, FileImage } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 
 import { useToast } from '@/components/feedback/toast-context';
-import { LocalDraftRecoverySheet } from '@/components/pwa/LocalDraftRecoverySheet';
 import { NetworkRequiredDialog } from '@/components/pwa/NetworkRequiredDialog';
 import { AttachmentUploader } from '@/components/ui/AttachmentUploader';
 import { useAuth } from '@/features/auth/auth-context';
@@ -63,7 +62,7 @@ export function CreateExpensePage(): JSX.Element {
   const [savedExpenseId, setSavedExpenseId] = useState<string | null>(editId);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [showNetworkDialog, setShowNetworkDialog] = useState(false);
-  const [draftHandled, setDraftHandled] = useState(false);
+  const autoRecoveredRef = useRef(false);
   const [initialFiles] = useState<File[]>(() => {
     const state = location.state as { initialFiles?: unknown } | null;
     return Array.isArray(state?.initialFiles) &&
@@ -115,6 +114,22 @@ export function CreateExpensePage(): JSX.Element {
       });
     }
   }, [editingExpense, reset]);
+
+  // Silently restore IndexedDB draft on first load — no modal shown
+  useEffect(() => {
+    if (editId || isDraftLoading || autoRecoveredRef.current) return;
+    autoRecoveredRef.current = true;
+    if (!draft || (!draft.categoryId && !draft.title && !draft.amount && !draft.expenseDate))
+      return;
+    reset({
+      categoryId: draft.categoryId ?? '',
+      title: draft.title ?? '',
+      description: draft.description ?? '',
+      amount: draft.amount,
+      expenseDate: draft.expenseDate ?? '',
+      dueDate: draft.dueDate ?? '',
+    });
+  }, [draft, editId, isDraftLoading, reset]);
 
   useEffect(() => {
     document.documentElement.dataset.unsavedForm = String(isDirty && !isSaved);
@@ -192,26 +207,6 @@ export function CreateExpensePage(): JSX.Element {
   };
 
   const loading = isSubmitting || createMut.isPending || updateMut.isPending;
-
-  const recoverLocalDraft = () => {
-    if (!draft) return;
-    reset({
-      categoryId: draft.categoryId ?? '',
-      title: draft.title ?? '',
-      description: draft.description ?? '',
-      amount: draft.amount,
-      expenseDate: draft.expenseDate ?? '',
-      dueDate: draft.dueDate ?? '',
-    });
-    setDraftHandled(true);
-    showToast('Yerel taslak geri yüklendi.', 'success');
-  };
-
-  const deleteLocalDraft = () => {
-    void clearDraft();
-    reset();
-    setDraftHandled(true);
-  };
 
   const inp = (hasErr: boolean): React.CSSProperties => ({
     width: '100%',
@@ -525,24 +520,6 @@ export function CreateExpensePage(): JSX.Element {
           </button>
         )}
       </div>
-      <LocalDraftRecoverySheet
-        draft={
-          !editId &&
-          !isDraftLoading &&
-          !draftHandled &&
-          draft &&
-          (draft.categoryId ||
-            draft.title ||
-            draft.description ||
-            draft.amount ||
-            draft.expenseDate ||
-            draft.dueDate)
-            ? draft
-            : null
-        }
-        onRecover={recoverLocalDraft}
-        onDelete={deleteLocalDraft}
-      />
       <NetworkRequiredDialog open={showNetworkDialog} onClose={() => setShowNetworkDialog(false)} />
     </div>
   );

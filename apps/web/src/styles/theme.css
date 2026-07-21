@@ -854,48 +854,35 @@ textarea {
   display: grid;
   gap: 10px;
 }
-.attachment-add {
-  width: 100%;
-  padding: 12px 14px;
-  border: 1.5px dashed #b7abea;
-  border-radius: 14px;
-  display: flex;
-  align-items: center;
+.attachment-action-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
-  background: #f7f5ff;
-  color: var(--color-primary);
-  font-weight: 700;
-  cursor: pointer;
 }
-.attachment-add svg {
-  width: 18px;
-}
-.attachment-add small {
-  margin-left: auto;
+.attachment-action-row .attachment-count {
+  grid-column: 1 / -1;
+  text-align: center;
   color: var(--color-text-muted);
+  font-size: 11px;
 }
-.attachment-options {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-  animation: card-in 160ms ease-out both;
-}
-.attachment-options button {
-  min-width: 0;
-  padding: 10px 3px;
-  border: 1px solid var(--color-border);
-  border-radius: 13px;
-  display: grid;
-  justify-items: center;
-  gap: 5px;
+.upload-action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 8px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 14px;
   background: var(--color-surface);
   color: var(--color-primary);
-  cursor: pointer;
-}
-.attachment-options span {
-  color: var(--color-text);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms;
+}
+.upload-action-btn:active {
+  background: var(--color-primary-light, #ede9ff);
+  border-color: var(--color-primary);
 }
 .attachment-list {
   display: grid;
@@ -1710,8 +1697,8 @@ textarea {
   .manager-card-actions button:last-child {
     grid-column: 1 / -1;
   }
-  .attachment-options {
-    grid-template-columns: repeat(2, 1fr);
+  .attachment-action-row {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 

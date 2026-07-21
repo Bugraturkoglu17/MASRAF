@@ -1,4 +1,4 @@
-import { Camera, FileText, Image, Plus, RefreshCw, Trash2, UploadCloud } from 'lucide-react';
+import { Camera, FileText, Image, RefreshCw, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { useToast } from '@/components/feedback/toast-context';
@@ -46,7 +46,6 @@ export function AttachmentUploader({
   const [config, setConfig] = useState(FALLBACK_CONFIG);
   const [uploaded, setUploaded] = useState<UploadedFile[]>([]);
   const [queue, setQueue] = useState<QueuedFile[]>([]);
-  const [showOptions, setShowOptions] = useState(false);
   const initialHandled = useRef(false);
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
@@ -130,7 +129,6 @@ export function AttachmentUploader({
 
   const handleFiles = (selected: File[] | FileList | null) => {
     if (!selected) return;
-    setShowOptions(false);
     const capacity = actualMax - uploaded.length - queue.length;
     const candidates = Array.from(selected).slice(0, Math.max(0, capacity));
     if (Array.from(selected).length > capacity)
@@ -211,36 +209,34 @@ export function AttachmentUploader({
       />
 
       {canUpload && (
-        <button
-          type="button"
-          className="attachment-add"
-          onClick={() => setShowOptions((value) => !value)}
-          aria-expanded={showOptions}
-        >
-          <Plus /> Belge ekle{' '}
-          <small>
-            {uploaded.length + queue.length}/{actualMax}
-          </small>
-        </button>
-      )}
-      {showOptions && (
-        <div className="attachment-options">
-          <button type="button" onClick={() => cameraRef.current?.click()}>
-            <Camera />
-            <span>Kamera</span>
+        <div className="attachment-action-row">
+          <button
+            type="button"
+            className="upload-action-btn"
+            onClick={() => cameraRef.current?.click()}
+          >
+            <Camera size={20} />
+            <span>Fotoğraf çek</span>
           </button>
-          <button type="button" onClick={() => galleryRef.current?.click()}>
-            <Image />
+          <button
+            type="button"
+            className="upload-action-btn"
+            onClick={() => galleryRef.current?.click()}
+          >
+            <Image size={20} />
             <span>Galeri</span>
           </button>
-          <button type="button" onClick={() => fileRef.current?.click()}>
-            <FileText />
-            <span>PDF / Dosya</span>
+          <button
+            type="button"
+            className="upload-action-btn"
+            onClick={() => fileRef.current?.click()}
+          >
+            <FileText size={20} />
+            <span>Manuel</span>
           </button>
-          <button type="button" onClick={() => galleryRef.current?.click()}>
-            <UploadCloud />
-            <span>Dosya ekle</span>
-          </button>
+          <small className="attachment-count">
+            {uploaded.length + queue.length}/{actualMax} belge
+          </small>
         </div>
       )}
 
