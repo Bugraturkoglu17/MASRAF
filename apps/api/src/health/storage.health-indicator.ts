@@ -13,11 +13,8 @@ export class StorageHealthIndicator extends HealthIndicator {
     try {
       await this.storage.ping();
       return this.getStatus(key, true);
-    } catch (error) {
-      throw new HealthCheckError(
-        'Depolama bağlantısı sağlanamadı',
-        this.getStatus(key, false, { message: (error as Error).message }),
-      );
+    } catch {
+      throw new HealthCheckError('Depolama bağlantısı sağlanamadı', this.getStatus(key, false));
     }
   }
 }

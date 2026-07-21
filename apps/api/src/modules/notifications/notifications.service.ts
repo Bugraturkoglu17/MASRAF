@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import type { NotificationChannel } from '@prisma/client';
+import type { NotificationChannel, Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../database/prisma.service';
+
+type NotificationClient = Pick<Prisma.TransactionClient, 'notification'>;
 
 @Injectable()
 export class NotificationsService {
@@ -28,8 +30,9 @@ export class NotificationsService {
     title: string,
     body: string,
     channel: NotificationChannel = 'IN_APP',
+    client: NotificationClient = this.prisma,
   ) {
-    return this.prisma.notification.create({
+    return client.notification.create({
       data: { organizationId, userId, title, body, channel },
     });
   }

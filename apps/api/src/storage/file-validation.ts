@@ -25,7 +25,12 @@ export const MAX_ATTACHMENT_SIZE_BYTES = 15 * 1024 * 1024; // 15 MB
 
 export class InvalidFileError extends Error {}
 
-export function assertValidAttachment(fileName: string, mimeType: string, sizeBytes: number): void {
+export function assertValidAttachment(
+  fileName: string,
+  mimeType: string,
+  sizeBytes: number,
+  maxSizeBytes = MAX_ATTACHMENT_SIZE_BYTES,
+): void {
   const ext = extname(fileName).toLowerCase();
   if (BLOCKED_EXTENSIONS.has(ext)) {
     throw new InvalidFileError(`Dosya uzantısına izin verilmiyor: ${ext}`);
@@ -33,10 +38,8 @@ export function assertValidAttachment(fileName: string, mimeType: string, sizeBy
   if (!ALLOWED_MIME_TYPES.has(mimeType)) {
     throw new InvalidFileError(`Dosya türüne izin verilmiyor: ${mimeType}`);
   }
-  if (sizeBytes > MAX_ATTACHMENT_SIZE_BYTES) {
-    throw new InvalidFileError(
-      `Dosya boyutu ${MAX_ATTACHMENT_SIZE_BYTES / (1024 * 1024)} MB sınırını aşıyor.`,
-    );
+  if (sizeBytes > maxSizeBytes) {
+    throw new InvalidFileError(`Dosya boyutu ${maxSizeBytes / (1024 * 1024)} MB sınırını aşıyor.`);
   }
 }
 

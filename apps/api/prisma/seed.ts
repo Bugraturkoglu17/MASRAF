@@ -8,6 +8,9 @@ const ALL_PERMISSIONS: { action: PermissionAction; resource: PermissionResource 
 ).flatMap((resource) => Object.values(PermissionAction).map((action) => ({ action, resource })));
 
 async function main() {
+  if (process.env.NODE_ENV === 'production' || process.env.APP_ENVIRONMENT === 'production') {
+    throw new Error('Production ortamında demo seed çalıştırılamaz.');
+  }
   console.log('Seed başlıyor...');
 
   const permissions = await Promise.all(

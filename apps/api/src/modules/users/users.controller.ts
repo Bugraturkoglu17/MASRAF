@@ -14,10 +14,16 @@ import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { UsersService } from './users.service';
 
 const completeProfileSchema = z.object({
-  firstName: z.string().min(1, 'Ad zorunludur'),
-  lastName: z.string().min(1, 'Soyad zorunludur'),
-  phone: z.string().min(1, 'Telefon zorunludur'),
-  iban: z.string().min(1, 'IBAN zorunludur'),
+  firstName: z.string().trim().min(2, 'Ad zorunludur').max(80),
+  lastName: z.string().trim().min(2, 'Soyad zorunludur').max(80),
+  phone: z
+    .string()
+    .trim()
+    .regex(/^(?:\+90|0)?5\d{9}$/, 'Geçerli bir Türkiye cep telefonu giriniz.'),
+  iban: z
+    .string()
+    .transform((value) => value.replace(/\s/g, '').toUpperCase())
+    .pipe(z.string().regex(/^TR\d{24}$/, 'Geçerli bir Türkiye IBAN numarası giriniz.')),
 });
 
 const setRoleSchema = z.object({
@@ -69,7 +75,7 @@ export class UsersController {
     @Body(new ZodValidationPipe(setRoleSchema)) body: z.infer<typeof setRoleSchema>,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.usersService.setRole(id, user.organizationId, body.role);
+    return this.usersService.setRole(id, user.organizationId, body.role, user.id);
   }
 
   @Patch(':id/status')
@@ -80,6 +86,6 @@ export class UsersController {
     @Body(new ZodValidationPipe(setStatusSchema)) body: z.infer<typeof setStatusSchema>,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.usersService.setStatus(id, user.organizationId, body.status);
+    return this.usersService.setStatus(id, user.organizationId, body.status, user.id);
   }
 }

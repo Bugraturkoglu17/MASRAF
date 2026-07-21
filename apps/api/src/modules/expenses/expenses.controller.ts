@@ -19,36 +19,47 @@ import {
   type AuthenticatedUser,
 } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { ForbiddenAppException } from '../../common/exceptions/app.exception';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 
 import { ExpensesService } from './expenses.service';
 
+const isoDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Tarih YYYY-MM-DD biçiminde olmalıdır.')
+  .refine((value) => !Number.isNaN(Date.parse(`${value}T00:00:00Z`)), 'Geçerli bir tarih giriniz.');
+const expenseDate = isoDate.refine(
+  (value) =>
+    value <= new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul' }).format(new Date()),
+  'Masraf tarihi gelecekte olamaz.',
+);
+
 const createExpenseSchema = z.object({
   categoryId: z.string().uuid(),
-  title: z.string().min(1),
-  description: z.string().optional(),
-  amount: z.number().positive(),
+  title: z.string().trim().min(1).max(200),
+  description: z.string().trim().max(2000).optional(),
+  amount: z.number().finite().positive().max(999_999_999_999.99),
   currency: z.string().length(3).optional(),
-  expenseDate: z.string(),
-  dueDate: z.string().optional(),
+  expenseDate,
+  dueDate: isoDate.optional(),
 });
 
 const updateExpenseSchema = z.object({
   categoryId: z.string().uuid().optional(),
-  title: z.string().min(1).optional(),
-  description: z.string().optional(),
-  amount: z.number().positive().optional(),
-  expenseDate: z.string().optional(),
-  dueDate: z.string().optional(),
+  title: z.string().trim().min(1).max(200).optional(),
+  description: z.string().trim().max(2000).optional(),
+  amount: z.number().finite().positive().max(999_999_999_999.99).optional(),
+  expenseDate: expenseDate.optional(),
+  dueDate: isoDate.optional(),
 });
 
-const rejectSchema = z.object({
-  reason: z.string().min(1, 'Red açıklaması zorunludur'),
+const decisionReasonSchema = z.object({
+  reason: z.string().trim().min(1, 'Açıklama zorunludur').max(1000),
 });
 
 const statusQuerySchema = z.object({
-  status: z.enum(['DRAFT', 'PENDING', 'APPROVED', 'REJECTED']).optional(),
+  status: z.enum(['DRAFT', 'PENDING', 'APPROVED', 'REJECTED', 'CANCELLED']).optional(),
   page: z.coerce.number().int().positive().optional(),
   limit: z.coerce.number().int().positive().max(100).optional(),
 });
@@ -66,6 +77,9 @@ export class ExpensesController {
     @Body(new ZodValidationPipe(createExpenseSchema)) body: z.infer<typeof createExpenseSchema>,
     @CurrentUser() user: AuthenticatedUser,
   ) {
+    if (!user.profileCompleted) {
+      throw new ForbiddenAppException('Masraf oluşturmadan önce profilinizi tamamlayın.');
+    }
     return this.expensesService.createDraft(user.organizationId, user.id, body);
   }
 
@@ -88,7 +102,13 @@ export class ExpensesController {
 
   @Get(':id')
   async findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.expensesService.findByIdScoped(id, user.organizationId);
+    return this.expensesService.findByIdForActor(
+      id,
+      user.organizationId,
+      user.id,
+      user.role,
+      user.permissions.includes('READ:USER'),
+    );
   }
 
   @Patch(':id')
@@ -171,9 +191,20 @@ export class ExpensesController {
   @Roles('MANAGER', 'ADMIN')
   async reject(
     @Param('id') id: string,
-    @Body(new ZodValidationPipe(rejectSchema)) body: z.infer<typeof rejectSchema>,
+    @Body(new ZodValidationPipe(decisionReasonSchema))
+    body: z.infer<typeof decisionReasonSchema>,
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.expensesService.reject(id, user.organizationId, user.id, body.reason);
+  }
+
+  @Post(':id/cancel')
+  async cancel(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(decisionReasonSchema))
+    body: z.infer<typeof decisionReasonSchema>,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.expensesService.cancel(id, user.organizationId, user.id, user.role, body.reason);
   }
 }

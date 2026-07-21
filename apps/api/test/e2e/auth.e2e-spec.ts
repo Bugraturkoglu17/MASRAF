@@ -11,6 +11,9 @@ describe('Auth (e2e)', () => {
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
+    app.setGlobalPrefix('api/v1', {
+      exclude: ['health', 'health/live', 'health/ready', 'health/storage'],
+    });
     await app.init();
   });
 

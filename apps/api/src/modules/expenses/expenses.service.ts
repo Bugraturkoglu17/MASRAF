@@ -1,5 +1,6 @@
 import type { PaginationQuery } from '@masraf/shared-types';
 import { Injectable } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 
 import { ConflictAppException, NotFoundAppException } from '../../common/exceptions/app.exception';
 import { buildPaginatedResult, toPrismaSkipTake } from '../../common/utils/pagination.util';
@@ -36,8 +37,8 @@ export class ExpensesService {
     private readonly realtime: RealtimeService,
   ) {}
 
-  private async generateExpenseNumber(): Promise<string> {
-    const counter = await this.prisma.expenseCounter.update({
+  private async generateExpenseNumber(client: Pick<Prisma.TransactionClient, 'expenseCounter'>) {
+    const counter = await client.expenseCounter.update({
       where: { id: 'global' },
       data: { nextVal: { increment: 1 } },
     });
@@ -49,10 +50,12 @@ export class ExpensesService {
       where: { id: input.categoryId, organizationId, deletedAt: null },
     });
     if (!category) throw new NotFoundAppException('Masraf kategorisi');
-
-    const expenseNumber = await this.generateExpenseNumber();
+    if (category.requiresDueDate && !input.dueDate) {
+      throw new ConflictAppException('Bu kategori için vade tarihi zorunludur.');
+    }
 
     const expense = await this.prisma.$transaction(async (tx) => {
+      const expenseNumber = await this.generateExpenseNumber(tx);
       const created = await tx.expense.create({
         data: {
           organizationId,
@@ -68,20 +71,30 @@ export class ExpensesService {
           status: 'DRAFT',
           createdBy: userId,
         },
-        include: { category: true },
+        include: {
+          category: true,
+          attachments: {
+            where: { deletedAt: null },
+            orderBy: { createdAt: 'asc' },
+            take: 1,
+            select: { id: true, fileName: true, mimeType: true, sizeBytes: true },
+          },
+        },
       });
       await tx.expenseStatusHistory.create({
         data: { expenseId: created.id, fromStatus: null, toStatus: 'DRAFT', changedById: userId },
       });
+      await this.auditLogs.record(
+        {
+          organizationId,
+          actorId: userId,
+          action: 'CREATE',
+          resource: 'EXPENSE',
+          resourceId: created.id,
+        },
+        tx,
+      );
       return created;
-    });
-
-    await this.auditLogs.record({
-      organizationId,
-      actorId: userId,
-      action: 'CREATE',
-      resource: 'EXPENSE',
-      resourceId: expense.id,
     });
 
     return expense;
@@ -95,18 +108,44 @@ export class ExpensesService {
     if (expense.status !== 'DRAFT')
       throw new ConflictAppException('Yalnızca taslak masraflar düzenlenebilir.');
 
-    return this.prisma.expense.update({
-      where: { id },
-      data: {
-        ...(input.categoryId && { categoryId: input.categoryId }),
-        ...(input.title && { title: input.title }),
-        description: input.description,
-        ...(input.amount !== undefined && { amount: input.amount }),
-        ...(input.expenseDate && { expenseDate: new Date(input.expenseDate) }),
-        dueDate: input.dueDate ? new Date(input.dueDate) : expense.dueDate,
-        updatedBy: userId,
-      },
-      include: { category: true },
+    if (input.categoryId || input.dueDate === undefined) {
+      const categoryId = input.categoryId ?? expense.categoryId;
+      const category = await this.prisma.expenseCategory.findFirst({
+        where: { id: categoryId, organizationId, deletedAt: null },
+      });
+      if (!category) throw new NotFoundAppException('Masraf kategorisi');
+      if (category.requiresDueDate && !(input.dueDate ?? expense.dueDate)) {
+        throw new ConflictAppException('Bu kategori için vade tarihi zorunludur.');
+      }
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.expense.update({
+        where: { id },
+        data: {
+          ...(input.categoryId && { categoryId: input.categoryId }),
+          ...(input.title && { title: input.title }),
+          description: input.description,
+          ...(input.amount !== undefined && { amount: input.amount }),
+          ...(input.expenseDate && { expenseDate: new Date(input.expenseDate) }),
+          dueDate: input.dueDate ? new Date(input.dueDate) : expense.dueDate,
+          updatedBy: userId,
+        },
+        include: {
+          category: true,
+          attachments: {
+            where: { deletedAt: null },
+            orderBy: { createdAt: 'asc' },
+            take: 1,
+            select: { id: true, fileName: true, mimeType: true, sizeBytes: true },
+          },
+        },
+      });
+      await this.auditLogs.record(
+        { organizationId, actorId: userId, action: 'UPDATE', resource: 'EXPENSE', resourceId: id },
+        tx,
+      );
+      return updated;
     });
   }
 
@@ -118,7 +157,13 @@ export class ExpensesService {
     if (expense.status !== 'DRAFT')
       throw new ConflictAppException('Yalnızca taslak masraflar silinebilir.');
 
-    await this.prisma.expense.update({ where: { id }, data: { deletedAt: new Date() } });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.expense.update({ where: { id }, data: { deletedAt: new Date() } });
+      await this.auditLogs.record(
+        { organizationId, actorId: userId, action: 'DELETE', resource: 'EXPENSE', resourceId: id },
+        tx,
+      );
+    });
   }
 
   async submitDraft(id: string, organizationId: string, userId: string) {
@@ -130,13 +175,30 @@ export class ExpensesService {
       throw new ConflictAppException('Yalnızca taslak masraflar onaya gönderilebilir.');
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      const result = await tx.expense.update({
-        where: { id },
+      const claimed = await tx.expense.updateMany({
+        where: { id, organizationId, userId, status: 'DRAFT', deletedAt: null },
         data: { status: 'PENDING', submittedAt: new Date(), updatedBy: userId },
-        include: { category: true, user: { select: { firstName: true, lastName: true } } },
       });
+      if (claimed.count !== 1) {
+        throw new ConflictAppException('Masraf başka bir işlem tarafından güncellendi.');
+      }
       await tx.expenseStatusHistory.create({
         data: { expenseId: id, fromStatus: 'DRAFT', toStatus: 'PENDING', changedById: userId },
+      });
+      await this.auditLogs.record(
+        {
+          organizationId,
+          actorId: userId,
+          action: 'UPDATE',
+          resource: 'EXPENSE',
+          resourceId: id,
+          metadata: { transition: 'DRAFT->PENDING' },
+        },
+        tx,
+      );
+      const result = await tx.expense.findUniqueOrThrow({
+        where: { id },
+        include: { category: true, user: { select: { firstName: true, lastName: true } } },
       });
       return result;
     });
@@ -168,7 +230,7 @@ export class ExpensesService {
       userId,
       deletedAt: null as null,
       ...(query.status
-        ? { status: query.status as 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' }
+        ? { status: query.status as 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' }
         : {}),
     };
     const [items, totalItems] = await Promise.all([
@@ -177,7 +239,15 @@ export class ExpensesService {
         skip,
         take,
         orderBy: { createdAt: 'desc' },
-        include: { category: true },
+        include: {
+          category: true,
+          attachments: {
+            where: { deletedAt: null },
+            orderBy: { createdAt: 'asc' },
+            take: 1,
+            select: { id: true, fileName: true, mimeType: true, sizeBytes: true },
+          },
+        },
       }),
       this.prisma.expense.count({ where }),
     ]);
@@ -218,10 +288,14 @@ export class ExpensesService {
               id: true,
               firstName: true,
               lastName: true,
-              phone: true,
               email: true,
-              iban: true,
             },
+          },
+          attachments: {
+            where: { deletedAt: null },
+            orderBy: { createdAt: 'asc' },
+            take: 1,
+            select: { id: true, fileName: true, mimeType: true, sizeBytes: true },
           },
         },
       }),
@@ -245,7 +319,13 @@ export class ExpensesService {
         orderBy: { decidedAt: 'desc' },
         include: {
           category: true,
-          user: { select: { id: true, firstName: true, lastName: true } },
+          user: { select: { id: true, firstName: true, lastName: true, email: true } },
+          attachments: {
+            where: { deletedAt: null },
+            orderBy: { createdAt: 'asc' },
+            take: 1,
+            select: { id: true, fileName: true, mimeType: true, sizeBytes: true },
+          },
         },
       }),
       this.prisma.expense.count({ where }),
@@ -281,6 +361,8 @@ export class ExpensesService {
             phone: true,
             email: true,
             iban: true,
+            organization: { select: { name: true } },
+            department: { select: { name: true } },
           },
         },
         approvals: {
@@ -294,14 +376,39 @@ export class ExpensesService {
     return expense;
   }
 
+  async findByIdForActor(
+    id: string,
+    organizationId: string,
+    actorId: string,
+    actorRole: 'USER' | 'MANAGER' | 'ADMIN',
+    canReadSensitiveUserData = false,
+  ) {
+    const expense = await this.findByIdScoped(id, organizationId);
+    if (actorRole === 'USER' && expense.userId !== actorId) {
+      // Kaydın varlığını sızdırmamak için 404 döndürülür.
+      throw new NotFoundAppException('Masraf');
+    }
+    if ((actorRole === 'MANAGER' || actorRole === 'ADMIN') && canReadSensitiveUserData) {
+      return expense;
+    }
+
+    if (!expense.user) return expense;
+
+    const { phone: _phone, iban: _iban, ...safeUser } = expense.user;
+    return { ...expense, user: safeUser };
+  }
+
   async approve(id: string, organizationId: string, approverId: string) {
     const expense = await this.assertPending(id, organizationId);
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.expense.update({
-        where: { id: expense.id },
+      const claimed = await tx.expense.updateMany({
+        where: { id: expense.id, organizationId, status: 'PENDING', deletedAt: null },
         data: { status: 'APPROVED', decidedAt: new Date(), updatedBy: approverId },
       });
+      if (claimed.count !== 1) {
+        throw new ConflictAppException('Masraf başka bir işlem tarafından güncellendi.');
+      }
       await tx.expenseStatusHistory.create({
         data: {
           expenseId: expense.id,
@@ -313,21 +420,30 @@ export class ExpensesService {
       await tx.approval.create({
         data: { expenseId: expense.id, approverId, decision: 'APPROVED', decidedAt: new Date() },
       });
+      await this.auditLogs.record(
+        {
+          organizationId,
+          actorId: approverId,
+          action: 'APPROVE',
+          resource: 'EXPENSE',
+          resourceId: expense.id,
+        },
+        tx,
+      );
+      await this.notifications.create(
+        organizationId,
+        expense.userId,
+        'Masrafınız onaylandı',
+        `${expense.title} başlıklı masrafınız onaylandı.`,
+        'IN_APP',
+        tx,
+      );
     });
-
-    await this.auditLogs.record({
+    this.realtime.emit({
+      type: 'EXPENSE_APPROVED',
       organizationId,
-      actorId: approverId,
-      action: 'APPROVE',
-      resource: 'EXPENSE',
-      resourceId: expense.id,
+      payload: { expenseId: expense.id, expenseNumber: expense.expenseNumber },
     });
-    await this.notifications.create(
-      organizationId,
-      expense.userId,
-      'Masrafınız onaylandı',
-      `${expense.title} başlıklı masrafınız onaylandı.`,
-    );
 
     return this.findByIdScoped(id, organizationId);
   }
@@ -336,8 +452,8 @@ export class ExpensesService {
     const expense = await this.assertPending(id, organizationId);
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.expense.update({
-        where: { id: expense.id },
+      const claimed = await tx.expense.updateMany({
+        where: { id: expense.id, organizationId, status: 'PENDING', deletedAt: null },
         data: {
           status: 'REJECTED',
           decidedAt: new Date(),
@@ -345,6 +461,9 @@ export class ExpensesService {
           updatedBy: approverId,
         },
       });
+      if (claimed.count !== 1) {
+        throw new ConflictAppException('Masraf başka bir işlem tarafından güncellendi.');
+      }
       await tx.expenseStatusHistory.create({
         data: {
           expenseId: expense.id,
@@ -363,23 +482,107 @@ export class ExpensesService {
           decidedAt: new Date(),
         },
       });
+      await this.auditLogs.record(
+        {
+          organizationId,
+          actorId: approverId,
+          action: 'REJECT',
+          resource: 'EXPENSE',
+          resourceId: expense.id,
+          metadata: { reason },
+        },
+        tx,
+      );
+      await this.notifications.create(
+        organizationId,
+        expense.userId,
+        'Masrafınız reddedildi',
+        `${expense.title} başlıklı masrafınız reddedildi: ${reason}`,
+        'IN_APP',
+        tx,
+      );
+    });
+    this.realtime.emit({
+      type: 'EXPENSE_REJECTED',
+      organizationId,
+      payload: { expenseId: expense.id, expenseNumber: expense.expenseNumber, reason },
     });
 
-    await this.auditLogs.record({
-      organizationId,
-      actorId: approverId,
-      action: 'REJECT',
-      resource: 'EXPENSE',
-      resourceId: expense.id,
-      metadata: { reason },
-    });
-    await this.notifications.create(
-      organizationId,
-      expense.userId,
-      'Masrafınız reddedildi',
-      `${expense.title} başlıklı masrafınız reddedildi: ${reason}`,
-    );
+    return this.findByIdScoped(id, organizationId);
+  }
 
+  async cancel(
+    id: string,
+    organizationId: string,
+    actorId: string,
+    actorRole: 'USER' | 'MANAGER' | 'ADMIN',
+    reason: string,
+  ) {
+    const expense = await this.prisma.expense.findFirst({
+      where: { id, organizationId, deletedAt: null },
+    });
+    if (!expense) throw new NotFoundAppException('Masraf');
+    const isOwner = expense.userId === actorId;
+    const isManager = actorRole === 'MANAGER' || actorRole === 'ADMIN';
+    if (!isOwner && !isManager) throw new NotFoundAppException('Masraf');
+    if (!['DRAFT', 'PENDING'].includes(expense.status)) {
+      throw new ConflictAppException('Yalnızca taslak veya bekleyen masraflar iptal edilebilir.');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.expense.updateMany({
+        where: {
+          id,
+          organizationId,
+          status: { in: ['DRAFT', 'PENDING'] },
+          deletedAt: null,
+        },
+        data: {
+          status: 'CANCELLED',
+          rejectionReason: reason,
+          decidedAt: new Date(),
+          updatedBy: actorId,
+        },
+      });
+      if (claimed.count !== 1) {
+        throw new ConflictAppException('Masraf başka bir işlem tarafından güncellendi.');
+      }
+      await tx.expenseStatusHistory.create({
+        data: {
+          expenseId: id,
+          fromStatus: expense.status,
+          toStatus: 'CANCELLED',
+          changedById: actorId,
+          reason,
+        },
+      });
+      await this.auditLogs.record(
+        {
+          organizationId,
+          actorId,
+          action: 'UPDATE',
+          resource: 'EXPENSE',
+          resourceId: id,
+          metadata: { transition: `${expense.status}->CANCELLED`, reason },
+        },
+        tx,
+      );
+      if (!isOwner) {
+        await this.notifications.create(
+          organizationId,
+          expense.userId,
+          'Masrafınız iptal edildi',
+          `${expense.title} başlıklı masrafınız iptal edildi: ${reason}`,
+          'IN_APP',
+          tx,
+        );
+      }
+    });
+    this.realtime.emit({
+      type: 'EXPENSE_CANCELLED',
+      organizationId,
+      payload: { expenseId: id, expenseNumber: expense.expenseNumber, reason },
+    });
     return this.findByIdScoped(id, organizationId);
   }
 

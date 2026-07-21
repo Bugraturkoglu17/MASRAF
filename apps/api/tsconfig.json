@@ -4,7 +4,7 @@
     "baseUrl": "./",
     "rootDir": "src",
     "outDir": "dist",
-    "incremental": true,
+    "incremental": false,
     "strictNullChecks": true,
     "noImplicitAny": true,
     "noUnusedLocals": false,

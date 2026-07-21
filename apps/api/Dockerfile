@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Aşama 1: Bağımlılıkları kur (workspace symlink'leri dahil)
 # ─────────────────────────────────────────────────────────────────────────────
-FROM node:20-alpine AS deps
+FROM node:22.23.1-alpine3.23 AS deps
 
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 
@@ -39,7 +39,7 @@ RUN pnpm --filter @masraf/api --prod deploy /prod/api
 # ─────────────────────────────────────────────────────────────────────────────
 # Aşama 3: Üretim imajı (minimal, non-root)
 # ─────────────────────────────────────────────────────────────────────────────
-FROM node:20-alpine AS production
+FROM node:22.23.1-alpine3.23 AS production
 
 RUN addgroup -S masraf && adduser -S masraf -G masraf
 
@@ -59,6 +59,7 @@ RUN chown -R masraf:masraf /app
 USER masraf
 
 ENV NODE_ENV=production
+ENV APP_ENVIRONMENT=production
 EXPOSE 4000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \

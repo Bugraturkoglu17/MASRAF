@@ -13,11 +13,8 @@ export class DatabaseHealthIndicator extends HealthIndicator {
     try {
       await this.prisma.isHealthy();
       return this.getStatus(key, true);
-    } catch (error) {
-      throw new HealthCheckError(
-        'Veritabanı bağlantısı sağlanamadı',
-        this.getStatus(key, false, { message: (error as Error).message }),
-      );
+    } catch {
+      throw new HealthCheckError('Veritabanı bağlantısı sağlanamadı', this.getStatus(key, false));
     }
   }
 }

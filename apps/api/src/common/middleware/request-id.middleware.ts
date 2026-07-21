@@ -13,7 +13,8 @@ declare module 'express' {
 export class RequestIdMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction): void {
     const incoming = req.header('x-request-id');
-    req.requestId = incoming && incoming.length > 0 ? incoming : uuid();
+    const trustedFormat = incoming && /^[A-Za-z0-9._:-]{1,64}$/.test(incoming);
+    req.requestId = trustedFormat ? incoming : uuid();
     res.setHeader('x-request-id', req.requestId);
     next();
   }

@@ -31,16 +31,48 @@ export class ApiError extends Error {
   }
 }
 
+export function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof ApiError)) return fallback;
+  return error.requestId ? `${error.message} (Talep: ${error.requestId})` : error.message;
+}
+
 interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: unknown;
   skipAuthRetry?: boolean;
 }
 
 let refreshPromise: Promise<boolean> | null = null;
+const REQUEST_TIMEOUT_MS = 15_000;
+
+async function fetchWithTimeout(url: string, init: RequestInit, externalSignal?: AbortSignal) {
+  const controller = new AbortController();
+  const abortFromCaller = () => controller.abort(externalSignal?.reason);
+  if (externalSignal?.aborted) abortFromCaller();
+  else externalSignal?.addEventListener('abort', abortFromCaller, { once: true });
+  const timeout = window.setTimeout(() => controller.abort('timeout'), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      const cancelled = externalSignal?.aborted;
+      throw new ApiError(
+        0,
+        cancelled ? 'REQUEST_CANCELLED' : 'NETWORK_TIMEOUT',
+        cancelled
+          ? 'İstek iptal edildi.'
+          : 'Sunucu zamanında yanıt vermedi. Lütfen tekrar deneyin.',
+      );
+    }
+    throw new ApiError(0, 'NETWORK_ERROR', 'Sunucuyla bağlantı kurulamadı.');
+  } finally {
+    window.clearTimeout(timeout);
+    externalSignal?.removeEventListener('abort', abortFromCaller);
+  }
+}
 
 async function refreshAccessToken(): Promise<boolean> {
   if (!refreshPromise) {
-    refreshPromise = fetch(`${API_BASE_URL}/auth/refresh`, {
+    refreshPromise = fetchWithTimeout(`${API_BASE_URL}/auth/refresh`, {
       method: 'POST',
       credentials: 'include',
     })
@@ -59,19 +91,28 @@ async function refreshAccessToken(): Promise<boolean> {
 }
 
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { body, skipAuthRetry, headers, ...rest } = options;
+  const { body, skipAuthRetry, headers, signal, ...rest } = options;
+  const method = (rest.method ?? 'GET').toUpperCase();
+  const alwaysOnlinePath = /\/(attachments|reports)(\/|$)/.test(path);
+  if ((!['GET', 'HEAD'].includes(method) || alwaysOnlinePath) && !navigator.onLine) {
+    throw new ApiError(0, 'NETWORK_REQUIRED', 'Bu işlem için internet bağlantısı gereklidir.');
+  }
 
   const doFetch = async (): Promise<Response> =>
-    fetch(`${API_BASE_URL}${path}`, {
-      ...rest,
-      credentials: 'include',
-      headers: {
-        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-        ...(inMemoryAccessToken ? { Authorization: `Bearer ${inMemoryAccessToken}` } : {}),
-        ...headers,
+    fetchWithTimeout(
+      `${API_BASE_URL}${path}`,
+      {
+        ...rest,
+        credentials: 'include',
+        headers: {
+          ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+          ...(inMemoryAccessToken ? { Authorization: `Bearer ${inMemoryAccessToken}` } : {}),
+          ...headers,
+        },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
       },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
+      signal ?? undefined,
+    );
 
   let response = await doFetch();
 

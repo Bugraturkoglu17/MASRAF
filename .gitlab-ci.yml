@@ -2,137 +2,212 @@ stages:
   - install
   - lint
   - typecheck
-  - test
-  - build
-  - container
+  - unit-test
+  - integration-test
+  - build-web
+  - build-api
+  - security-scan
+  - container-build
+  - staging-deploy
+  - production-deploy
 
 variables:
   PNPM_CACHE_DIR: '$CI_PROJECT_DIR/.pnpm-store'
-  # Test aşamasında kullanılan değerler yalnızca CI'ya özeldir; üretimde
-  # kullanılmaz. Gerçek secret'lar asla burada tutulmaz, GitLab CI/CD
-  # Variables bölümünden sağlanır (bkz. docs/deployment.md).
   DATABASE_URL: 'postgresql://postgres:postgres@postgres:5432/masraf_test?schema=public'
-  POSTGRES_USER: postgres
-  POSTGRES_PASSWORD: postgres
-  POSTGRES_DB: masraf_test
-  JWT_ACCESS_SECRET: 'ci-test-access-secret-please-change-32chars'
-  JWT_REFRESH_SECRET: 'ci-test-refresh-secret-please-change-32chars'
-  COOKIE_SECRET: 'ci-test-cookie-secret-please-change-32chars'
+  DIRECT_URL: 'postgresql://postgres:postgres@postgres:5432/masraf_test?schema=public'
   WEB_URL: 'http://localhost:3000'
   API_URL: 'http://localhost:4000'
-  VITE_API_URL: 'http://localhost:4000/api/v1'
   CORS_ORIGINS: 'http://localhost:3000'
-  S3_ENDPOINT: 'http://minio:9000'
-  S3_BUCKET: 'masraf-attachments-test'
-  S3_ACCESS_KEY_ID: 'minioadmin'
-  S3_SECRET_ACCESS_KEY: 'minioadmin'
+  R2_ENDPOINT: 'http://minio.invalid:9000'
+  R2_BUCKET: 'masraf-test'
+  R2_ACCESS_KEY_ID: 'ci-test-key'
+  R2_SECRET_ACCESS_KEY: 'ci-test-secret'
+  JWT_ACCESS_SECRET: 'ci-only-access-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  JWT_REFRESH_SECRET: 'ci-only-refresh-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+  COOKIE_SECRET: 'ci-only-cookie-cccccccccccccccccccccccccccccccc'
+  NODE_ENV: 'test'
+  APP_ENVIRONMENT: 'test'
+  APP_VERSION: '$CI_COMMIT_TAG'
+  APP_COMMIT_SHA: '$CI_COMMIT_SHA'
+  APP_BUILD_DATE: '$CI_JOB_STARTED_AT'
 
 default:
-  image: node:20-alpine
+  image: node:22.23.1-alpine3.23
+  interruptible: true
   cache:
     key:
-      files:
-        - pnpm-lock.yaml
-    paths:
-      - .pnpm-store
+      files: [pnpm-lock.yaml]
+    paths: [.pnpm-store]
     policy: pull
   before_script:
     - corepack enable
     - corepack prepare pnpm@9.12.0 --activate
-    - pnpm config set store-dir $PNPM_CACHE_DIR
+    - pnpm config set store-dir "$PNPM_CACHE_DIR"
 
 install:
   stage: install
   cache:
     key:
-      files:
-        - pnpm-lock.yaml
-    paths:
-      - .pnpm-store
-      - node_modules
+      files: [pnpm-lock.yaml]
+    paths: [.pnpm-store]
     policy: pull-push
   script:
     - pnpm install --frozen-lockfile
+    - pnpm db:generate
   artifacts:
-    paths:
-      - node_modules
-    expire_in: 1 hour
+    paths: [node_modules, apps/api/node_modules, apps/web/node_modules, packages/*/node_modules]
+    expire_in: 2 hours
 
 lint:
   stage: lint
-  needs: ['install']
-  script:
-    - pnpm lint
+  needs: [install]
+  script: [pnpm lint]
 
 typecheck:
   stage: typecheck
-  needs: ['install']
-  script:
-    - pnpm typecheck
+  needs: [install]
+  script: [pnpm typecheck]
 
-test:api:
-  stage: test
-  needs: ['install']
+unit:test:
+  stage: unit-test
+  needs: [install, lint, typecheck]
+  script: [pnpm test:unit]
+  artifacts:
+    when: always
+    paths: [apps/api/coverage, apps/web/coverage]
+    expire_in: 1 week
+
+integration:test:
+  stage: integration-test
+  needs: [install, unit:test]
   services:
-    - name: postgres:16-alpine
+    - name: postgres:16.4-alpine
       alias: postgres
   variables:
-    POSTGRES_HOST_AUTH_METHOD: trust
+    POSTGRES_USER: postgres
+    POSTGRES_PASSWORD: postgres
+    POSTGRES_DB: masraf_test
   script:
-    - pnpm --filter @masraf/api db:generate
-    - pnpm --filter @masraf/api test:cov
-  coverage: '/All files[^|]*\|[^|]*\s+([\d\.]+)/'
+    - pnpm db:deploy
+    - pnpm test:integration
+
+build:web:
+  stage: build-web
+  needs: [install, unit:test]
+  variables:
+    VITE_API_URL: /api/v1
+    VITE_APP_ENVIRONMENT: production
+    VITE_APP_VERSION: '$CI_COMMIT_TAG'
+  script: [pnpm --filter @masraf/web build, pnpm test:pwa]
   artifacts:
-    paths:
-      - apps/api/coverage
+    paths: [apps/web/dist]
     expire_in: 1 week
 
-test:web:
-  stage: test
-  needs: ['install']
-  script:
-    - pnpm --filter @masraf/web test:cov
+build:api:
+  stage: build-api
+  needs: [install, integration:test]
+  script: [pnpm --filter @masraf/api build]
   artifacts:
-    paths:
-      - apps/web/coverage
+    paths: [apps/api/dist, apps/api/prisma]
     expire_in: 1 week
 
-build:
-  stage: build
-  needs: ['install', 'lint', 'typecheck']
+security:source:
+  stage: security-scan
+  needs: [install, build:web, build:api]
   script:
-    - pnpm --filter @masraf/api db:generate
-    - pnpm build
-  artifacts:
-    paths:
-      - apps/api/dist
-      - apps/web/dist
-    expire_in: 1 week
+    - pnpm test:security
+    - pnpm --filter @masraf/api exec prisma validate
+    - pnpm audit --prod --audit-level high
 
-# Container image'ları yalnızca varsayılan (main/master) dalda oluşturulur.
-# GitLab Container Registry'yi kullanır; Northflank'in doğrudan GitLab
-# repository'sinden build alması tercih edilirse bu job'lar devre dışı
-# bırakılabilir (bkz. docs/northflank-setup.md).
-.container_build:
-  stage: container
-  image: docker:27
-  services:
-    - docker:27-dind
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+security:secrets:
+  stage: security-scan
+  image:
+    name: zricethezav/gitleaks:v8.24.2
+    entrypoint: ['']
+  before_script: []
+  cache: []
+  script:
+    - gitleaks git --redact --no-banner --exit-code 1
+
+.container-build:
+  stage: container-build
+  image: docker:27.5.1
+  services: [docker:27.5.1-dind]
   before_script:
-    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "staging" || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
 
 container:api:
-  extends: .container_build
+  extends: .container-build
+  needs: [security:source, security:secrets]
   script:
-    - docker build -f apps/api/Dockerfile -t "$CI_REGISTRY_IMAGE/api:$CI_COMMIT_SHORT_SHA" -t "$CI_REGISTRY_IMAGE/api:latest" .
-    - docker push "$CI_REGISTRY_IMAGE/api:$CI_COMMIT_SHORT_SHA"
-    - docker push "$CI_REGISTRY_IMAGE/api:latest"
+    - docker build --pull -f apps/api/Dockerfile -t "$CI_REGISTRY_IMAGE/api:$CI_COMMIT_SHA" .
+    - docker push "$CI_REGISTRY_IMAGE/api:$CI_COMMIT_SHA"
 
 container:web:
-  extends: .container_build
+  extends: .container-build
+  needs: [security:source, security:secrets]
   script:
-    - docker build -f apps/web/Dockerfile -t "$CI_REGISTRY_IMAGE/web:$CI_COMMIT_SHORT_SHA" -t "$CI_REGISTRY_IMAGE/web:latest" .
-    - docker push "$CI_REGISTRY_IMAGE/web:$CI_COMMIT_SHORT_SHA"
-    - docker push "$CI_REGISTRY_IMAGE/web:latest"
+    - docker build --pull -f apps/web/Dockerfile --build-arg VITE_API_URL=/api/v1 --build-arg VITE_APP_VERSION="${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}" -t "$CI_REGISTRY_IMAGE/web:$CI_COMMIT_SHA" .
+    - docker push "$CI_REGISTRY_IMAGE/web:$CI_COMMIT_SHA"
+
+container:scan:
+  stage: container-build
+  image:
+    name: aquasec/trivy:0.58.2
+    entrypoint: ['']
+  before_script: []
+  cache: []
+  needs: [container:api, container:web]
+  script:
+    - trivy image --username "$CI_REGISTRY_USER" --password "$CI_REGISTRY_PASSWORD" --exit-code 1 --severity CRITICAL,HIGH "$CI_REGISTRY_IMAGE/api:$CI_COMMIT_SHA"
+    - trivy image --username "$CI_REGISTRY_USER" --password "$CI_REGISTRY_PASSWORD" --exit-code 1 --severity CRITICAL,HIGH "$CI_REGISTRY_IMAGE/web:$CI_COMMIT_SHA"
+
+staging:migrate:
+  stage: staging-deploy
+  needs: [container:scan]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "staging"'
+      when: manual
+  environment: { name: staging }
+  script:
+    - test -n "$STAGING_DIRECT_URL"
+    - DIRECT_URL="$STAGING_DIRECT_URL" DATABASE_URL="$STAGING_DIRECT_URL" pnpm db:deploy
+
+staging:deploy:
+  stage: staging-deploy
+  needs: [staging:migrate]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "staging"'
+      when: manual
+  environment: { name: staging }
+  script:
+    - test -n "$NORTHFLANK_STAGING_DEPLOY_WEBHOOK"
+    - wget -qO- --post-data="sha=$CI_COMMIT_SHA" "$NORTHFLANK_STAGING_DEPLOY_WEBHOOK"
+
+production:migrate:
+  stage: production-deploy
+  needs: [container:scan]
+  resource_group: production
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
+  environment: { name: production }
+  script:
+    - test "$PRODUCTION_BACKUP_VERIFIED" = 'true'
+    - test -n "$PRODUCTION_DIRECT_URL"
+    - DIRECT_URL="$PRODUCTION_DIRECT_URL" DATABASE_URL="$PRODUCTION_DIRECT_URL" pnpm db:deploy
+
+production:deploy:
+  stage: production-deploy
+  needs: [production:migrate]
+  resource_group: production
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
+  environment: { name: production }
+  script:
+    - test -n "$NORTHFLANK_PRODUCTION_DEPLOY_WEBHOOK"
+    - wget -qO- --post-data="sha=$CI_COMMIT_SHA" "$NORTHFLANK_PRODUCTION_DEPLOY_WEBHOOK"
+    - SMOKE_BASE_URL="$PRODUCTION_URL" pnpm test:smoke

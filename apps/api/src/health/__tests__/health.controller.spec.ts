@@ -60,6 +60,7 @@ describe('HealthController', () => {
 
       expect(result.status).toBe('ok');
       expect(healthCheckService.check).toHaveBeenCalledTimes(1);
+      expect(healthCheckService.check.mock.calls[0]?.[0]).toHaveLength(2);
     });
   });
 
@@ -71,6 +72,7 @@ describe('HealthController', () => {
 
       expect(result.status).toBe('ok');
       expect(healthCheckService.check).toHaveBeenCalledTimes(1);
+      expect(healthCheckService.check.mock.calls[0]?.[0]).toHaveLength(1);
     });
 
     it('veritabanı erişilemezse hata yayar', async () => {
@@ -79,6 +81,14 @@ describe('HealthController', () => {
       );
 
       await expect(controller.ready()).rejects.toThrow('Veritabanı bağlantısı sağlanamadı');
+    });
+  });
+
+  describe('GET /health/storage', () => {
+    it('R2 durumunu readiness dışında ayrı kontrol eder', async () => {
+      healthCheckService.check.mockResolvedValueOnce(healthResult() as never);
+      await controller.storage();
+      expect(healthCheckService.check.mock.calls[0]?.[0]).toHaveLength(1);
     });
   });
 });

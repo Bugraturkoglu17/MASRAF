@@ -10,7 +10,9 @@ import { StorageHealthIndicator } from './storage.health-indicator';
 /**
  * Northflank ve diğer platformların health check probe'ları için.
  * /health/live: süreç ayakta mı (bağımlılık kontrolü yok, hızlı yanıt).
- * /health/ready: PostgreSQL ve depolama erişilebilir mi (trafiğe hazır mı).
+ * /health/ready: PostgreSQL erişilebilir ve API trafik almaya hazır mı.
+ * /health/storage: R2 durumu ayrı izlenir; geçici R2 kesintisi container'ı
+ * yeniden başlatmamalıdır.
  */
 @ApiTags('health')
 @Controller('health')
@@ -41,9 +43,13 @@ export class HealthController {
   @Get('ready')
   @HealthCheck()
   ready() {
-    return this.health.check([
-      () => this.databaseIndicator.check('database'),
-      () => this.storageIndicator.check('storage'),
-    ]);
+    return this.health.check([() => this.databaseIndicator.check('database')]);
+  }
+
+  @Public()
+  @Get('storage')
+  @HealthCheck()
+  storage() {
+    return this.health.check([() => this.storageIndicator.check('storage')]);
   }
 }

@@ -3,7 +3,7 @@ import { Shield, UserCheck, UserX } from 'lucide-react';
 
 import { useToast } from '@/components/feedback/toast-context';
 import { useAuth } from '@/features/auth/auth-context';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, getApiErrorMessage } from '@/lib/api-client';
 
 type AppRole = 'USER' | 'MANAGER' | 'ADMIN';
 type UserStatus = 'ACTIVE' | 'INACTIVE';
@@ -52,7 +52,7 @@ export function AdminUsersPage(): JSX.Element {
       qc.invalidateQueries({ queryKey: ['admin-users'] });
       showToast(`Rol "${roleLabels[vars.role]}" olarak güncellendi.`, 'success');
     },
-    onError: () => showToast('Rol güncellenemedi.', 'error'),
+    onError: (error) => showToast(getApiErrorMessage(error, 'Rol güncellenemedi.'), 'error'),
   });
 
   const statusMut = useMutation({
@@ -65,7 +65,7 @@ export function AdminUsersPage(): JSX.Element {
         'success',
       );
     },
-    onError: () => showToast('Durum güncellenemedi.', 'error'),
+    onError: (error) => showToast(getApiErrorMessage(error, 'Durum güncellenemedi.'), 'error'),
   });
 
   const nextRole = (current: AppRole): AppRole => {

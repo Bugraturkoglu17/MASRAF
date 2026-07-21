@@ -1,51 +1,55 @@
-# Üretim benzeri çalıştırma (kendi sunucunuz / VPS için).
-# Northflank gibi platformlarda her servis ayrı ayrı, bu dosya olmadan
-# yapılandırılır (bkz. docs/northflank-setup.md). MinIO burada YOKTUR;
-# üretimde gerçek bir S3 uyumlu sağlayıcı (R2, S3, B2) kullanılmalıdır.
 name: masraf-production
 
+# Production veritabanı bu compose içinde çalıştırılmaz. DATABASE_URL ve
+# DIRECT_URL Northflank Secret Group üzerinden Neon'a bağlanır.
 services:
-  postgres:
-    image: postgres:16-alpine
-    restart: always
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER}']
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
   api:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
     restart: always
-    env_file: .env
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid
+    security_opt:
+      - no-new-privileges:true
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
-    depends_on:
-      postgres:
-        condition: service_healthy
+      APP_ENVIRONMENT: production
+      PORT: 4000
+    env_file:
+      - path: .env
+        required: false
     expose:
       - '4000'
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:4000/health/ready']
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
 
   web:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        VITE_API_URL: ${VITE_API_URL}
+        VITE_API_URL: /api/v1
+        VITE_APP_ENVIRONMENT: production
+        VITE_APP_VERSION: ${APP_VERSION:-0.1.0}
     restart: always
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:size=32m,noexec,nosuid
+      - /var/run:size=8m,noexec,nosuid
+      - /var/log/nginx:size=16m,noexec,nosuid
+      - /tmp:size=16m,noexec,nosuid
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      API_INTERNAL_URL: http://api:4000
     ports:
-      - '80:8080'
+      - '8080:8080'
     depends_on:
-      - api
-
-volumes:
-  postgres-data:
+      api:
+        condition: service_healthy

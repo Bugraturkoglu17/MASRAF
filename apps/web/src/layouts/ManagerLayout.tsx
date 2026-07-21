@@ -2,6 +2,7 @@ import { CheckCircle, Clock, Home, User, XCircle } from 'lucide-react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 
 import { useToast } from '@/components/feedback/toast-context';
+import { MobileBottomNavigation } from '@/components/navigation/MobileBottomNavigation';
 import { useAuth } from '@/features/auth/auth-context';
 import { useManagerSse } from '@/lib/use-manager-sse';
 
@@ -17,7 +18,7 @@ export function ManagerLayout(): JSX.Element {
   const { user, logout } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
-  useManagerSse();
+  const realtimeStatus = useManagerSse();
 
   const handleLogout = async () => {
     await logout();
@@ -26,8 +27,8 @@ export function ManagerLayout(): JSX.Element {
   };
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <aside style={sidebarStyle}>
+    <div className="app-shell" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      <aside style={sidebarStyle} className="app-sidebar">
         <div style={brandStyle}>
           <span style={brandIconStyle}>₺</span>
           <div>
@@ -64,9 +65,20 @@ export function ManagerLayout(): JSX.Element {
         </div>
       </aside>
 
-      <main style={{ flex: 1, overflowY: 'auto', background: 'var(--color-bg)' }}>
+      <main
+        className="app-main"
+        style={{ flex: 1, overflowY: 'auto', background: 'var(--color-bg)' }}
+      >
+        {realtimeStatus !== 'connected' && (
+          <div className="realtime-status-banner" role="status">
+            {realtimeStatus === 'polling'
+              ? 'Canlı bağlantı kurulamadı. Veriler 30 saniyede bir güvenli şekilde yenileniyor.'
+              : 'Canlı bağlantı yeniden kuruluyor…'}
+          </div>
+        )}
         <Outlet />
       </main>
+      <MobileBottomNavigation role="MANAGER" />
     </div>
   );
 }

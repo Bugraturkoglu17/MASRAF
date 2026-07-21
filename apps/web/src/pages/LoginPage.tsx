@@ -3,7 +3,7 @@ import { loginSchema, type LoginInput } from '@masraf/shared-validation';
 import { Eye, EyeOff, Receipt } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, type Location } from 'react-router-dom';
 
 import { useAuth } from '@/features/auth/auth-context';
 import { ApiError } from '@/lib/api-client';
@@ -25,7 +25,8 @@ export function LoginPage(): JSX.Element {
     setFormError(null);
     try {
       await login(values.email, values.password);
-      const redirectTo = (location.state as { from?: Location })?.from?.pathname ?? '/';
+      const from = (location.state as { from?: Location })?.from;
+      const redirectTo = from ? `${from.pathname}${from.search}${from.hash}` : '/';
       navigate(redirectTo, { replace: true });
     } catch (error) {
       if (error instanceof ApiError && error.statusCode === 401) {

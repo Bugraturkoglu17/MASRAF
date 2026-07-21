@@ -49,15 +49,6 @@ export class AuthService {
       throw new UnauthorizedException('E-posta veya şifre hatalı.');
     }
 
-    const roles = user.userRoles.map((ur) => ur.role.name);
-    const permissions = [
-      ...new Set(
-        user.userRoles.flatMap((ur) =>
-          ur.role.rolePermissions.map((rp) => `${rp.permission.action}:${rp.permission.resource}`),
-        ),
-      ),
-    ];
-
     await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
     await this.auditLogs.record({
       organizationId: user.organizationId,
@@ -71,11 +62,6 @@ export class AuthService {
     return this.issueTokenPair({
       sub: user.id,
       organizationId: user.organizationId,
-      email: user.email,
-      role: user.role as import('./token.types').AppRole,
-      roles,
-      permissions,
-      profileCompleted: user.profileCompleted,
     });
   }
 
@@ -93,8 +79,12 @@ export class AuthService {
 
     const tokenHash = hashToken(refreshToken);
     const stored = await this.prisma.refreshToken.findUnique({ where: { tokenHash } });
-    if (!stored || stored.revokedAt || stored.expiresAt < new Date() || stored.userId !== sub) {
+    if (!stored || stored.expiresAt < new Date() || stored.userId !== sub) {
       throw new UnauthorizedException('Refresh token geçersiz veya süresi dolmuş.');
+    }
+    if (stored.revokedAt) {
+      await this.revokeAllSessions(sub);
+      throw new UnauthorizedException('Refresh token yeniden kullanımı algılandı.');
     }
 
     const user = await this.prisma.user.findUnique({
@@ -109,32 +99,28 @@ export class AuthService {
       throw new UnauthorizedException('Kullanıcı artık aktif değil.');
     }
 
-    // Refresh token rotasyonu: eski token iptal edilir, yenisi verilir.
-    const roles = user.userRoles.map((ur) => ur.role.name);
-    const permissions = [
-      ...new Set(
-        user.userRoles.flatMap((ur) =>
-          ur.role.rolePermissions.map((rp) => `${rp.permission.action}:${rp.permission.resource}`),
-        ),
-      ),
-    ];
+    // Eski token atomik olarak sahiplenilir; paralel veya tekrar kullanımda
+    // bütün oturumlar iptal edilir.
+    const rotationClaim = await this.prisma.refreshToken.updateMany({
+      where: { id: stored.id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    if (rotationClaim.count !== 1) {
+      await this.revokeAllSessions(sub);
+      throw new UnauthorizedException('Refresh token yeniden kullanımı algılandı.');
+    }
 
     const pair = await this.issueTokenPair(
       {
         sub: user.id,
         organizationId: user.organizationId,
-        email: user.email,
-        role: user.role as import('./token.types').AppRole,
-        roles,
-        permissions,
-        profileCompleted: user.profileCompleted,
       },
       ip,
     );
 
     await this.prisma.refreshToken.update({
       where: { id: stored.id },
-      data: { revokedAt: new Date(), replacedByTokenHash: hashToken(pair.refreshToken) },
+      data: { replacedByTokenHash: hashToken(pair.refreshToken) },
     });
 
     return pair;

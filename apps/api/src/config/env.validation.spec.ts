@@ -50,4 +50,37 @@ describe('validateEnv', () => {
     const { R2_ENDPOINT, ...rest } = validEnv;
     expect(() => validateEnv(rest)).toThrow(/R2_ENDPOINT/);
   });
+
+  it('production ortamında HTTP origin ve SSL olmayan veritabanını reddeder', () => {
+    expect(() =>
+      validateEnv({
+        ...validEnv,
+        NODE_ENV: 'production',
+        APP_ENVIRONMENT: 'production',
+        APP_VERSION: '1.0.0',
+        R2_ACCOUNT_ID: 'account-id',
+      }),
+    ).toThrow(/HTTPS|sslmode=require/);
+  });
+
+  it('production ortamında birbirinin aynı secret değerlerini reddeder', () => {
+    const secret = 'x'.repeat(48);
+    expect(() =>
+      validateEnv({
+        ...validEnv,
+        NODE_ENV: 'production',
+        APP_ENVIRONMENT: 'production',
+        APP_VERSION: '1.0.0',
+        WEB_URL: 'https://app.example.test',
+        API_URL: 'https://app.example.test',
+        CORS_ORIGINS: 'https://app.example.test',
+        DATABASE_URL: 'postgresql://db.example.test/app?sslmode=require',
+        DIRECT_URL: 'postgresql://db-direct.example.test/app?sslmode=require',
+        R2_ACCOUNT_ID: 'account-id',
+        JWT_ACCESS_SECRET: secret,
+        JWT_REFRESH_SECRET: secret,
+        COOKIE_SECRET: secret,
+      }),
+    ).toThrow(/birbirinden farklı/);
+  });
 });

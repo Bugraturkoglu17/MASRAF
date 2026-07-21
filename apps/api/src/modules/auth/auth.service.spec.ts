@@ -118,4 +118,19 @@ describe('AuthService', () => {
       UnauthorizedException,
     );
   });
+
+  it('iptal edilmiş refresh token tekrar kullanılırsa tüm oturumları iptal eder', async () => {
+    (jwtService.verify as jest.Mock).mockReturnValue({ sub: 'user-1' });
+    prisma.refreshToken.findUnique.mockResolvedValue({
+      id: 'refresh-1',
+      userId: 'user-1',
+      revokedAt: new Date(),
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    await expect(authService.refresh('replayed-token')).rejects.toThrow(UnauthorizedException);
+    expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: 'user-1', revokedAt: null } }),
+    );
+  });
 });

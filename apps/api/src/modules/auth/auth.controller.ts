@@ -2,6 +2,7 @@ import { loginSchema } from '@masraf/shared-validation';
 import {
   Body,
   Controller,
+  ForbiddenException,
   Ip,
   Post,
   Req,
@@ -11,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiTags } from '@nestjs/swagger';
-import { SkipThrottle, Throttle } from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 
 import { Public } from '../../common/decorators/public.decorator';
@@ -52,9 +53,10 @@ export class AuthController {
   }
 
   @Public()
-  @SkipThrottle()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('refresh')
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response, @Ip() ip: string) {
+    this.assertTrustedOrigin(req);
     const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME];
     if (!refreshToken) {
       throw new UnauthorizedException('Refresh token bulunamadı.');
@@ -65,9 +67,10 @@ export class AuthController {
   }
 
   @Public()
-  @SkipThrottle()
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Post('logout')
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    this.assertTrustedOrigin(req);
     const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME];
     if (refreshToken) {
       await this.authService.logout(refreshToken);
@@ -82,8 +85,18 @@ export class AuthController {
       httpOnly: true,
       secure: app.env === 'production',
       sameSite: 'strict',
+      ...(app.cookieDomain ? { domain: app.cookieDomain } : {}),
       path: '/api/v1/auth',
       maxAge: 1000 * 60 * 60 * 24 * 30,
     });
+  }
+
+  private assertTrustedOrigin(req: Request): void {
+    const origin = req.header('origin');
+    if (!origin) return;
+    const app = this.configService.get<AppConfig>('app')!;
+    if (!app.corsOrigins.includes(origin)) {
+      throw new ForbiddenException('İstek kaynağına izin verilmiyor.');
+    }
   }
 }

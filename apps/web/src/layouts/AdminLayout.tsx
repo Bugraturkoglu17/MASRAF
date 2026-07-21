@@ -1,13 +1,18 @@
-import { Home, Layout, Settings, User, Users } from 'lucide-react';
+import { FileClock, Home, Layout, Settings, User, Users } from 'lucide-react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 
 import { useToast } from '@/components/feedback/toast-context';
+import { MobileBottomNavigation } from '@/components/navigation/MobileBottomNavigation';
 import { useAuth } from '@/features/auth/auth-context';
 
 const navItems = [
   { to: '/admin', label: 'Admin Paneli', icon: Home, exact: true },
   { to: '/admin/users', label: 'Kullanıcı Yönetimi', icon: Users },
+  { to: '/admin/audit-logs', label: 'Denetim Kayıtları', icon: FileClock },
   { to: '/admin/profile', label: 'Profilim', icon: User },
+  ...(import.meta.env.DEV
+    ? [{ to: '/admin/pwa-diagnostics', label: 'PWA Tanılama', icon: Settings }]
+    : []),
 ];
 
 const viewItems = [
@@ -27,8 +32,8 @@ export function AdminLayout(): JSX.Element {
   };
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <aside style={sidebarStyle}>
+    <div className="app-shell" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      <aside style={sidebarStyle} className="app-sidebar">
         <div style={brandStyle}>
           <span style={brandIconStyle}>₺</span>
           <div>
@@ -84,9 +89,13 @@ export function AdminLayout(): JSX.Element {
         </div>
       </aside>
 
-      <main style={{ flex: 1, overflowY: 'auto', background: 'var(--color-bg)' }}>
+      <main
+        className="app-main"
+        style={{ flex: 1, overflowY: 'auto', background: 'var(--color-bg)' }}
+      >
         <Outlet />
       </main>
+      <MobileBottomNavigation role="ADMIN" />
     </div>
   );
 }

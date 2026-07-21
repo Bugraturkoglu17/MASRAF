@@ -2,6 +2,7 @@ import { CheckCircle, Clock, FileText, Home, PlusCircle, User, XCircle } from 'l
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 
 import { useToast } from '@/components/feedback/toast-context';
+import { MobileBottomNavigation } from '@/components/navigation/MobileBottomNavigation';
 import { useAuth } from '@/features/auth/auth-context';
 
 const navItems = [
@@ -26,9 +27,9 @@ export function UserLayout(): JSX.Element {
   };
 
   return (
-    <div style={wrapStyle}>
+    <div style={wrapStyle} className="app-shell">
       {/* Sidebar */}
-      <aside style={sidebarStyle}>
+      <aside style={sidebarStyle} className="app-sidebar">
         <div style={brandStyle}>
           <span style={brandIconStyle}>₺</span>
           <span style={brandTextStyle}>Masraf</span>
@@ -68,9 +69,10 @@ export function UserLayout(): JSX.Element {
       </aside>
 
       {/* İçerik */}
-      <main style={mainStyle}>
+      <main style={mainStyle} className="app-main">
         <Outlet />
       </main>
+      <MobileBottomNavigation role="USER" />
     </div>
   );
 }

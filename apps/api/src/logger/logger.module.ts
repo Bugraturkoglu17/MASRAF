@@ -27,6 +27,7 @@ interface RequestWithContext extends IncomingMessage {
               : { target: 'pino-pretty', options: { singleLine: true } },
             redact: {
               paths: [
+                'req.query.token',
                 'req.headers.authorization',
                 'req.headers.cookie',
                 'req.headers["x-api-key"]',
@@ -35,6 +36,11 @@ interface RequestWithContext extends IncomingMessage {
                 'req.body.newPassword',
                 'req.body.refreshToken',
                 'req.body.accessToken',
+                'req.body.iban',
+                'req.body.phone',
+                'req.body.smtpPassword',
+                'req.body.databaseUrl',
+                'req.body.signedUrl',
                 'res.headers["set-cookie"]',
               ],
               censor: '[REDACTED]',
@@ -45,6 +51,8 @@ interface RequestWithContext extends IncomingMessage {
                 requestId: request.requestId,
                 userId: request.user?.id,
                 organizationId: request.user?.organizationId,
+                appVersion: app.version,
+                environment: app.environment,
               };
             },
             customSuccessMessage: (req: IncomingMessage, res: ServerResponse) =>

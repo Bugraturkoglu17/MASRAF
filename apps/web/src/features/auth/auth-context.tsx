@@ -9,6 +9,7 @@ import {
 } from 'react';
 
 import { apiFetch, setAccessToken } from '@/lib/api-client';
+import { queryClient } from '@/lib/query-client';
 
 export type AppRole = 'USER' | 'MANAGER' | 'ADMIN';
 
@@ -41,8 +42,8 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-async function fetchCurrentUser(): Promise<CurrentUser> {
-  return apiFetch<CurrentUser>('/users/me');
+async function fetchCurrentUser(signal?: AbortSignal): Promise<CurrentUser> {
+  return apiFetch<CurrentUser>('/users/me', { signal });
 }
 
 export function AuthProvider({ children }: { children: ReactNode }): JSX.Element {
@@ -51,27 +52,34 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 8_000);
     (async () => {
       try {
         const tokens = await apiFetch<LoginResponse>('/auth/refresh', {
           method: 'POST',
           skipAuthRetry: true,
+          signal: controller.signal,
         });
         setAccessToken(tokens.accessToken);
-        const me = await fetchCurrentUser();
+        const me = await fetchCurrentUser(controller.signal);
         if (!cancelled) setUser(me);
       } catch {
         if (!cancelled) setAccessToken(null);
       } finally {
+        window.clearTimeout(timeout);
         if (!cancelled) setIsInitializing(false);
       }
     })();
     return () => {
       cancelled = true;
+      controller.abort();
+      window.clearTimeout(timeout);
     };
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
+    queryClient.clear();
     const tokens = await apiFetch<LoginResponse>('/auth/login', {
       method: 'POST',
       body: { email, password },
@@ -85,6 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
     await apiFetch('/auth/logout', { method: 'POST', skipAuthRetry: true }).catch(() => undefined);
     setAccessToken(null);
     setUser(null);
+    queryClient.clear();
   }, []);
 
   const refreshUser = useCallback(async () => {

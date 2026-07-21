@@ -6,6 +6,7 @@ import { ProtectedRoute } from './ProtectedRoute';
 import { RoleRoute } from './RoleRoute';
 
 import { FullScreenLoader } from '@/components/feedback/FullScreenLoader';
+import { OfflinePage } from '@/components/pwa/OfflinePage';
 import { AuthLayout } from '@/layouts/AuthLayout';
 import { ErrorPage } from '@/pages/ErrorPage';
 import { LoginPage } from '@/pages/LoginPage';
@@ -29,8 +30,16 @@ const UserExpensesPage = lazy(() =>
 const CreateExpensePage = lazy(() =>
   import('@/pages/user/CreateExpensePage').then((m) => ({ default: m.CreateExpensePage })),
 );
+const UserApprovalsPage = lazy(() =>
+  import('@/pages/user/UserApprovalsPage').then((m) => ({ default: m.UserApprovalsPage })),
+);
 const UserProfilePage = lazy(() =>
   import('@/pages/user/UserProfilePage').then((m) => ({ default: m.UserProfilePage })),
+);
+const NotificationsPage = lazy(() =>
+  import('@/pages/NotificationsPage').then((m) => ({
+    default: m.NotificationsPage,
+  })),
 );
 
 // MANAGER pages
@@ -59,6 +68,12 @@ const AdminDashboard = lazy(() =>
 );
 const AdminUsersPage = lazy(() =>
   import('@/pages/admin/AdminUsersPage').then((m) => ({ default: m.AdminUsersPage })),
+);
+const AdminAuditLogsPage = lazy(() =>
+  import('@/pages/admin/AdminAuditLogsPage').then((m) => ({ default: m.AdminAuditLogsPage })),
+);
+const PwaDiagnosticsPage = lazy(() =>
+  import('@/pages/admin/PwaDiagnosticsPage').then((m) => ({ default: m.PwaDiagnosticsPage })),
 );
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -132,10 +147,26 @@ export const router = createBrowserRouter([
                     ),
                   },
                   {
+                    path: '/approvals',
+                    element: (
+                      <S>
+                        <UserApprovalsPage />
+                      </S>
+                    ),
+                  },
+                  {
                     path: '/profile',
                     element: (
                       <S>
                         <UserProfilePage />
+                      </S>
+                    ),
+                  },
+                  {
+                    path: '/notifications',
+                    element: (
+                      <S>
+                        <NotificationsPage />
                       </S>
                     ),
                   },
@@ -157,7 +188,7 @@ export const router = createBrowserRouter([
         element: <ProfileGuard />,
         children: [
           {
-            element: <RoleRoute allowed={['MANAGER']} />,
+            element: <RoleRoute allowed={['MANAGER', 'ADMIN']} />,
             children: [
               {
                 element: (
@@ -206,6 +237,14 @@ export const router = createBrowserRouter([
                       </S>
                     ),
                   },
+                  {
+                    path: '/manager/notifications',
+                    element: (
+                      <S>
+                        <NotificationsPage />
+                      </S>
+                    ),
+                  },
                 ],
               },
             ],
@@ -250,6 +289,14 @@ export const router = createBrowserRouter([
                     ),
                   },
                   {
+                    path: '/admin/audit-logs',
+                    element: (
+                      <S>
+                        <AdminAuditLogsPage />
+                      </S>
+                    ),
+                  },
+                  {
                     path: '/admin/profile',
                     element: (
                       <S>
@@ -257,6 +304,26 @@ export const router = createBrowserRouter([
                       </S>
                     ),
                   },
+                  {
+                    path: '/admin/notifications',
+                    element: (
+                      <S>
+                        <NotificationsPage />
+                      </S>
+                    ),
+                  },
+                  ...(import.meta.env.DEV
+                    ? [
+                        {
+                          path: '/admin/pwa-diagnostics',
+                          element: (
+                            <S>
+                              <PwaDiagnosticsPage />
+                            </S>
+                          ),
+                        },
+                      ]
+                    : []),
                 ],
               },
             ],
@@ -267,5 +334,6 @@ export const router = createBrowserRouter([
   },
 
   { path: '/403', element: <UnauthorizedPage /> },
+  { path: '/offline', element: <OfflinePage /> },
   { path: '*', element: <NotFoundPage /> },
 ]);

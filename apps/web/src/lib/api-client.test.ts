@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ApiError, apiFetch, getAccessToken, setAccessToken } from './api-client';
+import {
+  ApiError,
+  apiFetch,
+  getAccessToken,
+  getApiErrorMessage,
+  setAccessToken,
+} from './api-client';
 
 describe('apiFetch', () => {
   beforeEach(() => {
@@ -49,5 +55,19 @@ describe('apiFetch', () => {
   it('ApiError bir Error örneğidir', () => {
     const error = new ApiError(500, 'INTERNAL_ERROR', 'Sunucu hatası');
     expect(error).toBeInstanceOf(Error);
+  });
+
+  it('ağ hatasını kurumsal ApiError olarak normalleştirir', async () => {
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new TypeError('offline'));
+
+    await expect(apiFetch('/test')).rejects.toMatchObject({
+      statusCode: 0,
+      code: 'NETWORK_ERROR',
+    });
+  });
+
+  it('kullanıcı hata mesajına izlenebilir talep kimliğini ekler', () => {
+    const error = new ApiError(409, 'CONFLICT', 'Kayıt değişti.', undefined, 'req-42');
+    expect(getApiErrorMessage(error, 'İşlem başarısız.')).toBe('Kayıt değişti. (Talep: req-42)');
   });
 });

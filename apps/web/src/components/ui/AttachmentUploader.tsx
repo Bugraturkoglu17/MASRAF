@@ -1,417 +1,345 @@
-import { Camera, FileText, Image, Plus, Trash2 } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { Camera, FileText, Image, Plus, RefreshCw, Trash2, UploadCloud } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 
-import { apiFetch } from '@/lib/api-client';
+import { useToast } from '@/components/feedback/toast-context';
+import { apiFetch, getApiErrorMessage } from '@/lib/api-client';
 
-interface UploadedFile {
+export interface UploadedFile {
   id: string;
   fileKey: string;
   fileName: string;
   mimeType: string;
   sizeBytes: number;
 }
-
-interface UploadingFile {
+interface QueuedFile {
   localId: string;
-  fileName: string;
+  file: File;
+  previewUrl?: string;
   progress: number;
   error?: string;
 }
-
-interface AttachmentUploaderProps {
+interface UploadConfig {
+  uploads?: { maxFiles: number; maxFileSizeBytes: number; allowedMimeTypes: string[] };
+}
+interface Props {
   expenseId: string;
   onFilesChange: (files: UploadedFile[]) => void;
   maxFiles?: number;
   disabled?: boolean;
+  initialFiles?: File[];
 }
 
-const ALLOWED_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'image/heic',
-  'application/pdf',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-excel',
-];
-const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+const FALLBACK_CONFIG = {
+  maxFiles: 5,
+  maxFileSizeBytes: 15 * 1024 * 1024,
+  allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf'],
+};
 
 export function AttachmentUploader({
   expenseId,
   onFilesChange,
-  maxFiles = 5,
+  maxFiles,
   disabled = false,
-}: AttachmentUploaderProps): JSX.Element {
-  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
-  const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
+  initialFiles = [],
+}: Props): JSX.Element {
+  const { showToast } = useToast();
+  const [config, setConfig] = useState(FALLBACK_CONFIG);
+  const [uploaded, setUploaded] = useState<UploadedFile[]>([]);
+  const [queue, setQueue] = useState<QueuedFile[]>([]);
   const [showOptions, setShowOptions] = useState(false);
-
+  const initialHandled = useRef(false);
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const updateUploaded = (files: UploadedFile[]) => {
-    setUploadedFiles(files);
-    onFilesChange(files);
+  useEffect(() => {
+    void apiFetch<UploadConfig>('/app/config')
+      .then((value) => value.uploads && setConfig(value.uploads))
+      .catch(() => undefined);
+  }, []);
+
+  const actualMax = maxFiles ?? config.maxFiles;
+  const updateUploaded = (next: UploadedFile[]) => {
+    setUploaded(next);
+    onFilesChange(next);
   };
 
-  const canUploadMore = uploadedFiles.length + uploadingFiles.length < maxFiles;
+  const putWithProgress = (url: string, file: File, localId: string) =>
+    new Promise<void>((resolve, reject) => {
+      const request = new XMLHttpRequest();
+      request.open('PUT', url);
+      request.setRequestHeader('Content-Type', file.type);
+      request.upload.onprogress = (event) => {
+        if (!event.lengthComputable) return;
+        const progress = Math.max(1, Math.min(95, Math.round((event.loaded / event.total) * 95)));
+        setQueue((items) =>
+          items.map((item) => (item.localId === localId ? { ...item, progress } : item)),
+        );
+      };
+      request.onload = () =>
+        request.status >= 200 && request.status < 300
+          ? resolve()
+          : reject(new Error('R2 yüklemesi başarısız.'));
+      request.onerror = () => reject(new Error('Dosya aktarımı sırasında bağlantı kesildi.'));
+      request.send(file);
+    });
 
-  const handleFiles = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    setShowOptions(false);
-
-    const toProcess = Array.from(files).slice(
-      0,
-      maxFiles - uploadedFiles.length - uploadingFiles.length,
+  const uploadOne = async (queued: QueuedFile) => {
+    const { file, localId } = queued;
+    setQueue((items) =>
+      items.map((item) =>
+        item.localId === localId ? { ...item, progress: 0, error: undefined } : item,
+      ),
     );
-
-    for (const file of toProcess) {
-      if (!ALLOWED_TYPES.includes(file.type)) {
-        alert(`${file.name}: Desteklenmeyen dosya türü.`);
-        continue;
-      }
-      if (file.size > MAX_SIZE_BYTES) {
-        alert(`${file.name}: Dosya boyutu 10 MB'ı aşıyor.`);
-        continue;
-      }
-
-      const localId = `${Date.now()}-${Math.random()}`;
-      setUploadingFiles((prev) => [...prev, { localId, fileName: file.name, progress: 0 }]);
-
-      try {
-        const { uploadUrl, fileKey } = await apiFetch<{ uploadUrl: string; fileKey: string }>(
-          '/attachments/upload-url',
-          {
-            method: 'POST',
-            body: { expenseId, fileName: file.name, mimeType: file.type, fileSize: file.size },
-          },
-        );
-
-        setUploadingFiles((prev) =>
-          prev.map((f) => (f.localId === localId ? { ...f, progress: 30 } : f)),
-        );
-
-        const uploadRes = await fetch(uploadUrl, {
-          method: 'PUT',
-          body: file,
-          headers: { 'Content-Type': file.type },
-        });
-
-        if (!uploadRes.ok) throw new Error('R2 yüklemesi başarısız');
-
-        setUploadingFiles((prev) =>
-          prev.map((f) => (f.localId === localId ? { ...f, progress: 80 } : f)),
-        );
-
-        const completed = await apiFetch<UploadedFile>('/attachments/complete', {
+    try {
+      const signed = await apiFetch<{ uploadUrl: string; fileKey: string }>(
+        '/attachments/upload-url',
+        {
           method: 'POST',
-          body: {
-            expenseId,
-            fileKey,
-            fileName: file.name,
-            mimeType: file.type,
-            fileSize: file.size,
-          },
-        });
-
-        setUploadingFiles((prev) => prev.filter((f) => f.localId !== localId));
-        setUploadedFiles((prev) => {
-          const next = [...prev, completed];
-          onFilesChange(next);
-          return next;
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Yükleme başarısız';
-        setUploadingFiles((prev) =>
-          prev.map((f) => (f.localId === localId ? { ...f, progress: 0, error: message } : f)),
-        );
-      }
+          body: { expenseId, fileName: file.name, mimeType: file.type, fileSize: file.size },
+        },
+      );
+      await putWithProgress(signed.uploadUrl, file, localId);
+      const completed = await apiFetch<UploadedFile>('/attachments/complete', {
+        method: 'POST',
+        body: {
+          expenseId,
+          fileKey: signed.fileKey,
+          fileName: file.name,
+          mimeType: file.type,
+          fileSize: file.size,
+        },
+      });
+      setQueue((items) => items.filter((item) => item.localId !== localId));
+      setUploaded((items) => {
+        const next = [...items, completed];
+        onFilesChange(next);
+        return next;
+      });
+      if (queued.previewUrl) URL.revokeObjectURL(queued.previewUrl);
+    } catch (error) {
+      setQueue((items) =>
+        items.map((item) =>
+          item.localId === localId
+            ? { ...item, progress: 0, error: getApiErrorMessage(error, 'Yükleme başarısız.') }
+            : item,
+        ),
+      );
     }
   };
 
-  const retryUpload = (localId: string) => {
-    setUploadingFiles((prev) => prev.filter((f) => f.localId !== localId));
+  const handleFiles = (selected: File[] | FileList | null) => {
+    if (!selected) return;
+    setShowOptions(false);
+    const capacity = actualMax - uploaded.length - queue.length;
+    const candidates = Array.from(selected).slice(0, Math.max(0, capacity));
+    if (Array.from(selected).length > capacity)
+      showToast(`En fazla ${actualMax} belge eklenebilir.`, 'error');
+    for (const file of candidates) {
+      if (!config.allowedMimeTypes.includes(file.type)) {
+        showToast(`${file.name}: desteklenmeyen dosya türü.`, 'error');
+        continue;
+      }
+      if (file.size > config.maxFileSizeBytes) {
+        showToast(
+          `${file.name}: dosya boyutu ${(config.maxFileSizeBytes / 1024 / 1024).toFixed(0)} MB sınırını aşıyor.`,
+          'error',
+        );
+        continue;
+      }
+      const queued: QueuedFile = {
+        localId: crypto.randomUUID(),
+        file,
+        progress: 0,
+        previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
+      };
+      setQueue((items) => [...items, queued]);
+      void uploadOne(queued);
+    }
   };
 
-  const deleteFile = async (fileId: string) => {
-    await apiFetch(`/attachments/${fileId}`, { method: 'DELETE' });
-    const next = uploadedFiles.filter((f) => f.id !== fileId);
-    updateUploaded(next);
+  useEffect(() => {
+    if (initialHandled.current || initialFiles.length === 0) return;
+    initialHandled.current = true;
+    handleFiles(initialFiles);
+    // Initial files are intentionally consumed only once after the draft receives an id.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expenseId]);
+
+  const removeQueued = (item: QueuedFile) => {
+    if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+    setQueue((items) => items.filter((candidate) => candidate.localId !== item.localId));
   };
-
-  type UploadKind = 'camera' | 'gallery' | 'file';
-
-  const triggerUpload = (kind: UploadKind) => {
-    if (kind === 'camera') cameraRef.current?.click();
-    else if (kind === 'gallery') galleryRef.current?.click();
-    else fileRef.current?.click();
+  const deleteUploaded = async (item: UploadedFile) => {
+    try {
+      await apiFetch(`/attachments/${item.id}`, { method: 'DELETE' });
+      updateUploaded(uploaded.filter((file) => file.id !== item.id));
+    } catch (error) {
+      showToast(getApiErrorMessage(error, 'Belge silinemedi.'), 'error');
+    }
   };
-
-  const uploadOptions: {
-    kind: UploadKind;
-    icon: JSX.Element;
-    label: string;
-    sub: string;
-    color: string;
-    bg: string;
-  }[] = [
-    {
-      kind: 'camera',
-      icon: <Camera size={22} />,
-      label: 'Fotoğraf Çek',
-      sub: 'Kamerayla belge çek',
-      color: '#2563eb',
-      bg: '#eff6ff',
-    },
-    {
-      kind: 'gallery',
-      icon: <Image size={22} />,
-      label: 'Galeriden Seç',
-      sub: 'Telefonundan görsel seç',
-      color: '#7c3aed',
-      bg: '#f5f3ff',
-    },
-    {
-      kind: 'file',
-      icon: <FileText size={22} />,
-      label: 'PDF / Dosya Yükle',
-      sub: 'PDF veya Excel seç',
-      color: '#dc2626',
-      bg: '#fef2f2',
-    },
-  ];
+  const canUpload = !disabled && uploaded.length + queue.length < actualMax;
 
   return (
-    <div>
-      {/* Hidden inputs */}
+    <section className="attachment-uploader" aria-label="Masraf belgeleri">
       <input
         ref={cameraRef}
+        className="visually-hidden"
         type="file"
-        accept="image/*"
+        accept="image/jpeg,image/png,image/webp"
         capture="environment"
-        style={{ display: 'none' }}
+        aria-label="Kamerayla fotoğraf çek"
         onChange={(e) => handleFiles(e.target.files)}
       />
       <input
         ref={galleryRef}
+        className="visually-hidden"
         type="file"
-        accept="image/*"
+        accept="image/jpeg,image/png,image/webp"
         multiple
-        style={{ display: 'none' }}
+        aria-label="Galeriden görsel seç"
         onChange={(e) => handleFiles(e.target.files)}
       />
       <input
         ref={fileRef}
+        className="visually-hidden"
         type="file"
-        accept=".pdf,.xlsx,.xls"
+        accept=".pdf,image/jpeg,image/png,image/webp"
         multiple
-        style={{ display: 'none' }}
+        aria-label="PDF veya dosya seç"
         onChange={(e) => handleFiles(e.target.files)}
       />
 
-      {/* Upload options toggle */}
-      {canUploadMore && !disabled && (
+      {canUpload && (
         <button
           type="button"
-          onClick={() => setShowOptions((s) => !s)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            width: '100%',
-            padding: '12px 14px',
-            borderRadius: 10,
-            border: '1.5px dashed var(--color-border)',
-            background: showOptions ? 'var(--color-bg)' : 'transparent',
-            cursor: 'pointer',
-            color: 'var(--color-primary)',
-            fontSize: 14,
-            fontWeight: 500,
-            transition: 'background 0.15s',
-          }}
+          className="attachment-add"
+          onClick={() => setShowOptions((value) => !value)}
+          aria-expanded={showOptions}
         >
-          <Plus size={16} />
-          Belge Ekle
-          <span style={{ fontSize: 11, color: 'var(--color-text-muted)', marginLeft: 'auto' }}>
-            {uploadedFiles.length}/{maxFiles}
-          </span>
+          <Plus /> Belge ekle{' '}
+          <small>
+            {uploaded.length + queue.length}/{actualMax}
+          </small>
         </button>
       )}
-
-      {/* Option cards */}
       {showOptions && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginTop: 10 }}>
-          {uploadOptions.map((opt) => (
-            <button
-              key={opt.label}
-              type="button"
-              onClick={() => triggerUpload(opt.kind)}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 6,
-                padding: '14px 8px',
-                borderRadius: 12,
-                border: '1px solid var(--color-border)',
-                background: opt.bg,
-                cursor: 'pointer',
-                textAlign: 'center',
-              }}
-            >
-              <span style={{ color: opt.color }}>{opt.icon}</span>
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: 'var(--color-text)',
-                  lineHeight: 1.2,
-                }}
-              >
-                {opt.label}
-              </span>
-              <span style={{ fontSize: 10, color: 'var(--color-text-muted)', lineHeight: 1.2 }}>
-                {opt.sub}
-              </span>
-            </button>
-          ))}
+        <div className="attachment-options">
+          <button type="button" onClick={() => cameraRef.current?.click()}>
+            <Camera />
+            <span>Kamera</span>
+          </button>
+          <button type="button" onClick={() => galleryRef.current?.click()}>
+            <Image />
+            <span>Galeri</span>
+          </button>
+          <button type="button" onClick={() => fileRef.current?.click()}>
+            <FileText />
+            <span>PDF / Dosya</span>
+          </button>
+          <button type="button" onClick={() => galleryRef.current?.click()}>
+            <UploadCloud />
+            <span>Dosya ekle</span>
+          </button>
         </div>
       )}
 
-      {/* Uploading in-progress */}
-      {uploadingFiles.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
-          {uploadingFiles.map((f) => (
-            <div
-              key={f.localId}
-              style={{
-                background: 'var(--color-bg)',
-                borderRadius: 8,
-                border: '1px solid var(--color-border)',
-                padding: '10px 12px',
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: f.error ? 6 : 4,
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 500,
-                    color: 'var(--color-text)',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    maxWidth: '75%',
-                  }}
-                >
-                  {f.fileName}
-                </span>
-                {f.error ? (
-                  <button
-                    type="button"
-                    onClick={() => retryUpload(f.localId)}
-                    style={{
-                      fontSize: 11,
-                      color: 'var(--color-danger)',
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      flexShrink: 0,
-                    }}
-                  >
-                    Tekrar Dene
-                  </button>
-                ) : (
-                  <span style={{ fontSize: 11, color: 'var(--color-text-muted)', flexShrink: 0 }}>
-                    {f.progress}%
-                  </span>
-                )}
-              </div>
-              {f.error ? (
-                <div style={{ fontSize: 12, color: 'var(--color-danger)' }}>{f.error}</div>
-              ) : (
-                <div style={{ height: 3, background: 'var(--color-border)', borderRadius: 2 }}>
-                  <div
-                    style={{
-                      height: '100%',
-                      background: 'var(--color-primary)',
-                      borderRadius: 2,
-                      width: `${f.progress}%`,
-                      transition: 'width 0.3s ease',
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Uploaded files list */}
-      {uploadedFiles.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
-          {uploadedFiles.map((f) => (
-            <div
-              key={f.id}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '10px 12px',
-                background: 'var(--color-approved-bg)',
-                borderRadius: 8,
-                border: '1px solid var(--color-approved-border)',
-              }}
-            >
-              <FileText size={14} color="var(--color-approved)" />
-              <div style={{ flex: 1, overflow: 'hidden' }}>
-                <div
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 500,
-                    color: 'var(--color-text)',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {f.fileName}
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-                  {(f.sizeBytes / 1024).toFixed(0)} KB
-                </div>
-              </div>
-              {!disabled && (
-                <button
-                  type="button"
-                  onClick={() => deleteFile(f.id)}
-                  style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: 6,
-                    border: '1px solid var(--color-danger-border)',
-                    background: 'var(--color-danger-bg)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    flexShrink: 0,
-                  }}
-                >
-                  <Trash2 size={13} color="var(--color-danger)" />
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+      <div className="attachment-list">
+        {queue.map((item) => (
+          <ExpenseAttachmentPreview
+            key={item.localId}
+            name={item.file.name}
+            size={item.file.size}
+            previewUrl={item.previewUrl}
+            progress={item.progress}
+            error={item.error}
+            onDelete={() => removeQueued(item)}
+            onRetry={() => void uploadOne(item)}
+          />
+        ))}
+        {uploaded.map((item) => (
+          <ExpenseAttachmentPreview
+            key={item.id}
+            name={item.fileName}
+            size={item.sizeBytes}
+            complete
+            onDelete={disabled ? undefined : () => void deleteUploaded(item)}
+          />
+        ))}
+      </div>
+      <p className="attachment-help">
+        JPG, PNG, WEBP veya PDF · dosya başına en fazla{' '}
+        {(config.maxFileSizeBytes / 1024 / 1024).toFixed(0)} MB
+      </p>
+    </section>
   );
+}
+
+export const ExpenseAttachmentUploader = AttachmentUploader;
+
+export function ExpenseAttachmentPreview({
+  name,
+  size,
+  previewUrl,
+  progress,
+  error,
+  complete,
+  onDelete,
+  onRetry,
+}: {
+  name: string;
+  size: number;
+  previewUrl?: string;
+  progress?: number;
+  error?: string;
+  complete?: boolean;
+  onDelete?: () => void;
+  onRetry?: () => void;
+}) {
+  return (
+    <article className={`attachment-preview ${error ? 'has-error' : ''}`}>
+      <span className="attachment-thumbnail">
+        {previewUrl ? <img src={previewUrl} alt="" /> : <FileText />}
+      </span>
+      <div className="attachment-meta">
+        <strong title={name}>{name}</strong>
+        <small>
+          {formatBytes(size)}
+          {complete ? ' · Yüklendi' : ''}
+        </small>
+        {!complete && !error && (
+          <div className="upload-progress">
+            <span style={{ width: `${progress ?? 0}%` }} />
+          </div>
+        )}
+        {error && <span role="alert">{error}</span>}
+      </div>
+      {error && onRetry && (
+        <button
+          type="button"
+          className="attachment-icon-button"
+          aria-label={`${name} dosyasını yeniden dene`}
+          onClick={onRetry}
+        >
+          <RefreshCw />
+        </button>
+      )}
+      {onDelete && (
+        <button
+          type="button"
+          className="attachment-icon-button"
+          aria-label={`${name} dosyasını sil`}
+          onClick={onDelete}
+        >
+          <Trash2 />
+        </button>
+      )}
+    </article>
+  );
+}
+
+function formatBytes(value: number) {
+  return value >= 1024 * 1024
+    ? `${(value / 1024 / 1024).toFixed(1)} MB`
+    : `${Math.ceil(value / 1024)} KB`;
 }

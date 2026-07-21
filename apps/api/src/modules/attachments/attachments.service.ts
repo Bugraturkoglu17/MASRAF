@@ -1,24 +1,35 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 
 import {
   ConflictAppException,
   ForbiddenAppException,
   NotFoundAppException,
 } from '../../common/exceptions/app.exception';
+import type { AppConfig } from '../../config/configuration';
 import { PrismaService } from '../../database/prisma.service';
 import { assertValidAttachment } from '../../storage/file-validation';
 import { StorageService } from '../../storage/storage.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 
-const MAX_ATTACHMENTS_PER_EXPENSE = 5;
-
 @Injectable()
 export class AttachmentsService {
+  private readonly logger = new Logger(AttachmentsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storageService: StorageService,
     private readonly auditLogs: AuditLogsService,
+    private readonly configService: ConfigService,
   ) {}
+
+  private get uploadLimits() {
+    const storage = this.configService.get<AppConfig['storage']>('app.storage')!;
+    return {
+      maxFiles: storage.maxAttachmentsPerExpense,
+      maxSizeBytes: storage.maxAttachmentSizeBytes,
+    };
+  }
 
   async requestUploadUrl(
     organizationId: string,
@@ -40,18 +51,18 @@ export class AttachmentsService {
     const currentCount = await this.prisma.attachment.count({
       where: { expenseId, deletedAt: null },
     });
-    if (currentCount >= MAX_ATTACHMENTS_PER_EXPENSE)
-      throw new ConflictAppException(`En fazla ${MAX_ATTACHMENTS_PER_EXPENSE} dosya eklenebilir.`);
+    if (currentCount >= this.uploadLimits.maxFiles)
+      throw new ConflictAppException(`En fazla ${this.uploadLimits.maxFiles} dosya eklenebilir.`);
 
-    assertValidAttachment(fileName, mimeType, fileSize);
+    assertValidAttachment(fileName, mimeType, fileSize, this.uploadLimits.maxSizeBytes);
 
-    const { fileKey, uploadUrl } = await this.storageService.getSignedUploadUrl(
+    const { fileKey, uploadUrl, expiresIn } = await this.storageService.getSignedUploadUrl(
       organizationId,
       fileName,
       mimeType,
     );
 
-    return { fileKey, uploadUrl, expiresIn: 900 };
+    return { fileKey, uploadUrl, expiresIn };
   }
 
   async completeUpload(
@@ -73,30 +84,53 @@ export class AttachmentsService {
     if (expense.status !== 'DRAFT')
       throw new ConflictAppException('Yalnızca taslak masraflara dosya eklenebilir.');
 
-    assertValidAttachment(fileName, mimeType, fileSize);
+    assertValidAttachment(fileName, mimeType, fileSize, this.uploadLimits.maxSizeBytes);
+    if (!fileKey.startsWith(`attachments/${organizationId}/`)) {
+      throw new ForbiddenAppException('Dosya anahtarı organizasyon kapsamı dışında.');
+    }
+    if (!(await this.storageService.fileExists(fileKey))) {
+      throw new NotFoundAppException('Yüklenen dosya');
+    }
 
-    const attachment = await this.prisma.attachment.create({
-      data: {
-        organizationId,
-        expenseId,
-        fileKey,
-        fileName,
-        mimeType,
-        sizeBytes: fileSize,
-        sha256: fileHash ?? '',
-        uploadedById: userId,
-      },
-    });
-
-    await this.auditLogs.record({
-      organizationId,
-      actorId: userId,
-      action: 'UPLOAD',
-      resource: 'ATTACHMENT',
-      resourceId: attachment.id,
-    });
-
-    return attachment;
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const attachment = await tx.attachment.create({
+          data: {
+            organizationId,
+            expenseId,
+            fileKey,
+            fileName,
+            mimeType,
+            sizeBytes: fileSize,
+            sha256: fileHash ?? '',
+            uploadedById: userId,
+          },
+        });
+        await this.auditLogs.record(
+          {
+            organizationId,
+            actorId: userId,
+            action: 'UPLOAD',
+            resource: 'ATTACHMENT',
+            resourceId: attachment.id,
+          },
+          tx,
+        );
+        return attachment;
+      });
+    } catch (error) {
+      // R2 yüklemesi tamamlandıktan sonra metadata/audit transaction'ı başarısızsa
+      // sahipsiz private obje bırakmamak için telafi silmesi uygulanır.
+      try {
+        await this.storageService.deleteFile(fileKey);
+      } catch (cleanupError) {
+        this.logger.error('Başarısız upload metadata işlemi sonrası R2 telafi silmesi başarısız.', {
+          fileKey,
+          error: cleanupError instanceof Error ? cleanupError.name : 'UnknownError',
+        });
+      }
+      throw error;
+    }
   }
 
   async getDownloadUrl(attachmentId: string, organizationId: string, userId: string) {

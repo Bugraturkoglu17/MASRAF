@@ -3,10 +3,11 @@
 Şirket içi masraf oluşturma, onay ve takip süreçlerini yönetmek için geliştirilen, çok
 kiracılı (multi-tenant) mimariye açık, TypeScript tabanlı bir monorepo.
 
-Bu sürüm **altyapı iskeletidir**: kimlik doğrulama, yetkilendirme (RBAC), dosya depolama,
-loglama, health check, test ve CI/CD altyapısı çalışır durumdadır. Masraf ekranlarının
-tamamı (raporlama, gelişmiş filtreler, bildirim merkezi vb.) sonraki geliştirme
-aşamalarında eklenecektir — bkz. [Gelecek Geliştirmeler](#gelecek-geliştirmeler).
+Bu sürüm production sertleştirmesi uygulanmış bir **release candidate**'tır. Kimlik
+doğrulama, temel rol/organizasyon koruması, masraf akışı, private dosya depolama,
+bildirim merkezi, PWA, health, Docker ve GitLab CI/CD altyapısı vardır. Raporlama,
+ayrıntılı permission override ve bazı admin/kabul akışları eksik olduğundan proje henüz
+production kabulü almamıştır; bkz. [docs/known-limitations.md](docs/known-limitations.md).
 
 ## İçindekiler
 
@@ -61,14 +62,14 @@ Detaylı mimari kararlar ve diyagramlar için [docs/architecture.md](docs/archit
 
 ## Gereksinimler
 
-- Node.js >= 20
+- Node.js >= 22
 - pnpm >= 9 (`corepack enable` ile gelir)
 - Docker + Docker Compose (lokal PostgreSQL/MinIO için)
 
 ## Kurulum
 
 ```bash
-git clone https://gitlab.com/bugraturkoglu441/masraf-sunucu.git
+git clone <GITLAB_REPOSITORY_URL>
 cd masraf-sunucu
 cp .env.example .env
 pnpm install
@@ -100,7 +101,7 @@ pnpm dev
 - Web: http://localhost:3000
 - API: http://localhost:4000/api/v1
 - Swagger: http://localhost:4000/api/docs
-- MinIO konsolu: http://localhost:9001 (kullanıcı/şifre: `.env` içindeki `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`)
+- MinIO konsolu: http://localhost:9001 (kullanıcı/şifre: `.env` içindeki `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY`)
 
 ## Docker ile Çalıştırma
 
@@ -162,7 +163,7 @@ pnpm build
 
 ## Swagger
 
-API ayaktayken: http://localhost:4000/api/docs
+API ayaktayken development ortamında: http://localhost:4000/api/docs. Production'da kapalıdır.
 
 ## PWA Testi
 
@@ -178,14 +179,15 @@ API ayaktayken: http://localhost:4000/api/docs
 ## GitLab Kullanımı
 
 ```bash
-git remote add origin https://gitlab.com/bugraturkoglu441/masraf-sunucu.git
+git remote add gitlab <GITLAB_REPOSITORY_URL>
 git add .
 git commit -m "chore: initialize expense management application architecture"
 git push -u origin main
 ```
 
-Pipeline: [.gitlab-ci.yml](.gitlab-ci.yml) — install → lint → typecheck → test → build →
-container. Gerekli CI/CD değişkenleri için [docs/deployment.md](docs/deployment.md).
+Pipeline: [.gitlab-ci.yml](.gitlab-ci.yml) — kalite, unit/integration, ayrı web/API build,
+security/secret/container scan ve manuel staging/production kapıları. Production adımları:
+[docs/production-deployment.md](docs/production-deployment.md).
 
 ## Northflank Deployment
 

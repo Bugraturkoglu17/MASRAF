@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+### Kullanıcı masraf girişi, mobil onaylar ve yönetici kartları (2026-07-21)
+
+- USER alt navigasyonu Ana Sayfa, Masraflarım, merkez hızlı ekleme, Onaylar ve Ayarlar olarak yenilendi.
+- Merkez `+` menüsüne yalnızca çoklu Galeri, arka Kamera ve Manuel masraf girişleri eklendi; QR/Mesafe seçenekleri kaldırıldı.
+- Seçilen belge önizlemesi, merkezi upload limitleri, gerçek R2 upload progress, silme ve aynı dosyayı yeniden deneme tamamlandı.
+- Bekleyen/Onaylanan/Reddedilen kullanıcı sekmeleri, profesyonel boş ekranlar ve mobil fiş/kupon masraf kartları eklendi.
+- Yönetici kartlarına gönderen ad-soyad/e-posta, tutar, kategori, tarih, vade ve karar aksiyonları eklendi.
+- Onay/red/iptal işlemleri aynı route üzerinde modal, optimistik kart kaldırma, sayaç yenileme ve toast ile tamamlandı.
+- Telefon ve IBAN liste cevaplarından kaldırıldı; yalnızca yetkili detay isteğinde döndürülüyor.
+- ADMIN `Menü` düğmesinin yanlışlıkla profile yönlendirmesi giderildi ve gerçek yönetim menüsü eklendi.
+- İndigo/mor kurumsal görsel dil, güvenli alanlar, 44 px dokunma hedefleri ve azaltılmış hareket tercihini destekleyen animasyonlar eklendi.
+- AŞAMA 13 doğrulama raporu `docs/stage-13-verification.md` dosyasına eklendi.
+
+### Production güvenliği ve kabul hazırlığı (2026-07-21)
+
+- Production env doğrulaması HTTPS/SSL, ayrı secret, R2, release ve CORS kurallarıyla sertleştirildi.
+- Access token URL query desteği kaldırıldı; SSE Authorization header kullanan fetch stream'e geçirildi.
+- Kullanıcı masraf detayı IDOR açığı, eşzamanlı çift karar yarışı ve son aktif ADMIN koruması düzeltildi.
+- Refresh-token tekrar kullanım tespiti, anlık rol/aktiflik doğrulaması ve oturum iptali eklendi.
+- Production Swagger kapatıldı; body limiti, CSP/HSTS ve log redaksiyonu genişletildi.
+- R2 health readiness'ten ayrıldı; `/health/storage`, app version/config ve bakım modu eklendi.
+- Node 22 LTS/Nginx sabit imajları, read-only compose ve internal API proxy tamamlandı.
+- GitLab pipeline güvenlik taramaları, kontrollü migration/deploy kapıları ve smoke test eklendi.
+- Bildirim placeholder'ı gerçek API bağlı bildirim merkezine dönüştürüldü.
+- Production, backup/restore, disaster recovery, rollback, monitoring ve kullanıcı teslim belgeleri eklendi.
+
+Nihai durum ve açık engeller: `docs/acceptance-test-results.md`.
+
 ### fix: vite dev sunucusu CJS workspace paketi çözüm hatası (2026-07-20)
 
 **Sorun:** Web uygulaması tamamen boş sayfa gösteriyordu. React DOM hiç render etmiyordu.

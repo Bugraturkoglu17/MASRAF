@@ -1,13 +1,17 @@
 import type { MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
+import { AppInfoModule } from './app-info/app-info.module';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { MaintenanceGuard } from './common/guards/maintenance.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import { ConfigModule } from './config/config.module';
+import type { AppConfig } from './config/configuration';
 import { DatabaseModule } from './database/database.module';
 import { HealthModule } from './health/health.module';
 import { LoggerModule } from './logger/logger.module';
@@ -29,10 +33,15 @@ import { StorageModule } from './storage/storage.module';
 @Module({
   imports: [
     ConfigModule,
+    AppInfoModule,
     LoggerModule,
     DatabaseModule,
-    ThrottlerModule.forRoot({
-      throttlers: [{ ttl: 60_000, limit: 100 }],
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        const app = configService.get<AppConfig>('app')!;
+        return { throttlers: [{ ttl: app.rateLimit.ttlMs, limit: app.rateLimit.max }] };
+      },
     }),
     HealthModule,
     StorageModule,
@@ -55,6 +64,7 @@ import { StorageModule } from './storage/storage.module';
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
+    { provide: APP_GUARD, useClass: MaintenanceGuard },
   ],
 })
 export class AppModule implements NestModule {

@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { WifiOff } from 'lucide-react';
+
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 
 /**
  * Tarayıcının online/offline olaylarını dinler. Masraf oluşturma gibi
@@ -6,35 +8,14 @@ import { useEffect, useState } from 'react';
  * bilgilendirir, veri kaybını önlemek ilgili form/servis katmanının işidir.
  */
 export function OfflineBanner(): JSX.Element | null {
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-
-  useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
+  const { isOnline } = useNetworkStatus();
 
   if (isOnline) return null;
 
   return (
-    <div
-      role="alert"
-      style={{
-        background: 'var(--color-warning-bg)',
-        color: 'var(--color-warning)',
-        padding: '8px 16px',
-        textAlign: 'center',
-        fontSize: 14,
-        borderBottom: '1px solid var(--color-border)',
-      }}
-    >
-      İnternet bağlantınız yok. Masraf oluşturma ve güncel veriler bağlantı gelene kadar
-      kullanılamaz; yarım kalan işlemler kaybolabilir.
+    <div role="alert" className="offline-banner">
+      <WifiOff size={17} aria-hidden="true" />
+      İnternet bağlantınız yok. Bazı işlemler kullanılamıyor.
     </div>
   );
 }

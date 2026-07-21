@@ -1,6 +1,6 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 
-import { FullScreenLoader } from '@/components/feedback/FullScreenLoader';
+import { AppSplashScreen } from '@/components/pwa/AppSplashScreen';
 import { useAuth } from '@/features/auth/auth-context';
 
 export function ProtectedRoute(): JSX.Element {
@@ -8,7 +8,7 @@ export function ProtectedRoute(): JSX.Element {
   const location = useLocation();
 
   if (isInitializing) {
-    return <FullScreenLoader label="Oturum kontrol ediliyor..." />;
+    return <AppSplashScreen />;
   }
 
   if (!isAuthenticated) {

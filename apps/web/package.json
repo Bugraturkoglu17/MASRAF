@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
+    "test:pwa": "node scripts/verify-pwa.mjs",
     "clean": "rimraf dist"
   },
   "dependencies": {

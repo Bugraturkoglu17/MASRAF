@@ -2,95 +2,20 @@
 
 ## Kimlik doğrulama
 
-- Şifreler **argon2id** (`argon2` paketi, varsayılan güvenli parametreler) ile
-  hash'lenir. bcrypt yerine argon2 tercih edilmiştir çünkü OWASP güncel önerisi ve
-  bellek-zor (memory-hard) yapısı GPU tabanlı saldırılara karşı daha dayanıklıdır.
-- **Access token**: JWT, 15 dakika (varsayılan, `.env` ile ayarlanabilir), rol/izin
-  listesini içerir (stateless yetkilendirme).
-- **Refresh token**: JWT, 30 gün, veritabanında **hash'lenmiş** (`sha256`) olarak
-  saklanır; her kullanımda rotasyona uğrar (eski token `revokedAt` ile iptal edilir,
-  yenisi verilir). Çalınmış bir refresh token tekrar kullanılmaya çalışılırsa (rotasyon
-  sonrası eski hash artık geçersiz olduğundan) istek reddedilir.
-- **Token/şifre saklama (frontend)**: Access token yalnızca React state'inde (bellekte)
-  tutulur, `localStorage`/`sessionStorage` kullanılmaz. Refresh token, backend
-  tarafından `httpOnly; Secure (production); SameSite=Strict` cookie olarak set edilir
-  — JavaScript'ten okunamaz, bu da XSS ile çalınmasını engeller. Bellekteki access
-  token teorik olarak bir XSS ile okunabilir, ancak sayfa yenilenince kaybolur ve kalıcı
-  değildir; bu, güvenlik ile kullanılabilirlik arasında endüstri standardı bir
-  dengedir.
-- **Çıkış yapma**: `/auth/logout`, ilgili refresh token'ı veritabanında iptal eder ve
-  cookie'yi temizler.
-- **Şifre sıfırlama**: Bu sürümde uçtan uca uygulanmamıştır; `SMTP_*` ortam değişkenleri
-  ve `AuditLogsService` altyapısı buna hazırdır (bkz. README Gelecek Geliştirmeler).
+Şifreler Argon2 ile hashlenir. Access token kısa ömürlüdür, yalnız kullanıcı/organizasyon kimliği taşır ve frontend belleğinde tutulur. Rol, izin, aktiflik ve profil durumu her API isteğinde veritabanından doğrulanır. Refresh token HttpOnly/Secure/SameSite=Strict cookie'dedir; hashlenmiş saklanır, döndürülür ve tekrar kullanımı tüm refresh oturumlarını iptal eder.
 
-## Yetkilendirme
+Login ve refresh rate-limitlidir. Refresh/logout isteğinde tarayıcı Origin allowlist kontrolü yapılır. Production'da CORS wildcard, HTTP origin ve placeholder secret env doğrulamasından geçmez.
 
-- **RBAC**: `Role` → `RolePermission` → `Permission` (`ACTION:RESOURCE` ikilisi, ör.
-  `APPROVE:EXPENSE`). `PermissionsGuard`, route üzerindeki `@RequirePermissions(...)`
-  dekoratörünü kullanıcının izin listesiyle karşılaştırır.
-- **Organizasyon kapsamı**: Her servis sorgusu `organizationId` ile filtrelenir;
-  `OrganizationScopeGuard` URL parametresi ile token'daki organizasyonun eşleştiğini
-  doğrular.
-- **Kullanıcı durumu**: `UserStatus` (`ACTIVE`/`INACTIVE`/`SUSPENDED`) login ve refresh
-  sırasında kontrol edilir; aktif olmayan kullanıcı oturum açamaz/yenileyemez.
+## Yetkilendirme ve tenant izolasyonu
 
-## Brute-force koruması
+JWT global, rol/izin korumaları endpoint bazında çalışır. Bütün sorgular `organizationId` ile scope edilir. USER masraf detayında ayrıca owner kontrolünden geçer; manager/admin yalnız kendi organizasyonunu görür. Son aktif ADMIN ve adminin kendi rolü backend'de korunur; rol/pasiflik değişimi refresh oturumlarını iptal eder.
 
-`@nestjs/throttler` global olarak 100 istek/dakika sınırı uygular;
-`POST /auth/login` uç noktası `@Throttle` ile 5 istek/dakikaya indirilmiştir
-(`AUTH_RATE_LIMIT_MAX` ile ayarlanabilir).
+## Dosya ve PWA
 
-## Taşıma güvenliği ve HTTP başlıkları
+R2 private olmalıdır. Upload/download backend yetkilendirmesi sonrası kısa signed URL üretir. Tür/boyut/sayı ve organization-scoped key kontrol edilir; binary PostgreSQL'e yazılmaz. Service worker bütün `/api/` isteklerinde NetworkOnly kullanır ve hassas yanıtları cache etmez.
 
-- **Helmet**: Güvenlik başlıkları (`X-Content-Type-Options`, `X-Frame-Options`, vb.)
-- **CORS allowlist**: `CORS_ORIGINS` ortam değişkeninden okunur, `*` kullanılmaz.
-- **HTTPS**: Production'da zorunludur (Northflank/CDN katmanında sonlandırılır); refresh
-  cookie'de `Secure` bayrağı yalnızca `NODE_ENV=production` iken aktiftir.
-- **CSRF değerlendirmesi**: Refresh cookie `SameSite=Strict` olduğundan çapraz site
-  formları cookie'yi otomatik gönderemez; ayrıca durum değiştiren tüm uçlar
-  `Authorization: Bearer` başlığı gerektirir (cookie tek başına yeterli değildir). Bu
-  kombinasyon klasik CSRF token ihtiyacını ortadan kaldırır.
+## Tarayıcı/API
 
-## Girdi doğrulama ve enjeksiyon koruması
+Nginx CSP, HSTS, nosniff, frame, referrer ve permissions başlıklarını uygular. API Helmet kullanır, 1 MB JSON limiti uygular, production Swagger'ı kapatır ve stack trace döndürmez. Yapılandırılmış loglar auth/cookie/password/token/IBAN/telefon/signed URL alanlarını redakte eder.
 
-- Tüm istek gövdeleri `packages/shared-validation` içindeki Zod şemalarıyla
-  (`ZodValidationPipe`) doğrulanır; bilinmeyen/eksik alanlar reddedilir.
-- **SQL injection**: Prisma parametreli sorgular üretir; ham SQL yalnızca health check
-  gibi sabit, parametresiz sorgularda kullanılır.
-- **XSS**: React varsayılan olarak çıktı kaçışlar; `dangerouslySetInnerHTML`
-  kullanılmaz.
-
-## Dosya güvenliği
-
-Bkz. [storage.md](storage.md) — dosya türü/boyut doğrulaması, rastgele dosya adı,
-private bucket, signed URL.
-
-## Hata mesajları
-
-`GlobalExceptionFilter`, production'da (`NODE_ENV=production`) beklenmeyen hataların
-stack trace'ini ve iç mesajını istemciye göndermez; yalnızca sunucu logunda tutulur.
-İstemciye her zaman `requestId` döner ki destek talebinde ilgili log kaydı bulunabilsin.
-
-## Secret yönetimi
-
-- `.env` dosyası Git'e gönderilmez (`.gitignore`).
-- CI'da secret'lar GitLab CI/CD Variables (masked + protected) üzerinden sağlanır.
-- Northflank'te Secret Groups kullanılır (bkz.
-  [northflank-setup.md](northflank-setup.md)).
-- Loglarda şifre, token, cookie, kredi kartı bilgisi asla yazılmaz —
-  `apps/api/src/logger/logger.module.ts` içindeki `redact` listesi bu alanları
-  otomatik olarak `[REDACTED]` ile değiştirir.
-
-## Bağımlılık güvenliği
-
-`pnpm audit` düzenli olarak (ör. CI'da ayrı bir zamanlanmış job olarak) çalıştırılması
-önerilir. Bu sürümde otomatik bir Dependabot/Renovate entegrasyonu kurulmamıştır —
-gelecek geliştirme önerisi olarak not edilmiştir.
-
-## Production'da varsayılan şifre kullanımı
-
-`prisma/seed.ts` yalnızca development/staging için tasarlanmıştır ve sabit bir demo
-şifresi (`ChangeMe123!`) içerir. **Production ortamında bu seed script'i
-çalıştırılmamalı**; ilk yönetici kullanıcısı ayrı, tek seferlik bir prosedürle
-(elle SQL veya ayrı bir "bootstrap admin" script'i) güçlü, rastgele bir şifreyle
-oluşturulmalıdır.
+Ayrıntılı operasyon ve rotation kontrolü: [security-hardening.md](security-hardening.md).

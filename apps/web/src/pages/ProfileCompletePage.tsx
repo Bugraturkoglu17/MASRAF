@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 import { useToast } from '@/components/feedback/toast-context';
 import { useAuth } from '@/features/auth/auth-context';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, getApiErrorMessage } from '@/lib/api-client';
 
 const schema = z.object({
   firstName: z.string().min(1, 'Ad zorunludur'),
@@ -39,8 +39,8 @@ export function ProfileCompletePage(): JSX.Element {
       await apiFetch('/users/me/profile', { method: 'PATCH', body: values });
       await refreshUser();
       showToast('Profil başarıyla tamamlandı.', 'success');
-    } catch {
-      showToast('Profil kaydedilemedi. Lütfen tekrar deneyin.', 'error');
+    } catch (error) {
+      showToast(getApiErrorMessage(error, 'Profil kaydedilemedi. Lütfen tekrar deneyin.'), 'error');
     }
   });
 

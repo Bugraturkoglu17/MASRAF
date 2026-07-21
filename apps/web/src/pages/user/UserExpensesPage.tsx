@@ -1,27 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
+import {
+  ExpenseEmptyState,
+  MobileReceiptExpenseCard,
+  type ExpenseListItem,
+} from '@/components/expenses/ExpenseCards';
 import { useToast } from '@/components/feedback/toast-context';
-import { ExpenseCard } from '@/components/ui/ExpenseCard';
 import { ExpenseDetailSheet } from '@/components/ui/ExpenseDetailSheet';
 import { ExpenseSubmitDialog } from '@/components/ui/ExpenseSubmitDialog';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, getApiErrorMessage } from '@/lib/api-client';
 
 type Status = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED';
 
-interface Expense {
-  id: string;
-  expenseNumber?: string | null;
-  title: string;
-  amount: string;
-  currency: string;
-  expenseDate: string;
-  dueDate?: string | null;
-  status: Status;
-  category: { name: string };
-}
+type Expense = ExpenseListItem & { status: Status };
 
 interface PagedResult {
   items: Expense[];
@@ -31,7 +24,7 @@ interface PagedResult {
 const tabs: { status: Status; label: string }[] = [
   { status: 'DRAFT', label: 'Taslaklar' },
   { status: 'PENDING', label: 'Bekleyen' },
-  { status: 'APPROVED', label: 'Onaylı' },
+  { status: 'APPROVED', label: 'Onaylandı' },
   { status: 'REJECTED', label: 'Reddedilen' },
 ];
 
@@ -58,7 +51,7 @@ export function UserExpensesPage(): JSX.Element {
       qc.invalidateQueries({ queryKey: ['expense-counts'] });
       showToast('Masraf silindi.', 'success');
     },
-    onError: () => showToast('Silinemedi.', 'error'),
+    onError: (error) => showToast(getApiErrorMessage(error, 'Silinemedi.'), 'error'),
   });
 
   const submitMut = useMutation({
@@ -138,49 +131,27 @@ export function UserExpensesPage(): JSX.Element {
         {isLoading ? (
           <div style={emptySt}>Yükleniyor...</div>
         ) : !data?.items.length ? (
-          <div style={emptySt}>Bu kategoride masraf bulunamadı.</div>
+          <ExpenseEmptyState status={activeStatus} />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {data.items.map((exp) => (
-              <ExpenseCard
+              <MobileReceiptExpenseCard
                 key={exp.id}
                 expense={exp}
-                onSubmit={() => setSubmitTarget(exp)}
-                onEdit={(id) => navigate(`/expenses/new?edit=${id}`)}
-                onDelete={handleDelete}
-                onDetail={(id) => setDetailId(id)}
-                isSubmitting={submitMut.isPending && submitTarget?.id === exp.id}
-                isDeleting={deleteMut.isPending}
+                onSubmit={exp.status === 'DRAFT' ? () => setSubmitTarget(exp) : undefined}
+                onEdit={
+                  exp.status === 'DRAFT'
+                    ? () => navigate(`/expenses/new?edit=${exp.id}`)
+                    : undefined
+                }
+                onDelete={exp.status === 'DRAFT' ? () => handleDelete(exp.id) : undefined}
+                onDetail={() => setDetailId(exp.id)}
+                busy={(submitMut.isPending && submitTarget?.id === exp.id) || deleteMut.isPending}
               />
             ))}
           </div>
         )}
       </div>
-
-      {/* Floating create button */}
-      <button
-        onClick={() => navigate('/expenses/new')}
-        style={{
-          position: 'fixed',
-          bottom: 24,
-          right: 20,
-          width: 52,
-          height: 52,
-          borderRadius: '50%',
-          border: 'none',
-          background: 'var(--color-primary)',
-          color: '#fff',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          zIndex: 100,
-        }}
-        title="Yeni Masraf"
-      >
-        <Plus size={22} />
-      </button>
 
       {/* Submit confirmation dialog */}
       {submitTarget && (

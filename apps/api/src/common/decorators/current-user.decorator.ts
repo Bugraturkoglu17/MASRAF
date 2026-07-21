@@ -5,7 +5,6 @@ import type { AppRole } from '../../modules/auth/token.types';
 export interface AuthenticatedUser {
   id: string;
   organizationId: string;
-  email: string;
   role: AppRole;
   roles: string[];
   permissions: string[];

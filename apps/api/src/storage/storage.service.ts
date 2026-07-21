@@ -64,14 +64,14 @@ export class StorageService {
     organizationId: string,
     originalName: string,
     mimeType: string,
-  ): Promise<{ fileKey: string; uploadUrl: string }> {
+  ): Promise<{ fileKey: string; uploadUrl: string; expiresIn: number }> {
     const fileKey = generateStorageKey(organizationId, originalName);
     const uploadUrl = await this.provider.getSignedUploadUrl(
       fileKey,
       mimeType,
       this.signedUrlTtlSeconds,
     );
-    return { fileKey, uploadUrl };
+    return { fileKey, uploadUrl, expiresIn: this.signedUrlTtlSeconds };
   }
 
   async deleteFile(fileKey: string): Promise<void> {

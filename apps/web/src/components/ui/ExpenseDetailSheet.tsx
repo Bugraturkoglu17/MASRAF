@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { Download, Paperclip, X } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import { DueDateBadge } from './DueDateBadge';
 import { StatusBadge } from './StatusBadge';
 
+import { useToast } from '@/components/feedback/toast-context';
 import { apiFetch } from '@/lib/api-client';
 
 interface Attachment {
@@ -32,6 +33,15 @@ interface ExpenseDetail {
   category: { name: string };
   attachments: Attachment[];
   approvals?: { approver: { firstName: string; lastName: string } }[];
+  user?: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string | null;
+    iban?: string | null;
+    organization?: { name: string };
+    department?: { name: string } | null;
+  };
 }
 
 interface ExpenseDetailSheetProps {
@@ -48,6 +58,8 @@ function formatDate(d?: string | null) {
 }
 
 export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetProps): JSX.Element {
+  const { showToast } = useToast();
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const { data: expense, isLoading } = useQuery<ExpenseDetail>({
     queryKey: ['expense-detail', expenseId],
     queryFn: () => apiFetch(`/expenses/${expenseId}`),
@@ -62,13 +74,32 @@ export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetPro
   }, [onClose]);
 
   const downloadAttachment = async (attachment: Attachment) => {
-    const { url } = await apiFetch<{ url: string }>(`/attachments/${attachment.id}/download-url`);
-    window.open(url, '_blank', 'noopener,noreferrer');
+    if (downloadingId) return;
+    setDownloadingId(attachment.id);
+    try {
+      const { url } = await apiFetch<{ url: string }>(`/attachments/${attachment.id}/download-url`);
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Dosya indirilemedi.');
+      const objectUrl = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = attachment.fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+      showToast('Dosya indirildi.', 'success');
+    } catch {
+      showToast('Dosya indirilemedi. İnternet bağlantınızı kontrol edin.', 'error');
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   return (
     <>
       <div
+        aria-hidden="true"
         onClick={onClose}
         style={{
           position: 'fixed',
@@ -78,6 +109,9 @@ export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetPro
         }}
       />
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="expense-detail-title"
         style={{
           position: 'fixed',
           bottom: 0,
@@ -115,6 +149,7 @@ export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetPro
                 #{expense?.expenseNumber ?? '—'}
               </div>
               <h2
+                id="expense-detail-title"
                 style={{
                   fontSize: 18,
                   fontWeight: 700,
@@ -127,6 +162,8 @@ export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetPro
               </h2>
             </div>
             <button
+              type="button"
+              aria-label="Masraf detayını kapat"
               onClick={onClose}
               style={{
                 width: 32,
@@ -158,12 +195,33 @@ export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetPro
                 }}
               >
                 <StatusBadge
-                  status={expense.status as 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED'}
+                  status={
+                    expense.status as 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED'
+                  }
                 />
                 <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--color-text)' }}>
                   {fmt(expense.amount)}
                 </span>
               </div>
+
+              {expense.user && (
+                <div className="expense-detail-sender">
+                  <h3>Gönderen bilgileri</h3>
+                  <DetailRow
+                    label="Ad Soyad"
+                    value={`${expense.user.firstName} ${expense.user.lastName}`}
+                  />
+                  <DetailRow label="E-posta" value={expense.user.email} />
+                  {expense.user.organization && (
+                    <DetailRow label="Şirket" value={expense.user.organization.name} />
+                  )}
+                  {expense.user.department && (
+                    <DetailRow label="Departman" value={expense.user.department.name} />
+                  )}
+                  {expense.user.phone && <DetailRow label="Telefon" value={expense.user.phone} />}
+                  {expense.user.iban && <DetailRow label="IBAN" value={expense.user.iban} />}
+                </div>
+              )}
 
               {/* Details grid */}
               <div
@@ -272,7 +330,10 @@ export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetPro
                           </div>
                         </div>
                         <button
-                          onClick={() => downloadAttachment(att)}
+                          type="button"
+                          aria-label={`${att.fileName} dosyasını indir`}
+                          disabled={downloadingId !== null}
+                          onClick={() => void downloadAttachment(att)}
                           style={{
                             width: 32,
                             height: 32,

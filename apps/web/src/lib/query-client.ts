@@ -9,8 +9,9 @@ export const queryClient = new QueryClient({
         if (error instanceof ApiError && error.statusCode < 500) return false;
         return failureCount < 2;
       },
-      staleTime: 30_000,
-      refetchOnWindowFocus: false,
+      staleTime: 10_000,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
     },
     mutations: {
       retry: false,
