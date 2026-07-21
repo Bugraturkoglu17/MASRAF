@@ -1110,10 +1110,12 @@ textarea {
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
 }
 
 .user-home-tabs {
   flex: 1;
+  min-width: 0;
   display: flex;
   overflow-x: auto;
   -ms-overflow-style: none;
