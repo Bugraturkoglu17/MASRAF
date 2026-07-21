@@ -10,7 +10,7 @@ const schema = z.object({
   firstName: z.string().min(1, 'Ad zorunludur'),
   lastName: z.string().min(1, 'Soyad zorunludur'),
   phone: z.string().min(1, 'Telefon zorunludur'),
-  iban: z.string().min(1, 'IBAN zorunludur'),
+  iban: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -39,9 +39,14 @@ export function UserProfilePage(): JSX.Element {
     },
   });
 
+  const isUser = user?.role === 'USER';
+
   const onSubmit = handleSubmit(async (values) => {
     try {
-      await apiFetch('/users/me/profile', { method: 'PATCH', body: values });
+      const payload = isUser
+        ? values
+        : { firstName: values.firstName, lastName: values.lastName, phone: values.phone };
+      await apiFetch('/users/me/profile', { method: 'PATCH', body: payload });
       await refreshUser();
       showToast('Profil güncellendi.', 'success');
     } catch (error) {
@@ -81,9 +86,11 @@ export function UserProfilePage(): JSX.Element {
             <Field label="Telefon" error={errors.phone?.message}>
               <input {...register('phone')} type="tel" style={inputStyle(Boolean(errors.phone))} />
             </Field>
-            <Field label="IBAN" error={errors.iban?.message}>
-              <input {...register('iban')} style={inputStyle(Boolean(errors.iban))} />
-            </Field>
+            {isUser && (
+              <Field label="IBAN" error={errors.iban?.message}>
+                <input {...register('iban')} style={inputStyle(Boolean(errors.iban))} />
+              </Field>
+            )}
             <Field label="E-posta">
               <input
                 value={user?.email ?? ''}

@@ -473,8 +473,8 @@ export function CreateExpensePage(): JSX.Element {
           </div>
         </form>
 
-        {/* Attachment uploader — shown after expense is saved */}
-        {isSaved && savedExpenseId && !editId && (
+        {/* Attachment uploader — shown after expense is saved, also in edit mode */}
+        {isSaved && savedExpenseId && (
           <div style={{ marginTop: 24 }}>
             <div
               style={{
