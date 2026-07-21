@@ -32,7 +32,9 @@ async function verifyConnection(): Promise<boolean> {
     });
     return response.ok;
   } catch {
-    return false;
+    // API'ye ulaşılamıyor (timeout, ağ hatası vb.) ama tarayıcı online diyorsa
+    // "internet yok" değil, "sunucu geçici olarak ulaşılamaz" durumudur.
+    return navigator.onLine;
   } finally {
     window.clearTimeout(timeout);
   }
