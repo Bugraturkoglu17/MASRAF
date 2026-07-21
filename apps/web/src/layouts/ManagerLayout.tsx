@@ -1,5 +1,6 @@
 import { CheckCircle, Clock, Home, User, XCircle } from 'lucide-react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate, useNavigation } from 'react-router-dom';
 
 import { useToast } from '@/components/feedback/toast-context';
 import { MobileBottomNavigation } from '@/components/navigation/MobileBottomNavigation';
@@ -18,7 +19,15 @@ export function ManagerLayout(): JSX.Element {
   const { user, logout } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
+  const navigation = useNavigation();
+  const mainRef = useRef<HTMLElement>(null);
+  const isPending = navigation.state !== 'idle';
   const realtimeStatus = useManagerSse();
+
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+  }, [location.pathname]);
 
   const handleLogout = async () => {
     await logout();
@@ -66,9 +75,11 @@ export function ManagerLayout(): JSX.Element {
       </aside>
 
       <main
-        className="app-main"
+        ref={mainRef}
+        className={`app-main${isPending ? ' app-main--pending' : ''}`}
         style={{ flex: 1, overflowY: 'auto', background: 'var(--color-bg)' }}
       >
+        {isPending && <div className="nav-loading-bar" aria-hidden="true" />}
         {realtimeStatus !== 'connected' && (
           <div className="realtime-status-banner" role="status">
             {realtimeStatus === 'polling'
@@ -76,7 +87,9 @@ export function ManagerLayout(): JSX.Element {
               : 'Canlı bağlantı yeniden kuruluyor…'}
           </div>
         )}
-        <Outlet />
+        <div key={location.pathname} className="page-view">
+          <Outlet />
+        </div>
       </main>
       <MobileBottomNavigation role="MANAGER" />
     </div>

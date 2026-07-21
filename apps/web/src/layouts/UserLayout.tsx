@@ -1,5 +1,6 @@
 import { CheckCircle, Clock, FileText, Home, PlusCircle, User, XCircle } from 'lucide-react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate, useNavigation } from 'react-router-dom';
 
 import { useToast } from '@/components/feedback/toast-context';
 import { MobileBottomNavigation } from '@/components/navigation/MobileBottomNavigation';
@@ -19,6 +20,14 @@ export function UserLayout(): JSX.Element {
   const { user, logout } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
+  const navigation = useNavigation();
+  const mainRef = useRef<HTMLElement>(null);
+  const isPending = navigation.state !== 'idle';
+
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+  }, [location.pathname]);
 
   const handleLogout = async () => {
     await logout();
@@ -69,8 +78,15 @@ export function UserLayout(): JSX.Element {
       </aside>
 
       {/* İçerik */}
-      <main style={mainStyle} className="app-main">
-        <Outlet />
+      <main
+        ref={mainRef}
+        style={mainStyle}
+        className={`app-main${isPending ? ' app-main--pending' : ''}`}
+      >
+        {isPending && <div className="nav-loading-bar" aria-hidden="true" />}
+        <div key={location.pathname} className="page-view">
+          <Outlet />
+        </div>
       </main>
       <MobileBottomNavigation role="USER" />
     </div>
