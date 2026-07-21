@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [da0e541] feat: ASAMA 13 - redesign mobile expense home, approvals and manager history cards
 
 ### Kullanıcı masraf girişi, mobil onaylar ve yönetici kartları (2026-07-21)
 
