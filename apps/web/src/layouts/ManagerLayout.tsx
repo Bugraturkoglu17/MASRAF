@@ -2,6 +2,7 @@ import { CheckCircle, Clock, Home, User, XCircle } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate, useNavigation } from 'react-router-dom';
 
+import { RouteTransitionLoader } from '@/components/feedback/RouteTransitionLoader';
 import { useToast } from '@/components/feedback/toast-context';
 import { MobileBottomNavigation } from '@/components/navigation/MobileBottomNavigation';
 import { useAuth } from '@/features/auth/auth-context';
@@ -29,6 +30,14 @@ export function ManagerLayout(): JSX.Element {
     mainRef.current?.scrollTo({ top: 0, behavior: 'instant' });
   }, [location.pathname]);
 
+  useEffect(() => {
+    void import('@/pages/manager/ManagerPendingPage');
+    void import('@/pages/manager/ManagerApprovedPage');
+    void import('@/pages/manager/ManagerRejectedPage');
+    void import('@/pages/user/UserProfilePage');
+    void import('@/pages/NotificationsPage');
+  }, []);
+
   const handleLogout = async () => {
     await logout();
     navigate('/login');
@@ -36,7 +45,7 @@ export function ManagerLayout(): JSX.Element {
   };
 
   return (
-    <div className="app-shell" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+    <div className="app-shell" style={{ display: 'flex', height: '100dvh', overflow: 'hidden' }}>
       <aside style={sidebarStyle} className="app-sidebar">
         <div style={brandStyle}>
           <span style={brandIconStyle}>₺</span>
@@ -76,10 +85,10 @@ export function ManagerLayout(): JSX.Element {
 
       <main
         ref={mainRef}
-        className={`app-main${isPending ? ' app-main--pending' : ''}`}
+        className="app-main"
         style={{ flex: 1, overflowY: 'auto', background: 'var(--color-bg)' }}
       >
-        {isPending && <div className="nav-loading-bar" aria-hidden="true" />}
+        {isPending && <RouteTransitionLoader />}
         {realtimeStatus !== 'connected' && (
           <div className="realtime-status-banner" role="status">
             {realtimeStatus === 'polling'
@@ -91,7 +100,7 @@ export function ManagerLayout(): JSX.Element {
           <Outlet />
         </div>
       </main>
-      <MobileBottomNavigation role="MANAGER" />
+      <MobileBottomNavigation key={location.pathname} role="MANAGER" />
     </div>
   );
 }

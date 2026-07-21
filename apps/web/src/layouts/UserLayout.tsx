@@ -2,6 +2,7 @@ import { CheckCircle, Clock, FileText, Home, PlusCircle, User, XCircle } from 'l
 import { useEffect, useRef } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate, useNavigation } from 'react-router-dom';
 
+import { RouteTransitionLoader } from '@/components/feedback/RouteTransitionLoader';
 import { useToast } from '@/components/feedback/toast-context';
 import { MobileBottomNavigation } from '@/components/navigation/MobileBottomNavigation';
 import { useAuth } from '@/features/auth/auth-context';
@@ -28,6 +29,11 @@ export function UserLayout(): JSX.Element {
   useEffect(() => {
     mainRef.current?.scrollTo({ top: 0, behavior: 'instant' });
   }, [location.pathname]);
+
+  useEffect(() => {
+    void import('@/pages/user/CreateExpensePage');
+    void import('@/pages/NotificationsPage');
+  }, []);
 
   const handleLogout = async () => {
     await logout();
@@ -78,24 +84,20 @@ export function UserLayout(): JSX.Element {
       </aside>
 
       {/* İçerik */}
-      <main
-        ref={mainRef}
-        style={mainStyle}
-        className={`app-main${isPending ? ' app-main--pending' : ''}`}
-      >
-        {isPending && <div className="nav-loading-bar" aria-hidden="true" />}
+      <main ref={mainRef} style={mainStyle} className="app-main">
+        {isPending && <RouteTransitionLoader />}
         <div key={location.pathname} className="page-view">
           <Outlet />
         </div>
       </main>
-      <MobileBottomNavigation role="USER" />
+      <MobileBottomNavigation key={location.pathname} role="USER" />
     </div>
   );
 }
 
 const wrapStyle: React.CSSProperties = {
   display: 'flex',
-  height: '100vh',
+  height: '100dvh',
   overflow: 'hidden',
 };
 

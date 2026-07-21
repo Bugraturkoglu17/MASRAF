@@ -1455,9 +1455,17 @@ textarea {
 }
 
 /* Page transitions */
-.nav-loading-bar {
+.route-transition-loader {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.route-transition-bar {
   height: 3px;
-  flex-shrink: 0;
   background: linear-gradient(
     90deg,
     var(--color-primary) 0%,
@@ -1465,28 +1473,22 @@ textarea {
     var(--color-primary) 100%
   );
   background-size: 200% 100%;
-  animation: nav-loading-shimmer 1s linear infinite;
+  animation: route-bar-shimmer 1s linear infinite;
 }
 
-@keyframes nav-loading-shimmer {
+@keyframes route-bar-shimmer {
   from { background-position: 200% 0; }
   to { background-position: -200% 0; }
 }
 
-.app-main--pending .page-view {
-  opacity: 0.5;
-  pointer-events: none;
-  transition: opacity 0.1s;
-}
-
 .page-view {
-  animation: page-enter 0.16s ease-out both;
+  animation: page-enter 0.15s ease-out both;
 }
 
 @keyframes page-enter {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
@@ -1498,7 +1500,7 @@ textarea {
   .page-view {
     animation: none;
   }
-  .nav-loading-bar {
+  .route-transition-bar {
     animation: none;
   }
 }

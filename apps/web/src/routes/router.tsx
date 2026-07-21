@@ -8,33 +8,23 @@ import { RoleRoute } from './RoleRoute';
 import { FullScreenLoader } from '@/components/feedback/FullScreenLoader';
 import { OfflinePage } from '@/components/pwa/OfflinePage';
 import { AuthLayout } from '@/layouts/AuthLayout';
+import { UserLayout } from '@/layouts/UserLayout';
 import { ErrorPage } from '@/pages/ErrorPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { UnauthorizedPage } from '@/pages/UnauthorizedPage';
+import { UserApprovalsPage } from '@/pages/user/UserApprovalsPage';
+import { UserDashboard } from '@/pages/user/UserDashboard';
+import { UserExpensesPage } from '@/pages/user/UserExpensesPage';
+import { UserProfilePage } from '@/pages/user/UserProfilePage';
 
 const ProfileCompletePage = lazy(() =>
   import('@/pages/ProfileCompletePage').then((m) => ({ default: m.ProfileCompletePage })),
 );
 
-// USER pages
-const UserLayout = lazy(() =>
-  import('@/layouts/UserLayout').then((m) => ({ default: m.UserLayout })),
-);
-const UserDashboard = lazy(() =>
-  import('@/pages/user/UserDashboard').then((m) => ({ default: m.UserDashboard })),
-);
-const UserExpensesPage = lazy(() =>
-  import('@/pages/user/UserExpensesPage').then((m) => ({ default: m.UserExpensesPage })),
-);
+// USER lazy pages (less-frequent paths)
 const CreateExpensePage = lazy(() =>
   import('@/pages/user/CreateExpensePage').then((m) => ({ default: m.CreateExpensePage })),
-);
-const UserApprovalsPage = lazy(() =>
-  import('@/pages/user/UserApprovalsPage').then((m) => ({ default: m.UserApprovalsPage })),
-);
-const UserProfilePage = lazy(() =>
-  import('@/pages/user/UserProfilePage').then((m) => ({ default: m.UserProfilePage })),
 );
 const NotificationsPage = lazy(() =>
   import('@/pages/NotificationsPage').then((m) => ({
@@ -116,27 +106,15 @@ export const router = createBrowserRouter([
             element: <RoleRoute allowed={['USER', 'ADMIN']} />,
             children: [
               {
-                element: (
-                  <S>
-                    <UserLayout />
-                  </S>
-                ),
+                element: <UserLayout />,
                 children: [
                   {
                     path: '/',
-                    element: (
-                      <S>
-                        <UserDashboard />
-                      </S>
-                    ),
+                    element: <UserDashboard />,
                   },
                   {
                     path: '/expenses',
-                    element: (
-                      <S>
-                        <UserExpensesPage />
-                      </S>
-                    ),
+                    element: <UserExpensesPage />,
                   },
                   {
                     path: '/expenses/new',
@@ -148,19 +126,11 @@ export const router = createBrowserRouter([
                   },
                   {
                     path: '/approvals',
-                    element: (
-                      <S>
-                        <UserApprovalsPage />
-                      </S>
-                    ),
+                    element: <UserApprovalsPage />,
                   },
                   {
                     path: '/profile',
-                    element: (
-                      <S>
-                        <UserProfilePage />
-                      </S>
-                    ),
+                    element: <UserProfilePage />,
                   },
                   {
                     path: '/notifications',
