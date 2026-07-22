@@ -22,15 +22,18 @@
   --color-draft: #7c3aed;
   --color-draft-bg: #f5f3ff;
   --color-draft-border: #c4b5fd;
-  --color-pending: #1e3a8a;
-  --color-pending-bg: #eff6ff;
-  --color-pending-border: #93c5fd;
+  --color-pending: #d97706;
+  --color-pending-bg: #fffbeb;
+  --color-pending-border: #fcd34d;
   --color-approved: #16a34a;
   --color-approved-bg: #f0fdf4;
   --color-approved-border: #86efac;
   --color-rejected: #dc2626;
   --color-rejected-bg: #fef2f2;
   --color-rejected-border: #fca5a5;
+  --color-cancelled: #64748b;
+  --color-cancelled-bg: #f8fafc;
+  --color-cancelled-border: #cbd5e1;
 
   /* Sidebar */
   --color-sidebar-bg: #1e293b;
@@ -1243,7 +1246,7 @@ textarea {
 .manager-expense-card {
   overflow: hidden;
   border: 1px solid var(--color-border);
-  border-radius: 18px;
+  border-radius: 14px;
   background: var(--color-surface);
   box-shadow: var(--shadow-sm);
   transition:
@@ -1251,23 +1254,125 @@ textarea {
     box-shadow 160ms ease,
     border-color 160ms ease;
 }
-.manager-expense-card:hover,
+.manager-expense-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.1);
+}
 .manager-expense-card.selected {
-  transform: translateY(-2px);
-  border-color: #a99af2;
-  box-shadow: 0 14px 35px rgba(43, 34, 88, 0.11);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(114, 87, 232, 0.12);
 }
 .manager-expense-main {
   width: 100%;
   padding: 16px;
   border: 0;
-  display: grid;
-  gap: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   background: transparent;
   color: var(--color-text);
   text-align: left;
   cursor: pointer;
 }
+
+/* New card layout classes */
+.mec-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mec-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.mec-person-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.mec-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mec-email {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mec-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.mec-attach-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 2px 6px;
+}
+.mec-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mec-catdate {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.mec-dot {
+  opacity: 0.4;
+}
+.mec-desc {
+  font-size: 12px;
+  color: var(--color-text);
+  opacity: 0.75;
+  margin: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.mec-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.mec-amount {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--color-text);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Legacy classes kept for compatibility */
 .expense-sender {
   display: flex;
   align-items: center;
@@ -1303,65 +1408,33 @@ textarea {
 .expense-sender small svg {
   width: 12px;
 }
-.manager-expense-summary,
-.manager-expense-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-.manager-expense-summary span {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--color-text-muted);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.manager-expense-summary strong {
-  color: var(--color-primary);
-  white-space: nowrap;
-}
-.manager-due-row {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 5px 0 2px;
-  flex-wrap: wrap;
-}
-.manager-due-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.manager-due-date {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--color-text);
-}
+
 .manager-card-actions {
   padding: 10px 12px;
   border-top: 1px solid var(--color-border);
-  display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  display: flex;
   gap: 7px;
 }
 .manager-card-actions button {
-  min-height: 40px;
+  flex: 1;
+  min-height: 38px;
   padding: 7px 10px;
   border: 1px solid var(--color-border);
-  border-radius: 10px;
+  border-radius: 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 5px;
   background: var(--color-bg);
   color: var(--color-text-muted);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
+  transition: opacity 0.12s;
+}
+.manager-card-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .manager-card-actions button.approve {
   border-color: var(--color-approved-border);
@@ -1373,8 +1446,22 @@ textarea {
   background: var(--color-rejected-bg);
   color: var(--color-rejected);
 }
+.manager-card-actions button.detail {
+  flex: 0 0 auto;
+  border-color: var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+}
+.manager-card-actions button.cancel {
+  flex: 0 0 auto;
+  border-color: var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
 .manager-card-actions svg {
   width: 14px;
+  height: 14px;
 }
 .decision-backdrop {
   z-index: 1400;
@@ -1673,6 +1760,12 @@ textarea {
   .manager-expense-list {
     grid-template-columns: 1fr;
   }
+  .mec-header {
+    flex-wrap: wrap;
+  }
+  .mec-amount {
+    font-size: 17px;
+  }
   .manager-page-hero h1 {
     font-size: 19px;
   }
@@ -1711,10 +1804,11 @@ textarea {
     font-size: 11px;
   }
   .manager-card-actions {
-    grid-template-columns: 1fr 1fr;
+    flex-wrap: wrap;
   }
-  .manager-card-actions button:last-child {
-    grid-column: 1 / -1;
+  .manager-card-actions button.cancel,
+  .manager-card-actions button.detail {
+    flex: 1 1 auto;
   }
   .attachment-action-row {
     grid-template-columns: repeat(3, 1fr);

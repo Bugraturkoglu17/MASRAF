@@ -4,6 +4,7 @@ import {
   Eye,
   FileImage,
   Mail,
+  Paperclip,
   ReceiptText,
   RotateCcw,
   Send,
@@ -240,33 +241,48 @@ export function ManagerExpenseCard({
   onCancel?: () => void;
   busy?: boolean;
 }) {
+  const initials =
+    `${expense.user.firstName[0] ?? ''}${expense.user.lastName[0] ?? ''}`.toUpperCase();
+  const attachmentCount = expense.attachments?.length ?? 0;
+
   return (
     <article className={`manager-expense-card ${selected ? 'selected' : ''}`}>
       <button type="button" className="manager-expense-main" onClick={onSelect}>
-        <ExpenseSenderInfo sender={expense.user} />
-        <div className="manager-expense-summary">
-          <span>
-            {expense.category.name} · {date(expense.expenseDate)}
-          </span>
-          <strong>{money(expense.amount)}</strong>
-        </div>
-        <div className="manager-expense-meta">
-          <StatusBadge status={expense.status} />
-          {expense.expenseCode && (
-            <span className="expense-code-badge">#{expense.expenseCode}</span>
-          )}
-        </div>
-        <div className="manager-due-row">
-          <span className="manager-due-label">Vade:</span>
-          {expense.dueDate ? (
-            <span className="manager-due-date">
-              {new Date(expense.dueDate).toLocaleDateString('tr-TR')}
+        {/* Header row: avatar + person + code + attachment */}
+        <div className="mec-header">
+          <div className="mec-avatar">{initials}</div>
+          <div className="mec-person-info">
+            <span className="mec-name">
+              {expense.user.firstName} {expense.user.lastName}
             </span>
-          ) : (
-            <span className="manager-due-date" style={{ color: 'var(--color-text-muted)' }}>
-              —
-            </span>
-          )}
+            <span className="mec-email">{expense.user.email}</span>
+          </div>
+          <div className="mec-badges">
+            {attachmentCount > 0 && (
+              <span className="mec-attach-badge">
+                <Paperclip size={11} />
+                {attachmentCount}
+              </span>
+            )}
+            {expense.expenseCode && (
+              <span className="expense-code-badge">#{expense.expenseCode}</span>
+            )}
+          </div>
+        </div>
+
+        {/* Category + date + description */}
+        <div className="mec-body">
+          <div className="mec-catdate">
+            <span>{expense.category.name}</span>
+            <span className="mec-dot">·</span>
+            <span>{date(expense.expenseDate)}</span>
+          </div>
+          {expense.description && <p className="mec-desc">{expense.description}</p>}
+        </div>
+
+        {/* Amount + due badge row */}
+        <div className="mec-footer">
+          <strong className="mec-amount">{money(expense.amount)}</strong>
           <DueDateBadge
             dueDate={expense.dueDate}
             dueDaysRemaining={expense.dueDaysRemaining}
@@ -275,25 +291,27 @@ export function ManagerExpenseCard({
           />
         </div>
       </button>
-      {(onApprove || onReject || onCancel) && (
-        <div className="manager-card-actions">
-          {onApprove && (
-            <button type="button" disabled={busy} onClick={onApprove} className="approve">
-              <CheckCircle2 /> Onayla
-            </button>
-          )}
-          {onReject && (
-            <button type="button" disabled={busy} onClick={onReject} className="reject">
-              <XCircle /> Reddet
-            </button>
-          )}
-          {onCancel && (
-            <button type="button" disabled={busy} onClick={onCancel}>
-              İptal
-            </button>
-          )}
-        </div>
-      )}
+
+      <div className="manager-card-actions">
+        {onApprove && (
+          <button type="button" disabled={busy} onClick={onApprove} className="approve">
+            <CheckCircle2 /> Onayla
+          </button>
+        )}
+        {onReject && (
+          <button type="button" disabled={busy} onClick={onReject} className="reject">
+            <XCircle /> Reddet
+          </button>
+        )}
+        <button type="button" onClick={onSelect} className="detail">
+          <Eye size={14} /> Detay
+        </button>
+        {onCancel && (
+          <button type="button" disabled={busy} onClick={onCancel} className="cancel">
+            İptal
+          </button>
+        )}
+      </div>
     </article>
   );
 }

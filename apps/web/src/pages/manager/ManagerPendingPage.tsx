@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Clock3 } from 'lucide-react';
-import { useState } from 'react';
+import { Clock3, Search } from 'lucide-react';
+import { useMemo, useState } from 'react';
 
 import { ManagerExpenseCard, type ManagerExpense } from '@/components/expenses/ExpenseCards';
 import { useToast } from '@/components/feedback/toast-context';
@@ -13,13 +13,23 @@ interface PagedResult {
 }
 type Decision = { kind: 'approve' | 'reject' | 'cancel'; expense: ManagerExpense };
 
-type SortOption = 'due-nearest' | 'due-farthest' | 'most-overdue' | 'newest' | 'oldest';
+type SortOption =
+  | 'due-nearest'
+  | 'due-farthest'
+  | 'most-overdue'
+  | 'newest'
+  | 'oldest'
+  | 'amount-high'
+  | 'amount-low';
+
 const SORT_LABELS: Record<SortOption, string> = {
   'due-nearest': 'Vadeye en yakın',
   'due-farthest': 'Vadeye en uzak',
   'most-overdue': 'En çok gecikmiş',
   newest: 'En yeni',
   oldest: 'En eski',
+  'amount-high': 'En yüksek tutar',
+  'amount-low': 'En düşük tutar',
 };
 
 export function ManagerPendingPage(): JSX.Element {
@@ -29,14 +39,37 @@ export function ManagerPendingPage(): JSX.Element {
   const [decision, setDecision] = useState<Decision | null>(null);
   const [reason, setReason] = useState('');
   const [sort, setSort] = useState<SortOption>('due-nearest');
+  const [search, setSearch] = useState('');
+
+  const apiSort = sort === 'amount-high' || sort === 'amount-low' ? ('newest' as const) : sort;
+
   const { data, isLoading } = useQuery<PagedResult>({
-    queryKey: ['manager-pending', sort],
-    queryFn: () => apiFetch(`/expenses/manager/pending?limit=50&sort=${sort}`),
+    queryKey: ['manager-pending', apiSort],
+    queryFn: () => apiFetch(`/expenses/manager/pending?limit=100&sort=${apiSort}`),
     refetchInterval: 10000,
   });
 
+  const filtered = useMemo(() => {
+    let items = data?.items ?? [];
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      items = items.filter(
+        (e) =>
+          `${e.user.firstName} ${e.user.lastName}`.toLowerCase().includes(q) ||
+          (e.expenseCode ?? '').toLowerCase().includes(q) ||
+          e.title.toLowerCase().includes(q) ||
+          (e.description ?? '').toLowerCase().includes(q),
+      );
+    }
+    if (sort === 'amount-high')
+      return [...items].sort((a, b) => Number(b.amount) - Number(a.amount));
+    if (sort === 'amount-low')
+      return [...items].sort((a, b) => Number(a.amount) - Number(b.amount));
+    return items;
+  }, [data, search, sort]);
+
   const finish = (expenseId: string, message: string) => {
-    qc.setQueryData<PagedResult>(['manager-pending'], (old) =>
+    qc.setQueryData<PagedResult>(['manager-pending', apiSort], (old) =>
       old
         ? {
             ...old,
@@ -96,19 +129,58 @@ export function ManagerPendingPage(): JSX.Element {
           ))}
         </select>
       </header>
+
+      {/* Search bar */}
+      <div style={{ position: 'relative', marginBottom: 16 }}>
+        <Search
+          size={15}
+          style={{
+            position: 'absolute',
+            left: 10,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            color: 'var(--color-text-muted)',
+            pointerEvents: 'none',
+          }}
+        />
+        <input
+          type="search"
+          placeholder="Ad, masraf no veya açıklama ara…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{
+            width: '100%',
+            paddingLeft: 34,
+            paddingRight: 12,
+            height: 38,
+            border: '1px solid var(--color-border)',
+            borderRadius: 8,
+            background: 'var(--color-surface)',
+            color: 'var(--color-text)',
+            fontSize: 13,
+            outline: 'none',
+            boxSizing: 'border-box',
+          }}
+        />
+      </div>
+
       <main className="manager-expense-list">
         {isLoading ? (
           <div className="expense-list-loading">Masraflar yükleniyor…</div>
-        ) : !data?.items.length ? (
+        ) : !filtered.length ? (
           <div className="expense-empty-state">
             <span>
               <Clock3 />
             </span>
-            <strong>Bekleyen masraf bulunmuyor.</strong>
-            <p>Yeni gönderimler anlık olarak burada görünecek.</p>
+            <strong>{search ? 'Arama sonucu bulunamadı.' : 'Bekleyen masraf bulunmuyor.'}</strong>
+            <p>
+              {search
+                ? 'Arama kriterini değiştirerek tekrar deneyin.'
+                : 'Yeni gönderimler anlık olarak burada görünecek.'}
+            </p>
           </div>
         ) : (
-          data.items.map((expense) => (
+          filtered.map((expense) => (
             <ManagerExpenseCard
               key={expense.id}
               expense={expense}
@@ -173,7 +245,8 @@ function DecisionModal({
           <strong>
             {decision.expense.user.firstName} {decision.expense.user.lastName}
           </strong>{' '}
-          tarafından gönderilen “{decision.expense.title}” masrafı için bu işlem uygulanacak.
+          tarafından gönderilen &ldquo;{decision.expense.title}&rdquo; masrafı için bu işlem
+          uygulanacak.
         </p>
         {requiresReason && (
           <label>

@@ -442,12 +442,37 @@ export class ExpensesService {
   }
 
   async managerCounts(organizationId: string) {
-    const [pending, approved, rejected] = await Promise.all([
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const [pending, approved, rejected, cancelled, monthlyAgg, payableAgg] = await Promise.all([
       this.prisma.expense.count({ where: { organizationId, status: 'PENDING', deletedAt: null } }),
       this.prisma.expense.count({ where: { organizationId, status: 'APPROVED', deletedAt: null } }),
       this.prisma.expense.count({ where: { organizationId, status: 'REJECTED', deletedAt: null } }),
+      this.prisma.expense.count({
+        where: { organizationId, status: 'CANCELLED', deletedAt: null },
+      }),
+      this.prisma.expense.aggregate({
+        where: {
+          organizationId,
+          deletedAt: null,
+          status: { not: 'DRAFT' },
+          createdAt: { gte: startOfMonth },
+        },
+        _sum: { amount: true },
+      }),
+      this.prisma.expense.aggregate({
+        where: { organizationId, status: 'APPROVED', deletedAt: null },
+        _sum: { amount: true },
+      }),
     ]);
-    return { pending, approved, rejected };
+    return {
+      pending,
+      approved,
+      rejected,
+      cancelled,
+      monthlyTotal: monthlyAgg._sum.amount?.toNumber() ?? 0,
+      payableTotal: payableAgg._sum.amount?.toNumber() ?? 0,
+    };
   }
 
   async findByIdScoped(id: string, organizationId: string) {

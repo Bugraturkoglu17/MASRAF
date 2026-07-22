@@ -1,316 +1,617 @@
-import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, CheckCircle, Clock, XCircle } from 'lucide-react';
-import React from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  AlertCircle,
+  BanknoteIcon,
+  CheckCircle,
+  Clock,
+  RefreshCw,
+  Search,
+  TrendingUp,
+  XCircle,
+} from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { type ManagerExpense } from '@/components/expenses/ExpenseCards';
-import { DueDateBadge } from '@/components/ui/DueDateBadge';
+import { ManagerExpenseCard, type ManagerExpense } from '@/components/expenses/ExpenseCards';
+import { useToast } from '@/components/feedback/toast-context';
+import { ExpenseDetailSheet } from '@/components/ui/ExpenseDetailSheet';
 import { useAuth } from '@/features/auth/auth-context';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, getApiErrorMessage } from '@/lib/api-client';
 
-interface Counts {
+interface ManagerCounts {
   pending: number;
   approved: number;
   rejected: number;
+  cancelled: number;
+  monthlyTotal: number;
+  payableTotal: number;
 }
 
-const cards = [
-  {
-    key: 'pending',
-    label: 'Onayda Bekleyen',
-    icon: Clock,
-    color: 'var(--color-pending)',
-    bg: 'var(--color-pending-bg)',
-    to: '/manager/pending',
-  },
-  {
-    key: 'approved',
-    label: 'Onaylanan',
-    icon: CheckCircle,
-    color: 'var(--color-approved)',
-    bg: 'var(--color-approved-bg)',
-    to: '/manager/approved',
-  },
-  {
-    key: 'rejected',
-    label: 'Reddedilen',
-    icon: XCircle,
-    color: 'var(--color-rejected)',
-    bg: 'var(--color-rejected-bg)',
-    to: '/manager/rejected',
-  },
-] as const;
+interface PagedResult {
+  items: ManagerExpense[];
+  meta: { totalItems: number; page: number; totalPages: number };
+}
+
+type Decision = { kind: 'approve' | 'reject' | 'cancel'; expense: ManagerExpense };
+type SortOption =
+  | 'due-nearest'
+  | 'due-farthest'
+  | 'most-overdue'
+  | 'newest'
+  | 'oldest'
+  | 'amount-high'
+  | 'amount-low';
+
+const SORT_LABELS: Record<SortOption, string> = {
+  'due-nearest': 'Vadeye en yakın',
+  'due-farthest': 'Vadeye en uzak',
+  'most-overdue': 'En çok gecikmiş',
+  newest: 'En yeni',
+  oldest: 'En eski',
+  'amount-high': 'En yüksek tutar',
+  'amount-low': 'En düşük tutar',
+};
+
+const money = (n: number) =>
+  new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(n);
+
+function todayLabel() {
+  return new Date().toLocaleDateString('tr-TR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+}
 
 export function ManagerDashboard(): JSX.Element {
   const { user } = useAuth();
+  const { showToast } = useToast();
+  const qc = useQueryClient();
   const navigate = useNavigate();
 
-  const { data: counts } = useQuery<Counts>({
+  const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [sort, setSort] = useState<SortOption>('due-nearest');
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [decision, setDecision] = useState<Decision | null>(null);
+  const [reason, setReason] = useState('');
+
+  const apiSort = sort === 'amount-high' || sort === 'amount-low' ? ('newest' as const) : sort;
+
+  const { data: counts, refetch: refetchCounts } = useQuery<ManagerCounts>({
     queryKey: ['manager-counts'],
     queryFn: () => apiFetch('/expenses/manager/counts'),
-    refetchInterval: 10000,
+    refetchInterval: 30_000,
   });
 
-  const { data: overdue } = useQuery<ManagerExpense[]>({
-    queryKey: ['manager-overdue'],
-    queryFn: () => apiFetch('/expenses/manager/overdue'),
-    refetchInterval: 30000,
+  const {
+    data: pendingData,
+    isLoading,
+    dataUpdatedAt,
+    refetch: refetchPending,
+  } = useQuery<PagedResult>({
+    queryKey: ['manager-pending', apiSort],
+    queryFn: () => apiFetch(`/expenses/manager/pending?limit=100&sort=${apiSort}`),
+    refetchInterval: 15_000,
   });
 
-  const { data: dueToday } = useQuery<ManagerExpense[]>({
-    queryKey: ['manager-due-today'],
-    queryFn: () => apiFetch('/expenses/manager/due-today'),
-    refetchInterval: 30000,
-  });
+  const categories = useMemo(() => {
+    const cats = new Set(pendingData?.items?.map((e) => e.category.name) ?? []);
+    return [...cats].sort();
+  }, [pendingData]);
 
-  const { data: dueSoon } = useQuery<ManagerExpense[]>({
-    queryKey: ['manager-due-soon'],
-    queryFn: () => apiFetch('/expenses/manager/due-soon'),
-    refetchInterval: 30000,
+  const filtered = useMemo(() => {
+    let items = pendingData?.items ?? [];
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      items = items.filter(
+        (e) =>
+          `${e.user.firstName} ${e.user.lastName}`.toLowerCase().includes(q) ||
+          (e.expenseCode ?? '').toLowerCase().includes(q) ||
+          e.title.toLowerCase().includes(q) ||
+          (e.description ?? '').toLowerCase().includes(q),
+      );
+    }
+    if (categoryFilter) {
+      items = items.filter((e) => e.category.name === categoryFilter);
+    }
+    if (sort === 'amount-high') {
+      return [...items].sort((a, b) => Number(b.amount) - Number(a.amount));
+    }
+    if (sort === 'amount-low') {
+      return [...items].sort((a, b) => Number(a.amount) - Number(b.amount));
+    }
+    return items;
+  }, [pendingData, search, categoryFilter, sort]);
+
+  const lastSyncTime = useMemo(
+    () =>
+      dataUpdatedAt
+        ? new Date(dataUpdatedAt).toLocaleTimeString('tr-TR', {
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : null,
+    [dataUpdatedAt],
+  );
+
+  const handleRefresh = () => {
+    void refetchCounts();
+    void refetchPending();
+  };
+
+  const finish = (expenseId: string, message: string) => {
+    qc.setQueryData<PagedResult>(['manager-pending', apiSort], (old) =>
+      old
+        ? {
+            ...old,
+            items: old.items.filter((i) => i.id !== expenseId),
+            meta: { ...old.meta, totalItems: Math.max(0, old.meta.totalItems - 1) },
+          }
+        : old,
+    );
+    void qc.invalidateQueries({ queryKey: ['manager-counts'] });
+    void qc.invalidateQueries({ queryKey: ['expenses'] });
+    setDecision(null);
+    setReason('');
+    setDetailId(null);
+    showToast(message, 'success');
+  };
+
+  const decide = useMutation({
+    mutationFn: async (val: Decision) => {
+      if (val.kind === 'approve')
+        return apiFetch(`/expenses/${val.expense.id}/approve`, { method: 'POST' });
+      return apiFetch(`/expenses/${val.expense.id}/${val.kind}`, {
+        method: 'POST',
+        body: { reason },
+      });
+    },
+    onSuccess: (_, val) =>
+      finish(
+        val.expense.id,
+        val.kind === 'approve'
+          ? 'Masraf onaylandı.'
+          : val.kind === 'reject'
+            ? 'Masraf reddedildi.'
+            : 'Masraf iptal edildi.',
+      ),
+    onError: (error) => showToast(getApiErrorMessage(error, 'İşlem tamamlanamadı.'), 'error'),
   });
 
   return (
-    <div style={{ padding: '28px 32px' }}>
-      <div style={{ marginBottom: 28 }}>
-        <h1
-          style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-text)', margin: '0 0 4px' }}
-        >
-          Yönetici Paneli
-        </h1>
-        <p style={{ fontSize: 14, color: 'var(--color-text-muted)', margin: 0 }}>
-          Merhaba {user?.firstName}, bekleyen masrafları buradan yönetin.
-        </p>
+    <div style={{ padding: '28px 32px 100px' }}>
+      {/* ── Header ── */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          marginBottom: 28,
+          gap: 12,
+        }}
+      >
+        <div>
+          <h1
+            style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-text)', margin: '0 0 4px' }}
+          >
+            Merhaba, {user?.firstName}
+          </h1>
+          <p
+            style={{
+              fontSize: 13,
+              color: 'var(--color-text-muted)',
+              margin: 0,
+              textTransform: 'capitalize',
+            }}
+          >
+            {todayLabel()}
+          </p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          {lastSyncTime && (
+            <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+              Son güncelleme: {lastSyncTime}
+            </span>
+          )}
+          <button
+            onClick={handleRefresh}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 14px',
+              borderRadius: 8,
+              border: '1px solid var(--color-border)',
+              background: 'var(--color-surface)',
+              color: 'var(--color-text)',
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: 'pointer',
+            }}
+          >
+            <RefreshCw size={14} />
+            Yenile
+          </button>
+        </div>
       </div>
 
+      {/* ── Stat Cards ── */}
       <div
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: 16,
+          gap: 14,
           marginBottom: 32,
         }}
       >
-        {cards.map(({ key, label, icon: Icon, color, bg, to }) => (
-          <button
-            key={key}
-            onClick={() => navigate(to)}
-            style={{
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)',
-              padding: '20px 16px',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 8,
-              cursor: 'pointer',
-              boxShadow: 'var(--shadow-sm)',
-            }}
-          >
-            <div
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: 12,
-                background: bg,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Icon size={22} color={color} />
-            </div>
-            <div style={{ fontSize: 32, fontWeight: 800, color }}>{counts ? counts[key] : '—'}</div>
-            <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-muted)' }}>
-              {label}
-            </div>
-          </button>
-        ))}
-      </div>
-
-      {counts && counts.pending > 0 && (
-        <div
-          style={{
-            background: 'var(--color-pending-bg)',
-            border: '1px solid var(--color-pending-border)',
-            borderRadius: 'var(--radius-md)',
-            padding: '16px 20px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 20,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <Clock size={20} color="var(--color-pending)" />
-            <div>
-              <div style={{ fontWeight: 600, color: 'var(--color-text)' }}>
-                {counts.pending} masraf onay bekliyor
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
-                Bekleyen masrafları incelemeniz gerekiyor.
-              </div>
-            </div>
-          </div>
-          <button
-            onClick={() => navigate('/manager/pending')}
-            style={{
-              padding: '8px 16px',
-              borderRadius: 6,
-              border: 'none',
-              background: 'var(--color-pending)',
-              color: '#fff',
-              fontWeight: 600,
-              fontSize: 13,
-              cursor: 'pointer',
-            }}
-          >
-            İncele
-          </button>
-        </div>
-      )}
-
-      {overdue && overdue.length > 0 && (
-        <DueSection
-          title="Gecikmiş Masraflar"
-          icon={<AlertTriangle size={16} />}
+        <StatCard
+          label="Onayda Bekleyen"
+          sublabel="Karar bekleyen masraflar"
+          icon={Clock}
+          value={counts?.pending ?? 0}
+          color="var(--color-pending)"
+          bg="var(--color-pending-bg)"
+          border="var(--color-pending-border)"
+          onClick={() => navigate('/manager/pending')}
+        />
+        <StatCard
+          label="Onaylanan"
+          sublabel="Onaylanmış masraflar"
+          icon={CheckCircle}
+          value={counts?.approved ?? 0}
+          color="var(--color-approved)"
+          bg="var(--color-approved-bg)"
+          border="var(--color-approved-border)"
+          onClick={() => navigate('/manager/approved')}
+        />
+        <StatCard
+          label="Reddedilen"
+          sublabel="Red kararı verilen"
+          icon={XCircle}
+          value={counts?.rejected ?? 0}
           color="var(--color-rejected)"
           bg="var(--color-rejected-bg)"
           border="var(--color-rejected-border)"
-          items={overdue}
-          onNavigate={() => navigate('/manager/pending?sort=most-overdue')}
+          onClick={() => navigate('/manager/rejected')}
         />
-      )}
-
-      {dueToday && dueToday.length > 0 && (
-        <DueSection
-          title="Bugün Vadesi Dolan"
-          icon={<Clock size={16} />}
-          color="var(--color-warning, #e67e22)"
-          bg="var(--color-warning-bg, rgba(230,126,34,0.08))"
-          border="var(--color-warning-border, rgba(230,126,34,0.25))"
-          items={dueToday}
-          onNavigate={() => navigate('/manager/pending?sort=due-nearest')}
+        <StatCard
+          label="İptal Edilen"
+          sublabel="Kullanıcı tarafından iptal"
+          icon={AlertCircle}
+          value={counts?.cancelled ?? 0}
+          color="var(--color-cancelled)"
+          bg="var(--color-cancelled-bg)"
+          border="var(--color-cancelled-border)"
         />
-      )}
-
-      {dueSoon && dueSoon.length > 0 && (
-        <DueSection
-          title="Yakında Vadesi Dolacak (7 gün)"
-          icon={<Clock size={16} />}
+        <StatCard
+          label="Bu Ay Toplam"
+          sublabel="Bu ayki masraf tutarı"
+          icon={TrendingUp}
+          value={counts?.monthlyTotal ?? 0}
+          formatter={money}
+          color="#1e3a8a"
+          bg="#eff6ff"
+          border="#93c5fd"
+        />
+        <StatCard
+          label="Onaylanan Toplam"
+          sublabel="Tüm onaylı masraf tutarı"
+          icon={BanknoteIcon}
+          value={counts?.payableTotal ?? 0}
+          formatter={money}
           color="var(--color-primary)"
-          bg="rgba(100,80,200,0.06)"
-          border="rgba(100,80,200,0.18)"
-          items={dueSoon}
-          onNavigate={() => navigate('/manager/pending?sort=due-nearest')}
+          bg="rgba(114,87,232,0.08)"
+          border="rgba(114,87,232,0.25)"
+        />
+      </div>
+
+      {/* ── Pending list header ── */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 14,
+        }}
+      >
+        <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>
+          Bekleyen Masraflar
+          {(counts?.pending ?? 0) > 0 && (
+            <span
+              style={{
+                marginLeft: 8,
+                padding: '2px 8px',
+                borderRadius: 10,
+                background: 'var(--color-pending-bg)',
+                color: 'var(--color-pending)',
+                fontSize: 12,
+                fontWeight: 700,
+                border: '1px solid var(--color-pending-border)',
+              }}
+            >
+              {counts!.pending}
+            </span>
+          )}
+        </h2>
+      </div>
+
+      {/* ── Search & Filter Bar ── */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
+          <Search
+            size={15}
+            style={{
+              position: 'absolute',
+              left: 10,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: 'var(--color-text-muted)',
+              pointerEvents: 'none',
+            }}
+          />
+          <input
+            type="search"
+            placeholder="Ad, masraf no veya açıklama ara…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{
+              width: '100%',
+              paddingLeft: 34,
+              paddingRight: 12,
+              height: 38,
+              border: '1px solid var(--color-border)',
+              borderRadius: 8,
+              background: 'var(--color-surface)',
+              color: 'var(--color-text)',
+              fontSize: 13,
+              outline: 'none',
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>
+        {categories.length > 1 && (
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="manager-sort-select"
+          >
+            <option value="">Tüm kategoriler</option>
+            {categories.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        )}
+        <select
+          value={sort}
+          onChange={(e) => setSort(e.target.value as SortOption)}
+          className="manager-sort-select"
+        >
+          {(Object.keys(SORT_LABELS) as SortOption[]).map((key) => (
+            <option key={key} value={key}>
+              {SORT_LABELS[key]}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* ── Expense List ── */}
+      {isLoading ? (
+        <div className="expense-list-loading">Masraflar yükleniyor…</div>
+      ) : filtered.length === 0 ? (
+        <div className="expense-empty-state">
+          <span>
+            <Clock />
+          </span>
+          <strong>
+            {search || categoryFilter ? 'Arama sonucu bulunamadı.' : 'Bekleyen masraf bulunmuyor.'}
+          </strong>
+          <p>
+            {search || categoryFilter
+              ? 'Filtre kriterlerini değiştirerek tekrar deneyin.'
+              : 'Yeni gönderimler anlık olarak burada görünecek.'}
+          </p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {filtered.map((expense) => (
+            <ManagerExpenseCard
+              key={expense.id}
+              expense={expense}
+              selected={detailId === expense.id}
+              onSelect={() => setDetailId(expense.id)}
+              onApprove={() => setDecision({ kind: 'approve', expense })}
+              onReject={() => setDecision({ kind: 'reject', expense })}
+              onCancel={() => setDecision({ kind: 'cancel', expense })}
+              busy={decide.isPending}
+            />
+          ))}
+        </div>
+      )}
+
+      {detailId && <ExpenseDetailSheet expenseId={detailId} onClose={() => setDetailId(null)} />}
+
+      {decision && (
+        <DecisionModal
+          decision={decision}
+          reason={reason}
+          onReason={setReason}
+          busy={decide.isPending}
+          onClose={() => {
+            setDecision(null);
+            setReason('');
+          }}
+          onConfirm={() => decide.mutate(decision)}
         />
       )}
     </div>
   );
 }
 
-function DueSection({
-  title,
-  icon,
+function StatCard({
+  label,
+  sublabel,
+  icon: Icon,
+  value,
+  formatter,
   color,
   bg,
   border,
-  items,
-  onNavigate,
+  onClick,
 }: {
-  title: string;
-  icon: React.ReactNode;
+  label: string;
+  sublabel: string;
+  icon: React.ElementType;
+  value: number;
+  formatter?: (n: number) => string;
   color: string;
   bg: string;
   border: string;
-  items: ManagerExpense[];
-  onNavigate: () => void;
+  onClick?: () => void;
 }) {
-  const money = (amount: string | number) =>
-    new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(Number(amount));
+  const display = formatter ? formatter(value) : String(value);
+  const isAmount = Boolean(formatter);
+
+  const Tag = onClick ? 'button' : ('div' as const);
   return (
-    <div
+    <Tag
+      onClick={onClick}
       style={{
-        background: bg,
-        border: `1px solid ${border}`,
+        position: 'relative',
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
         borderRadius: 'var(--radius-md)',
-        padding: '14px 18px',
-        marginBottom: 16,
+        padding: '18px 16px 16px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+        cursor: onClick ? 'pointer' : 'default',
+        boxShadow: 'var(--shadow-sm)',
+        textAlign: 'left',
+        width: '100%',
+        overflow: 'hidden',
+        transition: 'transform 0.15s, box-shadow 0.15s',
       }}
     >
+      {/* Accent top bar */}
       <div
         style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 3,
+          background: color,
+          borderRadius: '10px 10px 0 0',
+        }}
+      />
+      {/* Icon */}
+      <div
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: 10,
+          background: bg,
+          border: `1px solid ${border}`,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: 12,
+          justifyContent: 'center',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, color }}>
-          {icon}
-          {title}
-          <span
-            style={{
-              background: color,
-              color: '#fff',
-              borderRadius: 10,
-              padding: '1px 7px',
-              fontSize: 12,
-              fontWeight: 700,
-            }}
-          >
-            {items.length}
-          </span>
-        </div>
-        <button
-          onClick={onNavigate}
+        <Icon size={17} color={color} />
+      </div>
+      {/* Value + labels */}
+      <div>
+        <div
           style={{
-            fontSize: 12,
+            fontSize: isAmount ? 17 : 28,
+            fontWeight: 800,
             color,
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            fontWeight: 600,
-            padding: '2px 6px',
+            lineHeight: 1.1,
+            fontVariantNumeric: 'tabular-nums',
+            letterSpacing: '-0.02em',
+            wordBreak: 'break-all',
           }}
         >
-          Tümünü gör →
-        </button>
+          {display}
+        </div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)', marginTop: 4 }}>
+          {label}
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>
+          {sublabel}
+        </div>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {items.slice(0, 5).map((exp) => (
-          <div
-            key={exp.id}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              background: 'var(--color-surface)',
-              borderRadius: 8,
-              padding: '8px 12px',
-              fontSize: 13,
-            }}
+    </Tag>
+  );
+}
+
+function DecisionModal({
+  decision,
+  reason,
+  onReason,
+  onClose,
+  onConfirm,
+  busy,
+}: {
+  decision: Decision;
+  reason: string;
+  onReason: (v: string) => void;
+  onClose: () => void;
+  onConfirm: () => void;
+  busy: boolean;
+}) {
+  const requiresReason = decision.kind !== 'approve';
+  const verb =
+    decision.kind === 'approve' ? 'Onayla' : decision.kind === 'reject' ? 'Reddet' : 'İptal et';
+  return (
+    <div className="decision-backdrop" onMouseDown={onClose}>
+      <section
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="decision-title"
+        className="decision-modal"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <span className={`decision-symbol ${decision.kind}`} />
+        <h2 id="decision-title">Masrafı {verb.toLocaleLowerCase('tr-TR')}</h2>
+        <p>
+          <strong>
+            {decision.expense.user.firstName} {decision.expense.user.lastName}
+          </strong>{' '}
+          tarafından gönderilen &ldquo;{decision.expense.title}&rdquo; masrafı için bu işlem
+          uygulanacak.
+        </p>
+        {requiresReason && (
+          <label>
+            Gerekçe <span>*</span>
+            <textarea
+              autoFocus
+              value={reason}
+              onChange={(e) => onReason(e.target.value)}
+              maxLength={1000}
+              rows={4}
+              placeholder="Karar gerekçesini açıklayın…"
+            />
+          </label>
+        )}
+        <div>
+          <button type="button" onClick={onClose}>
+            Vazgeç
+          </button>
+          <button
+            type="button"
+            className={decision.kind}
+            disabled={busy || (requiresReason && !reason.trim())}
+            onClick={onConfirm}
           >
-            <span
-              style={{ color: 'var(--color-text-muted)', fontFamily: 'monospace', fontSize: 11 }}
-            >
-              #{exp.expenseCode}
-            </span>
-            <span
-              style={{
-                flex: 1,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {exp.user.firstName} {exp.user.lastName} — {exp.title}
-            </span>
-            <strong style={{ whiteSpace: 'nowrap', color }}>{money(exp.amount)}</strong>
-            {exp.dueDate && <DueDateBadge dueDate={exp.dueDate} />}
-          </div>
-        ))}
-      </div>
+            {busy ? 'İşleniyor…' : verb}
+          </button>
+        </div>
+      </section>
     </div>
   );
 }
