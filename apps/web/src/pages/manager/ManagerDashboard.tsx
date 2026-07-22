@@ -70,7 +70,7 @@ export function ManagerDashboard(): JSX.Element {
   });
 
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 800 }}>
+    <div style={{ padding: '28px 32px' }}>
       <div style={{ marginBottom: 28 }}>
         <h1
           style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-text)', margin: '0 0 4px' }}
