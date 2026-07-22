@@ -126,7 +126,7 @@ const brandIconStyle: React.CSSProperties = {
   width: 36,
   height: 36,
   borderRadius: 8,
-  background: '#d97706',
+  background: '#1e3a8a',
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -153,9 +153,9 @@ const navLinkStyle = (isActive: boolean): React.CSSProperties => ({
   fontSize: 13,
   fontWeight: 500,
   color: isActive ? '#fff' : 'var(--color-sidebar-text)',
-  background: isActive ? 'rgba(217,119,6,0.15)' : 'transparent',
+  background: isActive ? 'rgba(30,58,138,0.18)' : 'transparent',
   textDecoration: 'none',
-  borderLeft: isActive ? '3px solid #d97706' : '3px solid transparent',
+  borderLeft: isActive ? '3px solid #1e3a8a' : '3px solid transparent',
 });
 
 const footerStyle: React.CSSProperties = {
@@ -170,7 +170,7 @@ const avatarStyle: React.CSSProperties = {
   width: 34,
   height: 34,
   borderRadius: '50%',
-  background: '#d97706',
+  background: '#1e3a8a',
   color: '#fff',
   display: 'flex',
   alignItems: 'center',
