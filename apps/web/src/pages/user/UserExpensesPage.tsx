@@ -8,6 +8,7 @@ import {
   type ExpenseListItem,
 } from '@/components/expenses/ExpenseCards';
 import { useToast } from '@/components/feedback/toast-context';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { ExpenseDetailSheet } from '@/components/ui/ExpenseDetailSheet';
 import { ExpenseSubmitDialog } from '@/components/ui/ExpenseSubmitDialog';
 import { apiFetch, getApiErrorMessage } from '@/lib/api-client';
@@ -36,6 +37,7 @@ export function UserExpensesPage(): JSX.Element {
   const qc = useQueryClient();
 
   const [submitTarget, setSubmitTarget] = useState<Expense | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Expense | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<PagedResult>({
@@ -72,11 +74,7 @@ export function UserExpensesPage(): JSX.Element {
     await submitMut.mutateAsync(submitTarget.id);
   };
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('Bu masrafı silmek istediğinize emin misiniz?')) {
-      deleteMut.mutate(id);
-    }
-  };
+  const handleDelete = (expense: Expense) => setDeleteTarget(expense);
 
   return (
     <div style={{ maxWidth: 480, margin: '0 auto', paddingBottom: 80 }}>
@@ -144,7 +142,7 @@ export function UserExpensesPage(): JSX.Element {
                     ? () => navigate(`/expenses/new?edit=${exp.id}`)
                     : undefined
                 }
-                onDelete={exp.status === 'DRAFT' ? () => handleDelete(exp.id) : undefined}
+                onDelete={exp.status === 'DRAFT' ? () => handleDelete(exp) : undefined}
                 onDetail={() => setDetailId(exp.id)}
                 busy={(submitMut.isPending && submitTarget?.id === exp.id) || deleteMut.isPending}
               />
@@ -159,6 +157,20 @@ export function UserExpensesPage(): JSX.Element {
           expenseTitle={submitTarget.title}
           onConfirm={handleConfirmSubmit}
           onClose={() => setSubmitTarget(null)}
+        />
+      )}
+
+      {/* Delete confirmation dialog */}
+      {deleteTarget && (
+        <ConfirmDialog
+          title="Masrafı Sil"
+          description={`"${deleteTarget.title}" masrafını silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`}
+          confirmLabel={deleteMut.isPending ? 'Siliniyor...' : 'Evet, Sil'}
+          busy={deleteMut.isPending}
+          onConfirm={() => {
+            deleteMut.mutate(deleteTarget.id, { onSettled: () => setDeleteTarget(null) });
+          }}
+          onCancel={() => setDeleteTarget(null)}
         />
       )}
 

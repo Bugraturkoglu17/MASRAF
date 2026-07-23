@@ -41,6 +41,9 @@ export class S3StorageProvider implements StorageProvider {
         accessKeyId: app.storage.accessKeyId,
         secretAccessKey: app.storage.secretAccessKey,
       },
+      // MinIO ve R2 ile uyumluluk: otomatik CRC32 checksum'u devre dışı bırak
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      responseChecksumValidation: 'WHEN_REQUIRED',
     });
   }
 

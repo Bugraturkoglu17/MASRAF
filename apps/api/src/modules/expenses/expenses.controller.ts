@@ -29,11 +29,7 @@ const isoDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Tarih YYYY-MM-DD biçiminde olmalıdır.')
   .refine((value) => !Number.isNaN(Date.parse(`${value}T00:00:00Z`)), 'Geçerli bir tarih giriniz.');
-const expenseDate = isoDate.refine(
-  (value) =>
-    value <= new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul' }).format(new Date()),
-  'Masraf tarihi gelecekte olamaz.',
-);
+const expenseDate = isoDate;
 
 const createExpenseSchema = z.object({
   categoryId: z.string().uuid(),

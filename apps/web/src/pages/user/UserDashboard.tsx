@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BarChart2, Bell, MessageSquare, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -9,9 +9,12 @@ import {
   type ExpenseListItem,
   type ExpenseStatus,
 } from '@/components/expenses/ExpenseCards';
+import { useToast } from '@/components/feedback/toast-context';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { ExpenseDetailSheet } from '@/components/ui/ExpenseDetailSheet';
+import { ExpenseSubmitDialog } from '@/components/ui/ExpenseSubmitDialog';
 import { useAuth } from '@/features/auth/auth-context';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, getApiErrorMessage } from '@/lib/api-client';
 
 const STATUS_TABS: { status: ExpenseStatus; label: string; countKey: string }[] = [
   { status: 'PENDING', label: 'Bekleyen', countKey: 'pending' },
@@ -38,6 +41,10 @@ export function UserDashboard(): JSX.Element {
   const [params, setParams] = useSearchParams();
   const activeStatus = (params.get('tab') as ExpenseStatus) ?? 'PENDING';
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [submitTarget, setSubmitTarget] = useState<ExpenseListItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ExpenseListItem | null>(null);
+  const { showToast } = useToast();
+  const qc = useQueryClient();
 
   const { data: counts } = useQuery<Counts>({
     queryKey: ['expense-counts'],
@@ -49,6 +56,29 @@ export function UserDashboard(): JSX.Element {
     queryKey: ['expenses-home', activeStatus],
     queryFn: () => apiFetch(`/expenses?status=${activeStatus}&limit=30`),
     refetchInterval: 15000,
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => apiFetch(`/expenses/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['expenses-home'] });
+      void qc.invalidateQueries({ queryKey: ['expense-counts'] });
+      showToast('Masraf silindi.', 'success');
+    },
+    onError: (error) => showToast(getApiErrorMessage(error, 'Silinemedi.'), 'error'),
+  });
+
+  const submitMut = useMutation({
+    mutationFn: (id: string) => apiFetch(`/expenses/${id}/submit`, { method: 'POST' }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['expenses-home'] });
+      void qc.invalidateQueries({ queryKey: ['expense-counts'] });
+      showToast('Masraf onaya gönderildi.', 'success');
+      setSubmitTarget(null);
+    },
+    onError: (e: Error) => {
+      throw e;
+    },
   });
 
   const initials = `${user?.firstName?.[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
@@ -126,7 +156,18 @@ export function UserDashboard(): JSX.Element {
               <MobileReceiptExpenseCard
                 key={exp.id}
                 expense={exp}
+                onSubmit={exp.status === 'DRAFT' ? () => setSubmitTarget(exp) : undefined}
+                onEdit={
+                  exp.status === 'DRAFT'
+                    ? () => navigate(`/expenses/new?edit=${exp.id}`)
+                    : undefined
+                }
+                onDelete={exp.status === 'DRAFT' ? () => setDeleteTarget(exp) : undefined}
                 onDetail={() => setDetailId(exp.id)}
+                busy={
+                  (submitMut.isPending && submitTarget?.id === exp.id) ||
+                  (deleteMut.isPending && deleteTarget?.id === exp.id)
+                }
               />
             ))}
           </div>
@@ -134,6 +175,29 @@ export function UserDashboard(): JSX.Element {
       </main>
 
       {detailId && <ExpenseDetailSheet expenseId={detailId} onClose={() => setDetailId(null)} />}
+
+      {submitTarget && (
+        <ExpenseSubmitDialog
+          expenseTitle={submitTarget.title}
+          onConfirm={async () => {
+            await submitMut.mutateAsync(submitTarget.id);
+          }}
+          onClose={() => setSubmitTarget(null)}
+        />
+      )}
+
+      {deleteTarget && (
+        <ConfirmDialog
+          title="Masrafı Sil"
+          description={`"${deleteTarget.title}" masrafını silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`}
+          confirmLabel={deleteMut.isPending ? 'Siliniyor...' : 'Evet, Sil'}
+          busy={deleteMut.isPending}
+          onConfirm={() => {
+            deleteMut.mutate(deleteTarget.id, { onSettled: () => setDeleteTarget(null) });
+          }}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      )}
     </div>
   );
 }

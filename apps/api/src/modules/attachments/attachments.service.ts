@@ -166,7 +166,15 @@ export class AttachmentsService {
       where: { id: attachmentId },
       data: { deletedAt: new Date() },
     });
-    await this.storageService.deleteFile(attachment.fileKey);
+    try {
+      await this.storageService.deleteFile(attachment.fileKey);
+    } catch (storageError) {
+      this.logger.warn('Depolama silme başarısız, DB kaydı temizlendi.', {
+        attachmentId,
+        fileKey: attachment.fileKey,
+        error: storageError instanceof Error ? storageError.message : 'UnknownError',
+      });
+    }
   }
 
   async listForExpense(expenseId: string, organizationId: string, userId: string) {

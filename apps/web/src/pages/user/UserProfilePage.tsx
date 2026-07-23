@@ -1,5 +1,8 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { LogOut } from 'lucide-react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 
 import { useToast } from '@/components/feedback/toast-context';
@@ -22,8 +25,21 @@ const roleLabels: Record<string, string> = {
 };
 
 export function UserProfilePage(): JSX.Element {
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, logout } = useAuth();
   const { showToast } = useToast();
+  const navigate = useNavigate();
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await logout();
+      navigate('/login');
+      showToast('Oturum kapatıldı.', 'info');
+    } finally {
+      setLoggingOut(false);
+    }
+  };
 
   const {
     register,
@@ -117,6 +133,52 @@ export function UserProfilePage(): JSX.Element {
             </button>
           </div>
         </form>
+      </div>
+
+      {/* ── Oturumu Kapat ── */}
+      <div
+        style={{
+          marginTop: 24,
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-md)',
+          padding: '20px 24px',
+          boxShadow: 'var(--shadow-sm)',
+        }}
+      >
+        <div style={{ marginBottom: 14 }}>
+          <div
+            style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-text)', marginBottom: 3 }}
+          >
+            Oturumu Kapat
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
+            Bu cihazdan güvenli çıkış yapın. Tüm yerel veriler temizlenir.
+          </div>
+        </div>
+        <button
+          type="button"
+          disabled={loggingOut}
+          onClick={handleLogout}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '10px 20px',
+            borderRadius: 8,
+            border: '1px solid var(--color-rejected-border)',
+            background: 'var(--color-rejected-bg)',
+            color: 'var(--color-rejected)',
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: loggingOut ? 'not-allowed' : 'pointer',
+            opacity: loggingOut ? 0.6 : 1,
+            transition: 'opacity 0.15s',
+          }}
+        >
+          <LogOut size={16} />
+          {loggingOut ? 'Çıkış yapılıyor…' : 'Oturumu Kapat'}
+        </button>
       </div>
     </div>
   );

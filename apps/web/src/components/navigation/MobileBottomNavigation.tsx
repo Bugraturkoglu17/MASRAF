@@ -13,17 +13,22 @@ import { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 
 import { QuickExpenseActionMenu } from '@/components/expenses/QuickExpenseActionMenu';
+import { QuickManagerActionMenu } from '@/components/expenses/QuickManagerActionMenu';
 import type { AppRole } from '@/features/auth/auth-context';
 
 type NavItem = { to: string; label: string; icon: typeof Home; end?: boolean };
 
+const managerLeftItems: NavItem[] = [
+  { to: '/manager', label: 'Ana Sayfa', icon: Home, end: true },
+  { to: '/manager/pending', label: 'Bekleyen', icon: Clock3 },
+];
+const managerRightItems: NavItem[] = [
+  { to: '/manager/notifications', label: 'Bildirimler', icon: Bell },
+  { to: '/manager/profile', label: 'Ayarlar', icon: Settings },
+];
+
 const itemsByRole: Record<Exclude<AppRole, 'USER'>, NavItem[]> = {
-  MANAGER: [
-    { to: '/manager', label: 'Ana Sayfa', icon: Home, end: true },
-    { to: '/manager/pending', label: 'Bekleyen', icon: Clock3 },
-    { to: '/manager/notifications', label: 'Bildirimler', icon: Bell },
-    { to: '/manager/profile', label: 'Ayarlar', icon: Settings },
-  ],
+  MANAGER: [...managerLeftItems, ...managerRightItems],
   ADMIN: [
     { to: '/admin', label: 'Ana Sayfa', icon: Home, end: true },
     { to: '/admin/users', label: 'Kullanıcılar', icon: Users },
@@ -48,15 +53,21 @@ export function MobileBottomNavigation({
 }): JSX.Element {
   const navigate = useNavigate();
   const [quickOpen, setQuickOpen] = useState(false);
+  const [managerMenuOpen, setManagerMenuOpen] = useState(false);
   const [adminMenuOpen, setAdminMenuOpen] = useState(false);
 
   useEffect(() => {
-    if (!quickOpen && !adminMenuOpen) return;
-    const close = (event: KeyboardEvent) =>
-      event.key === 'Escape' && (setQuickOpen(false), setAdminMenuOpen(false));
+    if (!quickOpen && !managerMenuOpen && !adminMenuOpen) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setQuickOpen(false);
+        setManagerMenuOpen(false);
+        setAdminMenuOpen(false);
+      }
+    };
     document.addEventListener('keydown', close);
     return () => document.removeEventListener('keydown', close);
-  }, [quickOpen, adminMenuOpen]);
+  }, [quickOpen, managerMenuOpen, adminMenuOpen]);
 
   if (role === 'USER') {
     return (
@@ -75,10 +86,38 @@ export function MobileBottomNavigation({
             aria-expanded={quickOpen}
             onClick={() => setQuickOpen((value) => !value)}
           >
-            <span>{quickOpen ? <X aria-hidden="true" /> : '+'}</span>
+            <span>{quickOpen ? <X aria-hidden="true" /> : '☰'}</span>
           </button>
           <NavigationItem item={userItems[2]!} unreadCount={unreadCount} />
           <NavigationItem item={userItems[3]!} unreadCount={unreadCount} />
+        </nav>
+      </>
+    );
+  }
+
+  if (role === 'MANAGER') {
+    return (
+      <>
+        <QuickManagerActionMenu open={managerMenuOpen} onClose={() => setManagerMenuOpen(false)} />
+        <nav
+          className="mobile-bottom-nav mobile-bottom-nav--manager"
+          aria-label="Mobil ana navigasyon"
+        >
+          {managerLeftItems.map((item) => (
+            <NavigationItem key={item.to} item={item} unreadCount={unreadCount} />
+          ))}
+          <button
+            type="button"
+            className={`mobile-quick-action ${managerMenuOpen ? 'is-open' : ''}`}
+            aria-label={managerMenuOpen ? 'Menüyü kapat' : 'Hızlı erişim menüsü'}
+            aria-expanded={managerMenuOpen}
+            onClick={() => setManagerMenuOpen((v) => !v)}
+          >
+            <span>{managerMenuOpen ? <X aria-hidden="true" /> : '☰'}</span>
+          </button>
+          {managerRightItems.map((item) => (
+            <NavigationItem key={item.to} item={item} unreadCount={unreadCount} />
+          ))}
         </nav>
       </>
     );

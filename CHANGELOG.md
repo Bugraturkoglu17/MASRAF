@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+### feat: fatura yönetimi, fotoğraf düzenleyici ve taslak aksiyonları (2026-07-23)
+
+**Fatura Yönetimi**
+- `AttachmentUploader` bileşeni yeniden yazıldı: fatura alanı taslak kaydedilmeden önce de görünür
+- İki ayrı buton: "Fotoğraf Çek" (kamera) ve "Fotoğraf Yükle" (galeri/PDF)
+- Yüklenen her fatura için görüntüleme (lightbox), değiştirme ve silme aksiyonları (`AttachmentCard`)
+- Masraf düzenleme ekranında (`?edit=`) fatura alanı artık görünür (`!editId` koşulu kaldırıldı)
+
+**Fotoğraf Düzenleyici** (`ImageEditor`)
+- Canvas tabanlı düzenleyici: sürükle-kaydır (Pointer Events), yakınlaştır (slider), döndür (90°), yeniden seç
+- Çıktı: 1080×1080 px JPEG @ 0.92 kalite
+- Taslak kaydedilmeden önce seçilen fotoğraflar düzenlenebilir (pending file queue + `PendingFileCard`)
+
+**Taslak Aksiyonları**
+- `ConfirmDialog` paylaşılan UI bileşenine çıkarıldı (`components/ui/ConfirmDialog.tsx`)
+- Taslak silme işlemi `window.confirm` yerine özel onay modalı kullanıyor
+- `UserDashboard` (Ana Sayfa) Taslaklar sekmesine "Onaya gönder", "Düzenle", "Sil" butonları eklendi
+
+**Backend**
+- Fatura silme işleminde depolama (MinIO/R2) hatası artık fatal değil; DB kaydı her zaman temizleniyor, hata log'a uyarı olarak düşüyor
+
+---
+
 ### fix: local draft recovery loop and neon stage-14 prep (2026-07-21)
 
 - `apps/web/src/pages/user/CreateExpensePage.tsx` icinde local draft autosave kosulu guclendirildi; bos icerikte taslak yeniden olusmasi engellendi.

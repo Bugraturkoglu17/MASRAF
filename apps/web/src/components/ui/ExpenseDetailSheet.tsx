@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Download, Paperclip, X } from 'lucide-react';
+import { Download, FileText, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { DueDateBadge } from './DueDateBadge';
@@ -168,6 +168,9 @@ export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetPro
               style={{
                 width: 32,
                 height: 32,
+                minHeight: 32,
+                padding: 0,
+                boxSizing: 'border-box',
                 borderRadius: '50%',
                 border: '1px solid var(--color-border)',
                 background: 'var(--color-bg)',
@@ -297,59 +300,26 @@ export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetPro
                     Belge eklenmemiş
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div className="attachment-list">
                     {expense.attachments.map((att) => (
-                      <div
-                        key={att.id}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 10,
-                          padding: '10px 12px',
-                          background: 'var(--color-bg)',
-                          borderRadius: 8,
-                          border: '1px solid var(--color-border)',
-                        }}
-                      >
-                        <Paperclip size={15} color="var(--color-text-muted)" />
-                        <div style={{ flex: 1, overflow: 'hidden' }}>
-                          <div
-                            style={{
-                              fontSize: 13,
-                              fontWeight: 500,
-                              color: 'var(--color-text)',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {att.fileName}
-                          </div>
-                          <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-                            {(att.sizeBytes / 1024).toFixed(0)} KB
-                          </div>
+                      <article key={att.id} className="attachment-preview">
+                        <span className="attachment-thumbnail">
+                          <AttachmentThumb id={att.id} mimeType={att.mimeType} />
+                        </span>
+                        <div className="attachment-meta">
+                          <strong title={att.fileName}>{att.fileName}</strong>
+                          <small>{(att.sizeBytes / 1024).toFixed(0)} KB · Yüklendi</small>
                         </div>
                         <button
                           type="button"
+                          className="attachment-icon-button"
                           aria-label={`${att.fileName} dosyasını indir`}
                           disabled={downloadingId !== null}
                           onClick={() => void downloadAttachment(att)}
-                          style={{
-                            width: 32,
-                            height: 32,
-                            borderRadius: 6,
-                            border: '1px solid var(--color-border)',
-                            background: 'var(--color-surface)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: 'pointer',
-                            flexShrink: 0,
-                          }}
                         >
                           <Download size={14} color="var(--color-primary)" />
                         </button>
-                      </div>
+                      </article>
                     ))}
                   </div>
                 )}
@@ -365,6 +335,21 @@ export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetPro
         }
       `}</style>
     </>
+  );
+}
+
+function AttachmentThumb({ id, mimeType }: { id: string; mimeType: string }) {
+  const [src, setSrc] = useState<string>();
+  useEffect(() => {
+    if (!mimeType.startsWith('image/')) return;
+    void apiFetch<{ url: string }>(`/attachments/${id}/download-url`)
+      .then(({ url }) => setSrc(url))
+      .catch(() => undefined);
+  }, [id, mimeType]);
+  return src ? (
+    <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+  ) : (
+    <FileText size={20} />
   );
 }
 

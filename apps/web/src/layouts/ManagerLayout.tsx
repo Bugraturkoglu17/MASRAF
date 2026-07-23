@@ -1,11 +1,13 @@
-import { CheckCircle, Clock, Home, User, XCircle } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Bell, CheckCircle, Clock, Home, User, XCircle } from 'lucide-react';
+import { useEffect, useMemo, useRef } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate, useNavigation } from 'react-router-dom';
 
 import { RouteTransitionLoader } from '@/components/feedback/RouteTransitionLoader';
 import { useToast } from '@/components/feedback/toast-context';
 import { MobileBottomNavigation } from '@/components/navigation/MobileBottomNavigation';
 import { useAuth } from '@/features/auth/auth-context';
+import { apiFetch } from '@/lib/api-client';
 import { useManagerSse } from '@/lib/use-manager-sse';
 
 const navItems = [
@@ -13,6 +15,7 @@ const navItems = [
   { to: '/manager/pending', label: 'Onayda Bekleyen', icon: Clock },
   { to: '/manager/approved', label: 'Onaylananlar', icon: CheckCircle },
   { to: '/manager/rejected', label: 'Reddedilenler', icon: XCircle },
+  { to: '/manager/notifications', label: 'Bildirimler', icon: Bell },
   { to: '/manager/profile', label: 'Profilim', icon: User },
 ];
 
@@ -25,6 +28,16 @@ export function ManagerLayout(): JSX.Element {
   const mainRef = useRef<HTMLElement>(null);
   const isPending = navigation.state !== 'idle';
   const realtimeStatus = useManagerSse();
+
+  const { data: notifications } = useQuery<{ readAt: string | null }[]>({
+    queryKey: ['notifications'],
+    queryFn: () => apiFetch('/notifications'),
+    refetchInterval: 30_000,
+  });
+  const unreadCount = useMemo(
+    () => (notifications ?? []).filter((n) => !n.readAt).length,
+    [notifications],
+  );
 
   useEffect(() => {
     mainRef.current?.scrollTo({ top: 0, behavior: 'instant' });
@@ -58,7 +71,31 @@ export function ManagerLayout(): JSX.Element {
         <nav style={navStyle}>
           {navItems.map(({ to, label, icon: Icon, exact }) => (
             <NavLink key={to} to={to} end={exact} style={({ isActive }) => navLinkStyle(isActive)}>
-              <Icon size={18} />
+              <span style={{ position: 'relative', display: 'inline-flex' }}>
+                <Icon size={18} />
+                {label === 'Bildirimler' && unreadCount > 0 && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: -5,
+                      right: -8,
+                      minWidth: 15,
+                      height: 15,
+                      padding: '0 3px',
+                      borderRadius: 99,
+                      background: '#dc2626',
+                      color: '#fff',
+                      fontSize: 9,
+                      fontWeight: 700,
+                      display: 'grid',
+                      placeItems: 'center',
+                      lineHeight: 1,
+                    }}
+                  >
+                    {Math.min(unreadCount, 99)}
+                  </span>
+                )}
+              </span>
               <span>{label}</span>
             </NavLink>
           ))}
@@ -100,7 +137,7 @@ export function ManagerLayout(): JSX.Element {
           <Outlet />
         </div>
       </main>
-      <MobileBottomNavigation key={location.pathname} role="MANAGER" />
+      <MobileBottomNavigation key={location.pathname} role="MANAGER" unreadCount={unreadCount} />
     </div>
   );
 }

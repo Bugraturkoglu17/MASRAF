@@ -237,6 +237,38 @@ export class ExpensesService {
       },
     });
 
+    const managers = await this.prisma.user.findMany({
+      where: { organizationId, role: { in: ['MANAGER', 'ADMIN'] }, deletedAt: null },
+      select: { id: true },
+    });
+    if (managers.length > 0) {
+      const userName = `${updated.user.firstName} ${updated.user.lastName}`;
+      const expCode = updated.expenseNumber ?? updated.id.slice(-6);
+      const amtStr = new Intl.NumberFormat('tr-TR', {
+        style: 'currency',
+        currency: 'TRY',
+      }).format(Number(updated.amount));
+      const timeStr = (updated.submittedAt ?? new Date()).toLocaleString('tr-TR', {
+        timeZone: 'Europe/Istanbul',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      await Promise.all(
+        managers.map((m) =>
+          this.notifications.create(
+            organizationId,
+            m.id,
+            'Yeni bir masrafınız var.',
+            `${userName} · #${expCode} · ${amtStr} · Gönderim: ${timeStr}`,
+            'IN_APP',
+          ),
+        ),
+      );
+    }
+
     return updated;
   }
 
