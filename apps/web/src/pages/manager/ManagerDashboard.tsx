@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { ManagerExpenseCard, type ManagerExpense } from '@/components/expenses/ExpenseCards';
 import { useToast } from '@/components/feedback/toast-context';
+import { PanelBrandMark } from '@/components/PanelBrandMark';
 import { ExpenseDetailSheet } from '@/components/ui/ExpenseDetailSheet';
 import { useAuth } from '@/features/auth/auth-context';
 import { apiFetch, getApiErrorMessage } from '@/lib/api-client';
@@ -181,33 +182,33 @@ export function ManagerDashboard(): JSX.Element {
   });
 
   return (
-    <div style={{ padding: '28px 32px 100px' }}>
+    <div className="manager-dashboard">
       {/* ── Header ── */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          justifyContent: 'space-between',
-          marginBottom: 28,
-          gap: 12,
-        }}
-      >
-        <div>
-          <h1
-            style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-text)', margin: '0 0 4px' }}
-          >
-            Merhaba, {user?.firstName}
-          </h1>
-          <p
-            style={{
-              fontSize: 13,
-              color: 'var(--color-text-muted)',
-              margin: 0,
-              textTransform: 'capitalize',
-            }}
-          >
-            {todayLabel()}
-          </p>
+      <div className="manager-dashboard-header">
+        <div className="manager-dashboard-heading">
+          <PanelBrandMark />
+          <div>
+            <h1
+              style={{
+                fontSize: 22,
+                fontWeight: 700,
+                color: 'var(--color-text)',
+                margin: '0 0 4px',
+              }}
+            >
+              Merhaba, {user?.firstName}
+            </h1>
+            <p
+              style={{
+                fontSize: 13,
+                color: 'var(--color-text-muted)',
+                margin: 0,
+                textTransform: 'capitalize',
+              }}
+            >
+              {todayLabel()}
+            </p>
+          </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
           {lastSyncTime && (
@@ -238,14 +239,7 @@ export function ManagerDashboard(): JSX.Element {
       </div>
 
       {/* ── Stat Cards ── */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: 14,
-          marginBottom: 32,
-        }}
-      >
+      <div className="manager-stat-grid">
         <StatCard
           label="Onayda Bekleyen"
           sublabel="Karar bekleyen masraflar"
@@ -291,9 +285,9 @@ export function ManagerDashboard(): JSX.Element {
           icon={TrendingUp}
           value={counts?.monthlyTotal ?? 0}
           formatter={money}
-          color="#1e3a8a"
-          bg="#eff6ff"
-          border="#93c5fd"
+          color="var(--color-info)"
+          bg="var(--color-info-bg)"
+          border="var(--color-info-border)"
         />
         <StatCard
           label="Onaylanan Toplam"
@@ -338,7 +332,7 @@ export function ManagerDashboard(): JSX.Element {
       </div>
 
       {/* ── Search & Filter Bar ── */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+      <div className="manager-filter-bar">
         <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
           <Search
             size={15}
@@ -352,6 +346,7 @@ export function ManagerDashboard(): JSX.Element {
             }}
           />
           <input
+            className="manager-search-input"
             type="search"
             placeholder="Ad, masraf no veya açıklama ara…"
             value={search}
@@ -478,6 +473,7 @@ function StatCard({
   const Tag = onClick ? 'button' : ('div' as const);
   return (
     <Tag
+      className="manager-stat-card"
       onClick={onClick}
       style={{
         position: 'relative',
@@ -533,7 +529,7 @@ function StatCard({
             lineHeight: 1.1,
             fontVariantNumeric: 'tabular-nums',
             letterSpacing: '-0.02em',
-            wordBreak: 'break-all',
+            overflowWrap: 'anywhere',
           }}
         >
           {display}

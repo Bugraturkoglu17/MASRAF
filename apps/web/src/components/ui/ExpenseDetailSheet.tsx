@@ -3,6 +3,7 @@ import { Download, FileText, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { DueDateBadge } from './DueDateBadge';
+import { IbanCopyButton } from './IbanCopyButton';
 import { StatusBadge } from './StatusBadge';
 
 import { useToast } from '@/components/feedback/toast-context';
@@ -19,6 +20,7 @@ interface Attachment {
 interface ExpenseDetail {
   id: string;
   expenseNumber?: string | null;
+  expenseCode?: string | null;
   title: string;
   description?: string | null;
   amount: string;
@@ -39,7 +41,6 @@ interface ExpenseDetail {
     email: string;
     phone?: string | null;
     iban?: string | null;
-    organization?: { name: string };
     department?: { name: string } | null;
   };
 }
@@ -96,6 +97,8 @@ export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetPro
     }
   };
 
+  const expenseReference = expense?.expenseCode ?? expense?.expenseNumber ?? '------';
+
   return (
     <>
       <div
@@ -112,6 +115,7 @@ export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetPro
         role="dialog"
         aria-modal="true"
         aria-labelledby="expense-detail-title"
+        className="expense-detail-sheet"
         style={{
           position: 'fixed',
           bottom: 0,
@@ -134,7 +138,7 @@ export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetPro
           />
         </div>
 
-        <div style={{ padding: '0 16px 32px' }}>
+        <div className="expense-detail-sheet__content">
           {/* Header */}
           <div
             style={{
@@ -146,7 +150,7 @@ export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetPro
           >
             <div>
               <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 2 }}>
-                #{expense?.expenseNumber ?? '—'}
+                Masraf #{expenseReference}
               </div>
               <h2
                 id="expense-detail-title"
@@ -215,14 +219,21 @@ export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetPro
                     value={`${expense.user.firstName} ${expense.user.lastName}`}
                   />
                   <DetailRow label="E-posta" value={expense.user.email} />
-                  {expense.user.organization && (
-                    <DetailRow label="Şirket" value={expense.user.organization.name} />
-                  )}
                   {expense.user.department && (
                     <DetailRow label="Departman" value={expense.user.department.name} />
                   )}
                   {expense.user.phone && <DetailRow label="Telefon" value={expense.user.phone} />}
-                  {expense.user.iban && <DetailRow label="IBAN" value={expense.user.iban} />}
+                  {expense.user.iban && (
+                    <DetailRow
+                      label="IBAN"
+                      value={
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                          {expense.user.iban}
+                          <IbanCopyButton value={expense.user.iban} iconOnly />
+                        </span>
+                      }
+                    />
+                  )}
                 </div>
               )}
 
@@ -301,19 +312,21 @@ export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetPro
                   </div>
                 ) : (
                   <div className="attachment-list">
-                    {expense.attachments.map((att) => (
+                    {expense.attachments.map((att, index) => (
                       <article key={att.id} className="attachment-preview">
                         <span className="attachment-thumbnail">
                           <AttachmentThumb id={att.id} mimeType={att.mimeType} />
                         </span>
                         <div className="attachment-meta">
-                          <strong title={att.fileName}>{att.fileName}</strong>
-                          <small>{(att.sizeBytes / 1024).toFixed(0)} KB · Yüklendi</small>
+                          <strong>Masraf #{expenseReference}</strong>
+                          <small>
+                            Belge {index + 1} · {(att.sizeBytes / 1024).toFixed(0)} KB
+                          </small>
                         </div>
                         <button
                           type="button"
                           className="attachment-icon-button"
-                          aria-label={`${att.fileName} dosyasını indir`}
+                          aria-label={`Masraf ${expenseReference}, belge ${index + 1} indir`}
                           disabled={downloadingId !== null}
                           onClick={() => void downloadAttachment(att)}
                         >

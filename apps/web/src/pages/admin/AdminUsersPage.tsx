@@ -1,14 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MoreVertical } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 
-import { AdminPage, BoolBadge, formatDate, RoleBadge, StatusBadge } from './admin-ui';
+import { formatDate } from './admin-format';
+import { AdminPage, BoolBadge, RoleBadge, StatusBadge } from './admin-ui';
 
 import { useToast } from '@/components/feedback/toast-context';
 import { useAuth } from '@/features/auth/auth-context';
 import { apiFetch, getApiErrorMessage } from '@/lib/api-client';
-
 
 export interface AdminUser {
   id: string;
@@ -17,7 +18,6 @@ export interface AdminUser {
   lastName: string;
   phone: string | null;
   iban: string | null;
-  company: string | null;
   jobTitle: string | null;
   role: 'USER' | 'MANAGER' | 'ADMIN';
   status: 'ACTIVE' | 'INACTIVE';
@@ -29,6 +29,10 @@ export interface AdminUser {
 }
 
 type QuickFilter = '' | 'PROFILE_INCOMPLETE' | 'FIRST_LOGIN_PENDING';
+
+function getDefaultJobTitle(role: AdminUser['role']): string {
+  return role === 'MANAGER' ? 'Yönetici' : role === 'ADMIN' ? 'Admin' : 'Kullanıcı';
+}
 
 export function AdminUsersPage(): JSX.Element {
   const [search, setSearch] = useState('');
@@ -139,7 +143,6 @@ export function AdminUsersPage(): JSX.Element {
                 <th>Telefon</th>
                 <th>E-posta</th>
                 <th>Rol</th>
-                <th>Firma</th>
                 <th>Görev</th>
                 <th>Durum</th>
                 <th>Profil</th>
@@ -167,8 +170,7 @@ export function AdminUsersPage(): JSX.Element {
                   <td>
                     <RoleBadge role={u.role} />
                   </td>
-                  <td>{u.company ?? '—'}</td>
-                  <td>{u.jobTitle ?? '—'}</td>
+                  <td>{getDefaultJobTitle(u.role)}</td>
                   <td>
                     <StatusBadge status={u.status} />
                   </td>
@@ -271,8 +273,15 @@ export function UserActionsMenu({ user }: { user: AdminUser }): JSX.Element {
         setOpen(false);
       }
     };
+    const closeMenu = () => setOpen(false);
     document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
+    window.addEventListener('resize', closeMenu);
+    window.addEventListener('scroll', closeMenu, true);
+    return () => {
+      document.removeEventListener('mousedown', onClick);
+      window.removeEventListener('resize', closeMenu);
+      window.removeEventListener('scroll', closeMenu, true);
+    };
   }, [open]);
 
   const openMenu = () => {
@@ -340,59 +349,71 @@ export function UserActionsMenu({ user }: { user: AdminUser }): JSX.Element {
         type="button"
         className="adm-btn adm-btn-outline adm-btn-sm"
         aria-label="Kullanıcı işlemleri"
+        aria-expanded={open}
+        aria-haspopup="menu"
         onClick={openMenu}
         style={{ padding: 6 }}
       >
         <MoreVertical size={16} />
       </button>
-      {open && menuPos && (
-        <div
-          ref={menuRef}
-          style={{
-            position: 'fixed',
-            top: menuPos.top,
-            left: menuPos.left,
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 10,
-            boxShadow: '0 8px 28px rgba(0,0,0,0.35)',
-            zIndex: 200,
-            width: MENU_WIDTH,
-            overflow: 'hidden',
-          }}
-        >
-          {items.map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              disabled={item.disabled}
-              onClick={() => {
-                setOpen(false);
-                item.onClick();
-              }}
-              style={{
-                display: 'block',
-                width: '100%',
-                textAlign: 'left',
-                padding: '10px 14px',
-                background: 'transparent',
-                border: 'none',
-                fontSize: 13,
-                color: item.disabled
-                  ? 'var(--color-text-muted)'
-                  : item.danger
-                    ? '#f87171'
-                    : 'var(--color-text)',
-                cursor: item.disabled ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      )}
-      {modal === 'role' && <ChangeRoleModal user={user} onClose={() => setModal(null)} />}
-      {modal === 'password' && <TempPasswordModal user={user} onClose={() => setModal(null)} />}
+      {open &&
+        menuPos &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="menu"
+            style={{
+              position: 'fixed',
+              top: menuPos.top,
+              left: menuPos.left,
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 10,
+              boxShadow: '0 8px 28px rgba(0,0,0,0.35)',
+              zIndex: 1500,
+              width: MENU_WIDTH,
+              overflow: 'hidden',
+            }}
+          >
+            {items.map((item) => (
+              <button
+                key={item.label}
+                type="button"
+                role="menuitem"
+                disabled={item.disabled}
+                onClick={() => {
+                  setOpen(false);
+                  item.onClick();
+                }}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  textAlign: 'left',
+                  padding: '10px 14px',
+                  background: 'transparent',
+                  border: 'none',
+                  fontSize: 13,
+                  color: item.disabled
+                    ? 'var(--color-text-muted)'
+                    : item.danger
+                      ? '#f87171'
+                      : 'var(--color-text)',
+                  cursor: item.disabled ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
+      {modal === 'role' &&
+        createPortal(<ChangeRoleModal user={user} onClose={() => setModal(null)} />, document.body)}
+      {modal === 'password' &&
+        createPortal(
+          <TempPasswordModal user={user} onClose={() => setModal(null)} />,
+          document.body,
+        )}
     </div>
   );
 }

@@ -1,17 +1,22 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { UserCircle } from 'lucide-react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm, useWatch } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 
 import { useToast } from '@/components/feedback/toast-context';
+import { IbanCopyButton } from '@/components/ui/IbanCopyButton';
+import { normalizeTurkeyIban } from '@/components/ui/turkey-iban';
+import { TurkeyIbanInput } from '@/components/ui/TurkeyIbanInput';
 import { useAuth } from '@/features/auth/auth-context';
+import { getRoleHome } from '@/features/auth/role-home';
 import { apiFetch, getApiErrorMessage } from '@/lib/api-client';
 
 const schema = z.object({
   firstName: z.string().min(1, 'Ad zorunludur'),
   lastName: z.string().min(1, 'Soyad zorunludur'),
   phone: z.string().min(1, 'Telefon zorunludur'),
-  iban: z.string().min(1, 'IBAN zorunludur'),
+  iban: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -19,10 +24,14 @@ type FormValues = z.infer<typeof schema>;
 export function ProfileCompletePage(): JSX.Element {
   const { user, refreshUser, logout } = useAuth();
   const { showToast } = useToast();
+  const navigate = useNavigate();
+  const isUser = user?.role === 'USER';
 
   const {
     register,
     handleSubmit,
+    setError,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -34,11 +43,25 @@ export function ProfileCompletePage(): JSX.Element {
     },
   });
 
+  const ibanValue = useWatch({ control, name: 'iban' });
+  const ibanDigitCount = (ibanValue ?? '').replace(/\D/g, '').length;
+  const hasRealEmail = Boolean(user?.email && !user.email.endsWith('@masraf.local'));
+
   const onSubmit = handleSubmit(async (values) => {
+    const normalizedIban = normalizeTurkeyIban(values.iban ?? '');
+    if (isUser && !/^TR\d{24}$/.test(normalizedIban)) {
+      setError('iban', { message: 'IBAN, TR ile birlikte 26 karakter olmalıdır.' });
+      return;
+    }
+
     try {
-      await apiFetch('/users/me/profile', { method: 'PATCH', body: values });
-      await refreshUser();
+      const payload = isUser
+        ? { ...values, iban: normalizedIban }
+        : { firstName: values.firstName, lastName: values.lastName, phone: values.phone };
+      await apiFetch('/users/me/profile', { method: 'PATCH', body: payload });
+      const currentUser = await refreshUser();
       showToast('Profil başarıyla tamamlandı.', 'success');
+      navigate(getRoleHome(currentUser.role), { replace: true });
     } catch (error) {
       showToast(getApiErrorMessage(error, 'Profil kaydedilemedi. Lütfen tekrar deneyin.'), 'error');
     }
@@ -54,15 +77,6 @@ export function ProfileCompletePage(): JSX.Element {
           <h1 style={titleStyle}>Profilinizi Tamamlayın</h1>
           <p style={subtitleStyle}>Devam etmek için aşağıdaki bilgileri doldurun.</p>
         </div>
-
-        {user?.organization && (
-          <div style={orgBadgeStyle}>
-            <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Şirket</span>
-            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>
-              {user.organization.name}
-            </span>
-          </div>
-        )}
 
         <form
           onSubmit={onSubmit}
@@ -95,26 +109,41 @@ export function ProfileCompletePage(): JSX.Element {
             />
           </Field>
 
-          <Field label="IBAN" error={errors.iban?.message}>
-            <input
-              {...register('iban')}
-              placeholder="TR00 0000 0000 0000 0000 0000 00"
-              style={inputStyle(Boolean(errors.iban))}
-            />
-          </Field>
+          {isUser && (
+            <Field label="IBAN" error={errors.iban?.message}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Controller
+                  name="iban"
+                  control={control}
+                  render={({ field }) => (
+                    <TurkeyIbanInput
+                      {...field}
+                      aria-label="IBAN"
+                      placeholder="TR000000000000000000000000"
+                      style={{ ...inputStyle(Boolean(errors.iban)), flex: 1, minWidth: 0 }}
+                    />
+                  )}
+                />
+                <IbanCopyButton value={ibanValue} />
+              </div>
+              <p style={ibanHelpStyle}>TR sonrası {ibanDigitCount}/24 rakam</p>
+            </Field>
+          )}
 
-          <Field label="E-posta">
-            <input
-              value={user?.email ?? ''}
-              readOnly
-              style={{
-                ...inputStyle(false),
-                background: 'var(--color-bg)',
-                color: 'var(--color-text-muted)',
-                cursor: 'not-allowed',
-              }}
-            />
-          </Field>
+          {hasRealEmail && (
+            <Field label="E-posta">
+              <input
+                value={user?.email ?? ''}
+                readOnly
+                style={{
+                  ...inputStyle(false),
+                  background: 'var(--color-bg)',
+                  color: 'var(--color-text-muted)',
+                  cursor: 'not-allowed',
+                }}
+              />
+            </Field>
+          )}
 
           <button type="submit" disabled={isSubmitting} style={submitStyle}>
             {isSubmitting ? 'Kaydediliyor...' : 'Kaydet ve Devam Et'}
@@ -194,17 +223,6 @@ const subtitleStyle: React.CSSProperties = {
   margin: 0,
 };
 
-const orgBadgeStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 2,
-  background: 'var(--color-bg)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm)',
-  padding: '10px 14px',
-  marginBottom: 20,
-};
-
 const rowStyle: React.CSSProperties = {
   display: 'grid',
   gridTemplateColumns: '1fr 1fr',
@@ -234,6 +252,13 @@ const errorStyle: React.CSSProperties = {
   color: 'var(--color-danger)',
   fontSize: 12,
   margin: '4px 0 0',
+};
+
+const ibanHelpStyle: React.CSSProperties = {
+  margin: '5px 0 0',
+  color: 'var(--color-text-muted)',
+  fontSize: 12,
+  textAlign: 'right',
 };
 
 const submitStyle: React.CSSProperties = {

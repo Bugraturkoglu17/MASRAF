@@ -33,10 +33,10 @@ describe('ExpensesService security invariants', () => {
 
     await expect(
       service.findByIdForActor('expense-1', 'org-1', 'manager-1', 'MANAGER'),
-    ).resolves.toBe(expense);
+    ).resolves.toEqual(expect.objectContaining(expense));
   });
 
-  it('yetkisiz yönetici detayında telefon ve IBAN alanlarını döndürmez', async () => {
+  it('ödeme için yöneticiye IBAN döndürürken telefonu gizler', async () => {
     const prisma = {
       expense: {
         findFirst: jest.fn().mockResolvedValue({
@@ -48,7 +48,7 @@ describe('ExpensesService security invariants', () => {
             lastName: 'Yılmaz',
             email: 'ayse@example.com',
             phone: '+905001112233',
-            iban: 'TR0001',
+            iban: 'TR123456789012345678901234',
           },
         }),
       },
@@ -58,7 +58,7 @@ describe('ExpensesService security invariants', () => {
     const result = await service.findByIdForActor('expense-1', 'org-1', 'manager-1', 'MANAGER');
     expect(result.user).toEqual(expect.objectContaining({ email: 'ayse@example.com' }));
     expect(result.user).not.toHaveProperty('phone');
-    expect(result.user).not.toHaveProperty('iban');
+    expect(result.user).toHaveProperty('iban', 'TR123456789012345678901234');
   });
 
   it('eşzamanlı ikinci onay durum güncellemesini gerçekleştiremez', async () => {

@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 
-import { AdminPage, BoolBadge, formatDate, RoleBadge, StatusBadge } from './admin-ui';
+import { formatDate } from './admin-format';
+import { AdminPage, BoolBadge, RoleBadge, StatusBadge } from './admin-ui';
 
 import { useAuth } from '@/features/auth/auth-context';
 import { apiFetch } from '@/lib/api-client';
-
 
 interface RecentUser {
   id: string;

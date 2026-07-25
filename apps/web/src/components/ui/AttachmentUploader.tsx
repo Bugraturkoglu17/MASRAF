@@ -1,8 +1,6 @@
 import { Camera, Eye, FileText, ImagePlus, RefreshCw, RepeatIcon, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
-import { ImageEditor } from './ImageEditor';
-
 import { useToast } from '@/components/feedback/toast-context';
 import { apiFetch, getApiErrorMessage } from '@/lib/api-client';
 
@@ -31,12 +29,6 @@ interface Props {
   initialFiles?: File[];
 }
 
-interface EditorState {
-  file: File;
-  inputRef: React.RefObject<HTMLInputElement>;
-  replaceId?: string;
-}
-
 const FALLBACK_CONFIG = {
   maxFiles: 5,
   maxFileSizeBytes: 15 * 1024 * 1024,
@@ -54,7 +46,6 @@ export function AttachmentUploader({
   const [config, setConfig] = useState(FALLBACK_CONFIG);
   const [uploaded, setUploaded] = useState<UploadedFile[]>([]);
   const [queue, setQueue] = useState<QueuedFile[]>([]);
-  const [editor, setEditor] = useState<EditorState | null>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const initialHandled = useRef(false);
   const cameraRef = useRef<HTMLInputElement>(null);
@@ -211,42 +202,27 @@ export function AttachmentUploader({
     }
   };
 
-  // ── File selection → editor flow ──────────────────────────────────────────
+  // ── File selection ────────────────────────────────────────────────────────
 
   const onFileInputChange = (
     e: React.ChangeEvent<HTMLInputElement>,
-    inputRef: React.RefObject<HTMLInputElement>,
     replaceId?: string,
   ) => {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files ?? []);
     e.target.value = '';
-    if (!file) return;
-    if (file.type.startsWith('image/')) {
-      setEditor({ file, inputRef, replaceId });
-    } else {
-      // PDF or non-image: upload directly without editor
-      if (replaceId) {
-        const old = uploaded.find((u) => u.id === replaceId);
-        if (old) void deleteUploaded(old);
-      }
-      handleFiles([file]);
-    }
-  };
+    if (files.length === 0) return;
 
-  const handleEditorSave = (edited: File) => {
-    const { replaceId } = editor!;
-    setEditor(null);
     if (replaceId) {
+      const replacement = files[0];
+      if (!replacement) return;
       const old = uploaded.find((u) => u.id === replaceId);
       if (old) void deleteUploaded(old);
+      handleFiles([replacement]);
+      replaceTargetId.current = null;
+      return;
     }
-    handleFiles([edited]);
-  };
 
-  const handleEditorReselect = () => {
-    const inputRef = editor?.inputRef;
-    setEditor(null);
-    setTimeout(() => inputRef?.current?.click(), 80);
+    handleFiles(files);
   };
 
   // ── Lightbox ──────────────────────────────────────────────────────────────
@@ -279,7 +255,7 @@ export function AttachmentUploader({
           type="file"
           accept="image/jpeg,image/png,image/webp"
           capture="environment"
-          onChange={(e) => onFileInputChange(e, cameraRef)}
+          onChange={onFileInputChange}
         />
         <input
           ref={galleryRef}
@@ -287,14 +263,14 @@ export function AttachmentUploader({
           type="file"
           accept="image/jpeg,image/png,image/webp,application/pdf"
           multiple
-          onChange={(e) => onFileInputChange(e, galleryRef)}
+          onChange={onFileInputChange}
         />
         <input
           ref={replaceRef}
           className="visually-hidden"
           type="file"
           accept="image/jpeg,image/png,image/webp,application/pdf"
-          onChange={(e) => onFileInputChange(e, replaceRef, replaceTargetId.current ?? undefined)}
+          onChange={(e) => onFileInputChange(e, replaceTargetId.current ?? undefined)}
         />
 
         {/* Upload buttons — always visible */}
@@ -362,21 +338,10 @@ export function AttachmentUploader({
         </div>
 
         <p className="attachment-help">
-          JPG, PNG, WEBP veya PDF · dosya başına en fazla{' '}
+          Orijinal görüntü boyutu korunur · JPG, PNG, WEBP veya PDF · dosya başına en fazla{' '}
           {(config.maxFileSizeBytes / 1024 / 1024).toFixed(0)} MB
         </p>
       </section>
-
-      {/* Image editor modal */}
-      {editor && (
-        <ImageEditor
-          key={`${editor.file.name}-${editor.file.lastModified}`}
-          file={editor.file}
-          onSave={handleEditorSave}
-          onCancel={() => setEditor(null)}
-          onReselect={handleEditorReselect}
-        />
-      )}
 
       {/* Lightbox */}
       {lightbox && (

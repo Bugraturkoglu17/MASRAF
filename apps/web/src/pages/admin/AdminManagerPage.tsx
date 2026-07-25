@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 
-
-import { AdminPage, BoolBadge, formatDateTime, StatusBadge } from './admin-ui';
+import { formatDateTime } from './admin-format';
+import { AdminPage, BoolBadge, StatusBadge } from './admin-ui';
 import { UserActionsMenu, type AdminUser } from './AdminUsersPage';
 
 import { apiFetch } from '@/lib/api-client';

@@ -2,6 +2,37 @@
 
 ## [Unreleased]
 
+### feat: telefonla giriş, IBAN ödeme akışı ve arayüz iyileştirmeleri (2026-07-26)
+
+**Kimlik Doğrulama ve Kullanıcı Akışı**
+- Giriş alanı e-posta veya Türkiye cep telefonu kabul edecek şekilde yenilendi; telefonlar başında `0` olmadan (`5XX XXX XX XX`) kullanılabiliyor.
+- Telefona bağlı, e-postasız hesaplar için dahili adres üretimi korunurken bu adresler kullanıcı arayüzünde gizlendi.
+- Geçici şifreyle ilk giriş sırası `şifre değiştirme → profil/IBAN tamamlama → rol ana sayfası` olarak kesinleştirildi.
+- Development seed hesapları `admin@masraf.local`, `müdür@masraf.local`, `kullanıcı@masraf.local` ve ortak demo şifresiyle güncellendi.
+
+**IBAN ve Ödeme Bilgileri**
+- IBAN yalnızca `USER` rolünde tutulacak şekilde API, servis ve veritabanı CHECK constraint'i ile sınırlandırıldı; ADMIN ve MANAGER hesaplarındaki IBAN'lar temizleniyor.
+- Türkiye IBAN alanına silinemeyen `TR` öneki, yalnızca 24 rakam kabulü, 26 karakter sınırı, canlı sayaç ve alan bazlı doğrulama eklendi.
+- Profil, admin kullanıcı detayı ve yönetici masraf detayına IBAN kopyalama aksiyonu eklendi.
+- Yönetici, masraf ödemesi için gönderenin IBAN'ını görebiliyor; telefon bilgisi ve kullanıcılar arası hassas veri izolasyonu korunuyor.
+
+**Admin ve Profil Yönetimi**
+- Firma/Şirket alanları kullanıcı listesi, detay, profil, masraf detayı ve sistem ayarları ekranlarından kaldırıldı.
+- Görev/Unvan role göre otomatik belirlenen ve değiştirilemeyen pasif alana dönüştürüldü (`Kullanıcı`, `Yönetici`, `Admin`).
+- Kullanıcı işlemleri menüsü, form geri bildirimleri ve admin etkileşim durumları iyileştirildi.
+
+**Masraf ve Belge Deneyimi**
+- Fatura yüklemede zorunlu kare kırpma/fotoğraf düzenleyici kaldırıldı; belge orijinal boyut ve oranıyla yükleniyor.
+- Masraf ve vade tarihi alanları dokunması kolay, modern Türkçe tarih seçiciyle yenilendi.
+- Yönetici masraf detay panelinde belge alanı alt navigasyonun üzerine alındı; dosya adı yerine altı haneli masraf numarası gösteriliyor.
+
+**Marka ve Arayüz**
+- MASRAF için animasyonlu çubuk logo, panel marka işareti ve yeni PWA ikon seti eklendi.
+- Giriş ekranı, kullanıcı/yönetici ana sayfaları ve ortak tema daha sade, erişilebilir ve tutarlı hale getirildi.
+
+**Testler**
+- Telefonla giriş, rol bazlı yönlendirme, tarih seçici, masraf detayı, IBAN girişi/kopyalama ve yönetici hassas veri kuralları için otomatik testler eklendi.
+
 ### feat: ADMIN panelini kullanıcı/yetki yönetimine odakla, giriş ekranı logosu (2026-07-25)
 
 **ADMIN Paneli Yeniden Yapılandırıldı**

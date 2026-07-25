@@ -21,6 +21,16 @@ function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
+function normalizeLoginPhone(identifier: string): string | null {
+  const digits = identifier.replace(/\D/g, '');
+  const local = digits.startsWith('90')
+    ? digits.slice(2)
+    : digits.startsWith('0')
+      ? digits.slice(1)
+      : digits;
+  return /^5\d{9}$/.test(local) ? `+90${local}` : null;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -30,9 +40,10 @@ export class AuthService {
     private readonly auditLogs: AuditLogsService,
   ) {}
 
-  async login(email: string, password: string, ip?: string): Promise<TokenPair> {
-    const user = await this.prisma.user.findUnique({
-      where: { email },
+  async login(identifier: string, password: string, ip?: string): Promise<TokenPair> {
+    const phone = normalizeLoginPhone(identifier);
+    const user = await this.prisma.user.findFirst({
+      where: phone ? { phone } : { email: identifier.trim().toLowerCase() },
       include: {
         userRoles: {
           include: { role: { include: { rolePermissions: { include: { permission: true } } } } },
@@ -46,7 +57,7 @@ export class AuthService {
     const passwordValid = await argon2.verify(passwordHash, password).catch(() => false);
 
     if (!user || !passwordValid || user.status !== 'ACTIVE' || user.deletedAt) {
-      throw new UnauthorizedException('E-posta veya şifre hatalı.');
+      throw new UnauthorizedException('E-posta, telefon veya şifre hatalı.');
     }
 
     await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });

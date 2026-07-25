@@ -1,0 +1,103 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="1024"
+  height="1024"
+  viewBox="0 0 1024 1024"
+  role="img"
+  aria-labelledby="title description"
+>
+  <title id="title">Animasyonlu Masraf M logosu</title>
+  <desc id="description">
+    Koyu lacivert zemin üzerinde aynı koyu mor renkte üç geometrik çubuk ve soldan sağa
+    sırayla geçen ışık hüzmesi.
+  </desc>
+
+  <defs>
+    <path
+      id="left-bar"
+      d="M270 220C264 220 260 225 260 232V760C260 767 265 772 272 772H385C392 772 397 767 397 760V374C397 368 395 363 391 359L283 225C280 222 276 220 270 220Z"
+    />
+    <path
+      id="center-bar"
+      d="M444 524C438 529 435 535 435 543V760C435 767 440 772 447 772H565C572 772 577 767 577 760V408C577 397 564 392 557 399L444 524Z"
+    />
+    <path
+      id="right-bar"
+      d="M754 220C760 220 764 225 764 232V760C764 767 759 772 752 772H639C632 772 627 767 627 760V374C627 368 629 363 633 359L741 225C744 222 748 220 754 220Z"
+    />
+
+    <clipPath id="left-clip">
+      <use href="#left-bar" />
+    </clipPath>
+    <clipPath id="center-clip">
+      <use href="#center-bar" />
+    </clipPath>
+    <clipPath id="right-clip">
+      <use href="#right-bar" />
+    </clipPath>
+
+    <linearGradient id="beam" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0" />
+      <stop offset="0.38" stop-color="#dcd6ff" stop-opacity="0.08" />
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0.88" />
+      <stop offset="0.62" stop-color="#dcd6ff" stop-opacity="0.08" />
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+
+  <style>
+    .beam {
+      mix-blend-mode: screen;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .beam {
+        display: none;
+      }
+    }
+  </style>
+
+  <rect width="1024" height="1024" fill="#08111f" />
+
+  <g fill="#7567d4">
+    <use href="#left-bar" />
+    <use href="#center-bar" />
+    <use href="#right-bar" />
+  </g>
+
+  <g clip-path="url(#left-clip)">
+    <rect class="beam" x="-420" y="-180" width="170" height="1380" fill="url(#beam)" transform="rotate(17 512 512)">
+      <animate
+        attributeName="x"
+        values="-420;-420;1180;1180"
+        keyTimes="0;0.03;0.23;1"
+        dur="4.8s"
+        repeatCount="indefinite"
+      />
+    </rect>
+  </g>
+
+  <g clip-path="url(#center-clip)">
+    <rect class="beam" x="-420" y="-180" width="170" height="1380" fill="url(#beam)" transform="rotate(17 512 512)">
+      <animate
+        attributeName="x"
+        values="-420;-420;1180;1180"
+        keyTimes="0;0.3;0.5;1"
+        dur="4.8s"
+        repeatCount="indefinite"
+      />
+    </rect>
+  </g>
+
+  <g clip-path="url(#right-clip)">
+    <rect class="beam" x="-420" y="-180" width="170" height="1380" fill="url(#beam)" transform="rotate(17 512 512)">
+      <animate
+        attributeName="x"
+        values="-420;-420;1180;1180"
+        keyTimes="0;0.57;0.77;1"
+        dur="4.8s"
+        repeatCount="indefinite"
+      />
+    </rect>
+  </g>
+</svg>

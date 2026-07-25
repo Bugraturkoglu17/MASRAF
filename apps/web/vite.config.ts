@@ -43,7 +43,7 @@ export default defineConfig({
         display: 'standalone',
         orientation: 'portrait-primary',
         background_color: '#0f172a',
-        theme_color: '#2563eb',
+        theme_color: '#7567d4',
         lang: 'tr-TR',
         dir: 'ltr',
         categories: ['business', 'finance', 'productivity'],

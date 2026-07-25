@@ -1,11 +1,14 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { LogOut } from 'lucide-react';
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 
 import { useToast } from '@/components/feedback/toast-context';
+import { IbanCopyButton } from '@/components/ui/IbanCopyButton';
+import { normalizeTurkeyIban } from '@/components/ui/turkey-iban';
+import { TurkeyIbanInput } from '@/components/ui/TurkeyIbanInput';
 import { useAuth } from '@/features/auth/auth-context';
 import { apiFetch, getApiErrorMessage } from '@/lib/api-client';
 
@@ -44,6 +47,8 @@ export function UserProfilePage(): JSX.Element {
   const {
     register,
     handleSubmit,
+    setError,
+    control,
     formState: { errors, isSubmitting, isDirty },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -56,11 +61,20 @@ export function UserProfilePage(): JSX.Element {
   });
 
   const isUser = user?.role === 'USER';
+  const ibanValue = useWatch({ control, name: 'iban' });
+  const ibanDigitCount = (ibanValue ?? '').replace(/\D/g, '').length;
+  const hasRealEmail = Boolean(user?.email && !user.email.endsWith('@masraf.local'));
 
   const onSubmit = handleSubmit(async (values) => {
+    const normalizedIban = normalizeTurkeyIban(values.iban ?? '');
+    if (isUser && !/^TR\d{24}$/.test(normalizedIban)) {
+      setError('iban', { message: 'IBAN, TR ile birlikte 26 karakter olmalıdır.' });
+      return;
+    }
+
     try {
       const payload = isUser
-        ? values
+        ? { ...values, iban: normalizedIban }
         : { firstName: values.firstName, lastName: values.lastName, phone: values.phone };
       await apiFetch('/users/me/profile', { method: 'PATCH', body: payload });
       await refreshUser();
@@ -104,23 +118,33 @@ export function UserProfilePage(): JSX.Element {
             </Field>
             {isUser && (
               <Field label="IBAN" error={errors.iban?.message}>
-                <input {...register('iban')} style={inputStyle(Boolean(errors.iban))} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Controller
+                    name="iban"
+                    control={control}
+                    render={({ field }) => (
+                      <TurkeyIbanInput
+                        {...field}
+                        aria-label="IBAN"
+                        placeholder="TR000000000000000000000000"
+                        style={{ ...inputStyle(Boolean(errors.iban)), flex: 1, minWidth: 0 }}
+                      />
+                    )}
+                  />
+                  <IbanCopyButton value={ibanValue} />
+                </div>
+                <p style={ibanHelpStyle}>TR sonrası {ibanDigitCount}/24 rakam</p>
               </Field>
             )}
-            <Field label="E-posta">
-              <input
-                value={user?.email ?? ''}
-                readOnly
-                style={{ ...inputStyle(false), cursor: 'not-allowed', opacity: 0.7 }}
-              />
-            </Field>
-            <Field label="Şirket">
-              <input
-                value={user?.organization?.name ?? '—'}
-                readOnly
-                style={{ ...inputStyle(false), cursor: 'not-allowed', opacity: 0.7 }}
-              />
-            </Field>
+            {hasRealEmail && (
+              <Field label="E-posta">
+                <input
+                  value={user?.email ?? ''}
+                  readOnly
+                  style={{ ...inputStyle(false), cursor: 'not-allowed', opacity: 0.7 }}
+                />
+              </Field>
+            )}
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
@@ -278,6 +302,13 @@ const errStyle: React.CSSProperties = {
   color: 'var(--color-danger)',
   fontSize: 12,
   margin: '4px 0 0',
+};
+
+const ibanHelpStyle: React.CSSProperties = {
+  margin: '5px 0 0',
+  color: 'var(--color-text-muted)',
+  fontSize: 12,
+  textAlign: 'right',
 };
 const saveBtnStyle = (disabled: boolean): React.CSSProperties => ({
   padding: '10px 28px',

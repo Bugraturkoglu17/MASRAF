@@ -7,13 +7,13 @@ import { AdminPage } from './admin-ui';
 import { useToast } from '@/components/feedback/toast-context';
 import { apiFetch, getApiErrorMessage } from '@/lib/api-client';
 
-
 interface FormState {
   firstName: string;
   lastName: string;
   phone: string;
   email: string;
   roleName: 'USER' | 'MANAGER';
+  jobTitle: string;
   tempPassword: string;
   tempPasswordConfirm: string;
   status: 'ACTIVE' | 'INACTIVE';
@@ -25,6 +25,7 @@ const initialForm: FormState = {
   phone: '',
   email: '',
   roleName: 'USER',
+  jobTitle: 'Kullanıcı',
   tempPassword: '',
   tempPasswordConfirm: '',
   status: 'ACTIVE',
@@ -155,11 +156,33 @@ export function AdminNewUserPage(): JSX.Element {
             id="nu-role"
             className="adm-select"
             value={form.roleName}
-            onChange={(e) => set('roleName', e.target.value as FormState['roleName'])}
+            onChange={(e) => {
+              const role = e.target.value as FormState['roleName'];
+              setForm((current) => ({
+                ...current,
+                roleName: role,
+                jobTitle: role === 'MANAGER' ? 'Yönetici' : 'Kullanıcı',
+              }));
+            }}
           >
             <option value="USER">Kullanıcı</option>
             <option value="MANAGER">Yönetici (sistemde en fazla 1 aktif)</option>
           </select>
+        </div>
+
+        <div className="adm-field">
+          <label className="adm-label" htmlFor="nu-job-title">
+            Görev / Unvan *
+          </label>
+          <input
+            id="nu-job-title"
+            className="adm-input"
+            value={form.jobTitle}
+            readOnly
+            aria-readonly="true"
+            style={{ cursor: 'not-allowed', opacity: 0.68 }}
+          />
+          <p className="adm-help">Seçilen role göre otomatik belirlenir ve değiştirilemez.</p>
         </div>
 
         <div className="adm-field">

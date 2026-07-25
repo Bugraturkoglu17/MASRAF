@@ -36,9 +36,9 @@ interface AuthContextValue {
   user: CurrentUser | null;
   isAuthenticated: boolean;
   isInitializing: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<CurrentUser>;
   logout: () => Promise<void>;
-  refreshUser: () => Promise<void>;
+  refreshUser: () => Promise<CurrentUser>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -79,15 +79,17 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
     };
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (identifier: string, password: string) => {
     queryClient.clear();
     const tokens = await apiFetch<LoginResponse>('/auth/login', {
       method: 'POST',
-      body: { email, password },
+      body: { identifier, password },
       skipAuthRetry: true,
     });
     setAccessToken(tokens.accessToken);
-    setUser(await fetchCurrentUser());
+    const currentUser = await fetchCurrentUser();
+    setUser(currentUser);
+    return currentUser;
   }, []);
 
   const logout = useCallback(async () => {
@@ -100,6 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
   const refreshUser = useCallback(async () => {
     const me = await fetchCurrentUser();
     setUser(me);
+    return me;
   }, []);
 
   const value = useMemo<AuthContextValue>(

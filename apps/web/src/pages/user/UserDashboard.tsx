@@ -10,6 +10,7 @@ import {
   type ExpenseStatus,
 } from '@/components/expenses/ExpenseCards';
 import { useToast } from '@/components/feedback/toast-context';
+import { PanelBrandMark } from '@/components/PanelBrandMark';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { ExpenseDetailSheet } from '@/components/ui/ExpenseDetailSheet';
 import { ExpenseSubmitDialog } from '@/components/ui/ExpenseSubmitDialog';
@@ -81,18 +82,16 @@ export function UserDashboard(): JSX.Element {
     },
   });
 
-  const initials = `${user?.firstName?.[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
-
   return (
     <div className="user-home-page">
       <header className="user-home-hero">
         <button
           type="button"
-          className="user-home-avatar"
+          className="user-home-logo-button"
           aria-label="Profilim"
           onClick={() => navigate('/profile')}
         >
-          {initials}
+          <PanelBrandMark size="large" />
         </button>
         <div className="user-home-greeting">
           <strong>

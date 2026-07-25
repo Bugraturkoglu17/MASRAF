@@ -1,7 +1,29 @@
 import { z } from 'zod';
 
+export const emailSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/u, 'Geçerli bir e-posta adresi giriniz.');
+
+export const loginIdentifierSchema = z
+  .string()
+  .trim()
+  .min(1, 'E-posta veya telefon numarası zorunludur.')
+  .refine((value) => {
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value)) return true;
+    const digits = value.replace(/\D/g, '');
+    const local = digits.startsWith('90')
+      ? digits.slice(2)
+      : digits.startsWith('0')
+        ? digits.slice(1)
+        : digits;
+    return /^5\d{9}$/.test(local);
+  }, 'Geçerli bir e-posta veya cep telefonu giriniz (5XX XXX XX XX).')
+  .transform((value) => (value.includes('@') ? value.toLowerCase() : value));
+
 export const loginSchema = z.object({
-  email: z.string().trim().toLowerCase().email('Geçerli bir e-posta adresi giriniz.'),
+  identifier: loginIdentifierSchema,
   password: z.string().min(8, 'Şifre en az 8 karakter olmalıdır.'),
 });
 export type LoginInput = z.infer<typeof loginSchema>;

@@ -75,42 +75,6 @@ export function BoolBadge({
   );
 }
 
-export function formatDate(value: string | Date | null | undefined): string {
-  if (!value) return '—';
-  return new Date(value).toLocaleDateString('tr-TR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
-}
-
-export function formatDateTime(value: string | Date | null | undefined): string {
-  if (!value) return '—';
-  return new Date(value).toLocaleString('tr-TR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-export const AUDIT_ACTION_LABELS: Record<string, string> = {
-  CREATE: 'Kullanıcı oluşturuldu',
-  UPDATE: 'Kullanıcı düzenlendi',
-  ASSIGN: 'Rol değiştirildi',
-  ACTIVATE: 'Hesap aktif edildi',
-  DEACTIVATE: 'Hesap pasife alındı',
-  PASSWORD_RESET: 'Şifre sıfırlandı',
-  SESSIONS_REVOKED: 'Oturumlar kapatıldı',
-  LOGIN: 'Giriş yapıldı',
-  LOGOUT: 'Çıkış yapıldı',
-  APPROVE: 'Onaylandı',
-  REJECT: 'Reddedildi',
-  DELETE: 'Silindi',
-  UPLOAD: 'Dosya yüklendi',
-};
-
 const ADMIN_CSS = `
 .adm-page { padding: 20px 16px 40px; max-width: 1200px; margin: 0 auto; }
 @media (min-width: 768px) { .adm-page { padding: 28px 32px 48px; } }
@@ -182,10 +146,13 @@ const ADMIN_CSS = `
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   padding: 9px 14px; border-radius: 8px; border: 1px solid transparent;
   font-size: 13px; font-weight: 600; cursor: pointer; min-height: 38px; text-decoration: none;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
 }
 .adm-btn-primary { background: var(--color-primary); color: #fff; }
 .adm-btn-outline { background: transparent; color: var(--color-text); border-color: var(--color-border); }
 .adm-btn-danger { background: rgba(220,38,38,0.12); color: #f87171; }
+.adm-btn-primary:hover:not(:disabled) { background: var(--color-primary-hover); transform: translateY(-1px); }
+.adm-btn-outline:hover:not(:disabled) { background: var(--color-surface-raised); border-color: var(--color-primary); }
 .adm-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .adm-btn-sm { padding: 6px 10px; font-size: 12px; min-height: 30px; }
 
@@ -193,7 +160,7 @@ const ADMIN_CSS = `
   width: 100%; padding: 10px 12px; border-radius: 8px; border: 1.5px solid var(--color-border);
   background: var(--color-bg); color: var(--color-text); font-size: 14px; outline: none; box-sizing: border-box;
 }
-.adm-input:focus, .adm-select:focus { border-color: var(--color-primary); }
+.adm-input:focus, .adm-select:focus { border-color: var(--color-primary); box-shadow: 0 0 0 4px var(--focus-ring); }
 .adm-label { display: block; font-size: 13px; font-weight: 600; color: var(--color-text); margin-bottom: 6px; }
 .adm-field { margin-bottom: 14px; }
 .adm-error { color: var(--color-danger); font-size: 12px; margin-top: 4px; }

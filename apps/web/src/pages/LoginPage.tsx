@@ -1,12 +1,13 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { loginSchema, type LoginInput } from '@masraf/shared-validation';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, ReceiptText, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useLocation, useNavigate, type Location } from 'react-router-dom';
 
 import { BrandLogo } from '@/components/BrandLogo';
 import { useAuth } from '@/features/auth/auth-context';
+import { getPostLoginPath } from '@/features/auth/role-home';
 import { ApiError } from '@/lib/api-client';
 
 export function LoginPage(): JSX.Element {
@@ -25,13 +26,18 @@ export function LoginPage(): JSX.Element {
   const onSubmit = handleSubmit(async (values) => {
     setFormError(null);
     try {
-      await login(values.email, values.password);
+      const currentUser = await login(values.identifier, values.password);
       const from = (location.state as { from?: Location })?.from;
-      const redirectTo = from ? `${from.pathname}${from.search}${from.hash}` : '/';
+      const requestedPath = from ? `${from.pathname}${from.search}${from.hash}` : undefined;
+      const redirectTo = currentUser.mustChangePassword
+        ? '/change-password'
+        : !currentUser.profileCompleted
+          ? '/complete-profile'
+          : getPostLoginPath(currentUser.role, requestedPath);
       navigate(redirectTo, { replace: true });
     } catch (error) {
       if (error instanceof ApiError && error.statusCode === 401) {
-        setFormError('E-posta veya şifre hatalı.');
+        setFormError('E-posta, telefon veya şifre hatalı.');
       } else {
         setFormError('Giriş yapılamadı. Lütfen tekrar deneyin.');
       }
@@ -39,194 +45,117 @@ export function LoginPage(): JSX.Element {
   });
 
   return (
-    <div style={pageStyle}>
-      <div style={cardStyle}>
-        {/* Logo / başlık */}
-        <div style={logoAreaStyle}>
-          <BrandLogo />
-          <p style={subtitleStyle}>Hesabınıza giriş yapın</p>
-        </div>
+    <main className="auth-shell">
+      <div className="auth-frame">
+        <section className="auth-brand-panel" aria-label="Masraf yönetim platformu">
+          <div className="auth-brand-logo">
+            <BrandLogo />
+          </div>
 
-        <form onSubmit={onSubmit} noValidate style={formStyle}>
-          {/* E-posta */}
-          <div style={fieldGroupStyle}>
-            <label htmlFor="email" style={labelStyle}>
-              E-posta
-            </label>
-            <input
-              id="email"
-              type="email"
-              autoComplete="email"
-              placeholder="ornek@sirket.com"
-              aria-invalid={Boolean(errors.email)}
-              {...register('email')}
-              style={inputStyle(Boolean(errors.email))}
+          <div className="auth-brand-copy">
+            <span className="auth-kicker">MASRAF YÖNETİM PLATFORMU</span>
+            <h1>Masraf akışınız, tek ve güvenli bir yerde.</h1>
+            <p>
+              Harcama kayıtlarını oluşturun, onay süreçlerini takip edin ve ekip görünürlüğünü
+              kaybetmeden ilerleyin.
+            </p>
+          </div>
+
+          <div className="auth-capabilities" aria-label="Platform özellikleri">
+            <div>
+              <ReceiptText size={18} aria-hidden="true" />
+              <span>Uçtan uca masraf takibi</span>
+            </div>
+            <div>
+              <ShieldCheck size={18} aria-hidden="true" />
+              <span>Rol bazlı güvenli erişim</span>
+            </div>
+          </div>
+        </section>
+
+        <section className="auth-form-panel">
+          <div className="auth-form-heading">
+            <img
+              className="auth-form-logo"
+              src="/logo-mark-animated.svg"
+              alt=""
+              aria-hidden="true"
             />
-            {errors.email && (
-              <p role="alert" style={errorTextStyle}>
-                {errors.email.message}
-              </p>
-            )}
+            <div>
+              <h2>MASRAF</h2>
+              <p>Devam etmek için kurumsal hesabınızla giriş yapın.</p>
+            </div>
           </div>
 
-          {/* Şifre */}
-          <div style={fieldGroupStyle}>
-            <label htmlFor="password" style={labelStyle}>
-              Şifre
-            </label>
-            <div style={passwordWrapStyle}>
+          <form onSubmit={onSubmit} noValidate className="auth-form">
+            <div className="auth-field">
+              <label htmlFor="identifier">E-posta veya Telefon</label>
               <input
-                id="password"
-                type={showPassword ? 'text' : 'password'}
-                autoComplete="current-password"
-                placeholder="••••••••"
-                aria-invalid={Boolean(errors.password)}
-                {...register('password')}
-                style={{ ...inputStyle(Boolean(errors.password)), paddingRight: 44 }}
+                id="identifier"
+                type="text"
+                inputMode="text"
+                autoComplete="username"
+                placeholder="ornek@sirket.com veya 5XX XXX XX XX"
+                aria-invalid={Boolean(errors.identifier)}
+                aria-describedby={errors.identifier ? 'identifier-error' : undefined}
+                {...register('identifier')}
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                style={eyeBtnStyle}
-                tabIndex={-1}
-                aria-label={showPassword ? 'Şifreyi gizle' : 'Şifreyi göster'}
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
+              {errors.identifier && (
+                <p id="identifier-error" role="alert" className="auth-field-error">
+                  {errors.identifier.message}
+                </p>
+              )}
             </div>
-            {errors.password && (
-              <p role="alert" style={errorTextStyle}>
-                {errors.password.message}
-              </p>
+
+            <div className="auth-field">
+              <label htmlFor="password">Şifre</label>
+              <div className="auth-password-wrap">
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  placeholder="••••••••"
+                  aria-invalid={Boolean(errors.password)}
+                  aria-describedby={errors.password ? 'password-error' : undefined}
+                  {...register('password')}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="auth-password-toggle"
+                  aria-label={showPassword ? 'Şifreyi gizle' : 'Şifreyi göster'}
+                  aria-pressed={showPassword}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+              {errors.password && (
+                <p id="password-error" role="alert" className="auth-field-error">
+                  {errors.password.message}
+                </p>
+              )}
+            </div>
+
+            {formError && (
+              <div className="auth-alert" role="alert">
+                {formError}
+              </div>
             )}
-          </div>
 
-          {/* Form hatası */}
-          {formError && (
-            <div style={alertStyle} role="alert">
-              {formError}
-            </div>
-          )}
+            <button type="submit" disabled={isSubmitting} className="auth-submit">
+              <span className="auth-submit-content" aria-live="polite">
+                {isSubmitting && <span className="auth-submit-spinner" aria-hidden="true" />}
+                <span>{isSubmitting ? 'Giriş yapılıyor…' : 'Giriş Yap'}</span>
+              </span>
+            </button>
+          </form>
 
-          {/* Giriş butonu */}
-          <button type="submit" disabled={isSubmitting} style={submitStyle}>
-            {isSubmitting ? 'Giriş yapılıyor...' : 'Giriş Yap'}
-          </button>
-        </form>
+          <p className="auth-security-note">
+            <ShieldCheck size={14} aria-hidden="true" /> Oturum bilgileriniz güvenli bağlantı
+            üzerinden iletilir.
+          </p>
+        </section>
       </div>
-    </div>
+    </main>
   );
 }
-
-const pageStyle: React.CSSProperties = {
-  minHeight: '100vh',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  background: 'linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)',
-  padding: '16px',
-};
-
-const cardStyle: React.CSSProperties = {
-  background: 'var(--color-surface)',
-  borderRadius: 'var(--radius-lg)',
-  padding: '40px 32px',
-  width: '100%',
-  maxWidth: 400,
-  boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-};
-
-const logoAreaStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  textAlign: 'center',
-  marginBottom: 32,
-  gap: 10,
-};
-
-const subtitleStyle: React.CSSProperties = {
-  fontSize: 14,
-  color: 'var(--color-text-muted)',
-  margin: 0,
-};
-
-const formStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 0,
-};
-
-const fieldGroupStyle: React.CSSProperties = {
-  marginBottom: 16,
-};
-
-const labelStyle: React.CSSProperties = {
-  display: 'block',
-  fontSize: 13,
-  fontWeight: 500,
-  color: 'var(--color-text)',
-  marginBottom: 6,
-};
-
-const inputStyle = (hasError: boolean): React.CSSProperties => ({
-  width: '100%',
-  padding: '11px 14px',
-  borderRadius: 'var(--radius-sm)',
-  border: `1px solid ${hasError ? 'var(--color-danger)' : 'var(--color-border)'}`,
-  background: 'var(--color-bg)',
-  color: 'var(--color-text)',
-  fontSize: 14,
-  outline: 'none',
-  boxSizing: 'border-box',
-  transition: 'border-color 0.15s',
-});
-
-const passwordWrapStyle: React.CSSProperties = {
-  position: 'relative',
-};
-
-const eyeBtnStyle: React.CSSProperties = {
-  position: 'absolute',
-  right: 12,
-  top: '50%',
-  transform: 'translateY(-50%)',
-  background: 'none',
-  border: 'none',
-  cursor: 'pointer',
-  color: 'var(--color-text-muted)',
-  padding: 0,
-  display: 'flex',
-  alignItems: 'center',
-};
-
-const errorTextStyle: React.CSSProperties = {
-  color: 'var(--color-danger)',
-  fontSize: 12,
-  marginTop: 4,
-  margin: '4px 0 0',
-};
-
-const alertStyle: React.CSSProperties = {
-  background: 'var(--color-danger-bg)',
-  color: 'var(--color-danger)',
-  border: '1px solid var(--color-rejected-border)',
-  borderRadius: 'var(--radius-sm)',
-  padding: '10px 14px',
-  fontSize: 13,
-  marginBottom: 16,
-};
-
-const submitStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '12px',
-  borderRadius: 'var(--radius-sm)',
-  border: 'none',
-  background: 'var(--color-primary)',
-  color: '#fff',
-  fontWeight: 600,
-  fontSize: 15,
-  cursor: 'pointer',
-  marginTop: 4,
-  transition: 'background 0.15s',
-};

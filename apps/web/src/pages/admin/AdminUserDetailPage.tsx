@@ -2,20 +2,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 
-import {
-  AdminPage,
-  AUDIT_ACTION_LABELS,
-  BoolBadge,
-  formatDate,
-  formatDateTime,
-  RoleBadge,
-  StatusBadge,
-} from './admin-ui';
+import { AUDIT_ACTION_LABELS, formatDate, formatDateTime } from './admin-format';
+import { AdminPage, BoolBadge, RoleBadge, StatusBadge } from './admin-ui';
 import { UserActionsMenu, type AdminUser } from './AdminUsersPage';
 
 import { useToast } from '@/components/feedback/toast-context';
+import { IbanCopyButton } from '@/components/ui/IbanCopyButton';
+import { TurkeyIbanInput } from '@/components/ui/TurkeyIbanInput';
 import { apiFetch, getApiErrorMessage } from '@/lib/api-client';
-
 
 interface AuditItem {
   id: string;
@@ -23,6 +17,10 @@ interface AuditItem {
   resource: string;
   createdAt: string;
   actor: { firstName: string; lastName: string; email: string } | null;
+}
+
+function getDefaultJobTitle(role: AdminUser['role']): string {
+  return role === 'MANAGER' ? 'Yönetici' : role === 'ADMIN' ? 'Admin' : 'Kullanıcı';
 }
 
 export function AdminUserDetailPage(): JSX.Element {
@@ -104,17 +102,21 @@ export function AdminUserDetailPage(): JSX.Element {
 
           <section className="adm-card">
             <h2 className="adm-section-title">Profil Bilgileri</h2>
-            <div className="adm-detail-row">
-              <span className="k">IBAN</span>
-              <span className="v">{user.iban ?? '—'}</span>
-            </div>
-            <div className="adm-detail-row">
-              <span className="k">Firma</span>
-              <span className="v">{user.company ?? '—'}</span>
-            </div>
+            {user.role === 'USER' && (
+              <div className="adm-detail-row">
+                <span className="k">IBAN</span>
+                <span
+                  className="v"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                >
+                  {user.iban ?? '—'}
+                  <IbanCopyButton value={user.iban} />
+                </span>
+              </div>
+            )}
             <div className="adm-detail-row">
               <span className="k">Görev / Unvan</span>
-              <span className="v">{user.jobTitle ?? '—'}</span>
+              <span className="v">{getDefaultJobTitle(user.role)}</span>
             </div>
             <div className="adm-detail-row">
               <span className="k">Profil Durumu</span>
@@ -202,8 +204,7 @@ function EditUserForm({ user, onDone }: { user: AdminUser; onDone: () => void })
     phone: user.phone ?? '',
     email: user.email.endsWith('@masraf.local') ? '' : user.email,
     iban: user.iban ?? '',
-    company: user.company ?? '',
-    jobTitle: user.jobTitle ?? '',
+    jobTitle: getDefaultJobTitle(user.role),
   });
   const queryClient = useQueryClient();
   const { showToast } = useToast();
@@ -213,10 +214,8 @@ function EditUserForm({ user, onDone }: { user: AdminUser; onDone: () => void })
       const body: Record<string, string | null> = {
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim(),
-        iban: form.iban.trim() || null,
-        company: form.company.trim() || null,
-        jobTitle: form.jobTitle.trim() || null,
       };
+      if (user.role === 'USER') body.iban = form.iban.trim() || null;
       if (form.phone.trim()) body.phone = form.phone.trim();
       if (form.email.trim()) body.email = form.email.trim();
       return apiFetch(`/users/${user.id}`, { method: 'PATCH', body });
@@ -231,15 +230,15 @@ function EditUserForm({ user, onDone }: { user: AdminUser; onDone: () => void })
 
   const set = (key: keyof typeof form, value: string) => setForm((f) => ({ ...f, [key]: value }));
 
-  const fields: Array<{ key: keyof typeof form; label: string; type?: string }> = [
+  const allFields: Array<{ key: keyof typeof form; label: string; type?: string }> = [
     { key: 'firstName', label: 'Ad' },
     { key: 'lastName', label: 'Soyad' },
     { key: 'phone', label: 'Telefon', type: 'tel' },
     { key: 'email', label: 'E-posta', type: 'email' },
     { key: 'iban', label: 'IBAN' },
-    { key: 'company', label: 'Firma' },
     { key: 'jobTitle', label: 'Görev / Unvan' },
   ];
+  const fields = allFields.filter((field) => user.role === 'USER' || field.key !== 'iban');
 
   return (
     <form
@@ -256,13 +255,35 @@ function EditUserForm({ user, onDone }: { user: AdminUser; onDone: () => void })
           <label className="adm-label" htmlFor={`edit-${f.key}`}>
             {f.label}
           </label>
-          <input
-            id={`edit-${f.key}`}
-            className="adm-input"
-            type={f.type ?? 'text'}
-            value={form[f.key]}
-            onChange={(e) => set(f.key, e.target.value)}
-          />
+          {f.key === 'iban' ? (
+            <TurkeyIbanInput
+              id={`edit-${f.key}`}
+              className="adm-input"
+              aria-label="IBAN"
+              value={form.iban}
+              onChange={(value) => set('iban', value)}
+              placeholder="TR000000000000000000000000"
+            />
+          ) : (
+            <input
+              id={`edit-${f.key}`}
+              className="adm-input"
+              type={f.type ?? 'text'}
+              value={form[f.key]}
+              onChange={(e) => set(f.key, e.target.value)}
+              readOnly={f.key === 'jobTitle'}
+              aria-readonly={f.key === 'jobTitle'}
+              style={f.key === 'jobTitle' ? { cursor: 'not-allowed', opacity: 0.68 } : undefined}
+            />
+          )}
+          {f.key === 'jobTitle' && (
+            <p className="adm-help">Role göre otomatik belirlenir ve değiştirilemez.</p>
+          )}
+          {f.key === 'iban' && (
+            <p className="adm-help" style={{ textAlign: 'right' }}>
+              TR sonrası {form.iban.replace(/\D/g, '').length}/24 rakam
+            </p>
+          )}
         </div>
       ))}
       <div style={{ display: 'flex', gap: 10 }}>

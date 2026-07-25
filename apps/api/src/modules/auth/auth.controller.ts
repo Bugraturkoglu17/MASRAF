@@ -43,11 +43,11 @@ export class AuthController {
   @Post('login')
   @UsePipes(new ZodValidationPipe(loginSchema))
   async login(
-    @Body() body: { email: string; password: string },
+    @Body() body: { identifier: string; password: string },
     @Res({ passthrough: true }) res: Response,
     @Ip() ip: string,
   ) {
-    const tokens = await this.authService.login(body.email, body.password, ip);
+    const tokens = await this.authService.login(body.identifier, body.password, ip);
     this.setRefreshCookie(res, tokens.refreshToken);
     return { accessToken: tokens.accessToken, expiresIn: tokens.expiresIn };
   }

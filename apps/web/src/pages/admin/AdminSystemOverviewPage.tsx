@@ -4,12 +4,10 @@ import { AdminPage } from './admin-ui';
 
 import { apiFetch } from '@/lib/api-client';
 
-
 interface SystemOverview {
   userLimit: number;
   usedUsers: number;
   remainingUsers: number;
-  companyName: string;
   defaultCurrency: string;
   defaultLanguage: string;
 }
@@ -41,10 +39,6 @@ export function AdminSystemOverviewPage(): JSX.Element {
 
       <section className="adm-card" style={{ maxWidth: 560 }}>
         <h2 className="adm-section-title">Genel Bilgiler</h2>
-        <div className="adm-detail-row">
-          <span className="k">Firma Adı</span>
-          <span className="v">{data?.companyName || '—'}</span>
-        </div>
         <div className="adm-detail-row">
           <span className="k">Varsayılan Para Birimi</span>
           <span className="v">{currencyLabel}</span>

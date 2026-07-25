@@ -1,3 +1,4 @@
+import { loginSchema } from '@masraf/shared-validation';
 import { UnauthorizedException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import type { JwtService } from '@nestjs/jwt';
@@ -11,7 +12,7 @@ import { AuthService } from './auth.service';
 describe('AuthService', () => {
   let authService: AuthService;
   let prisma: {
-    user: { findUnique: jest.Mock; update: jest.Mock };
+    user: { findFirst: jest.Mock; findUnique: jest.Mock; update: jest.Mock };
     refreshToken: {
       create: jest.Mock;
       findUnique: jest.Mock;
@@ -25,7 +26,7 @@ describe('AuthService', () => {
 
   beforeEach(() => {
     prisma = {
-      user: { findUnique: jest.fn(), update: jest.fn() },
+      user: { findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
       refreshToken: {
         create: jest.fn(),
         findUnique: jest.fn(),
@@ -57,8 +58,14 @@ describe('AuthService', () => {
     );
   });
 
+  it('giriş doğrulaması başında sıfır olmayan telefonu kabul eder', () => {
+    expect(
+      loginSchema.parse({ identifier: '544 770 13 80', password: 'Gecici123' }).identifier,
+    ).toBe('544 770 13 80');
+  });
+
   it('geçersiz e-posta ile UnauthorizedException fırlatır', async () => {
-    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.user.findFirst.mockResolvedValue(null);
     await expect(authService.login('yok@example.com', 'sifre12345')).rejects.toThrow(
       UnauthorizedException,
     );
@@ -66,7 +73,7 @@ describe('AuthService', () => {
 
   it('doğru şifre ile giriş yapıldığında token çifti döner', async () => {
     const passwordHash = await argon2.hash('DogruSifre123');
-    prisma.user.findUnique.mockResolvedValue({
+    prisma.user.findFirst.mockResolvedValue({
       id: 'user-1',
       organizationId: 'org-1',
       email: 'kullanici@example.com',
@@ -85,9 +92,30 @@ describe('AuthService', () => {
     );
   });
 
+  it('başında sıfır olmadan telefon numarasıyla giriş yapar', async () => {
+    const passwordHash = await argon2.hash('DogruSifre123');
+    prisma.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      organizationId: 'org-1',
+      email: 'u905551112233@masraf.local',
+      phone: '+905551112233',
+      passwordHash,
+      status: 'ACTIVE',
+      deletedAt: null,
+      userRoles: [],
+    });
+
+    await expect(authService.login('5551112233', 'DogruSifre123')).resolves.toEqual(
+      expect.objectContaining({ accessToken: 'signed-token' }),
+    );
+    expect(prisma.user.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { phone: '+905551112233' } }),
+    );
+  });
+
   it('yanlış şifre ile UnauthorizedException fırlatır', async () => {
     const passwordHash = await argon2.hash('DogruSifre123');
-    prisma.user.findUnique.mockResolvedValue({
+    prisma.user.findFirst.mockResolvedValue({
       id: 'user-1',
       organizationId: 'org-1',
       email: 'kullanici@example.com',
@@ -104,7 +132,7 @@ describe('AuthService', () => {
 
   it('aktif olmayan kullanıcı ile UnauthorizedException fırlatır', async () => {
     const passwordHash = await argon2.hash('DogruSifre123');
-    prisma.user.findUnique.mockResolvedValue({
+    prisma.user.findFirst.mockResolvedValue({
       id: 'user-1',
       organizationId: 'org-1',
       email: 'kullanici@example.com',

@@ -1,3 +1,4 @@
+import { emailSchema } from '@masraf/shared-validation';
 import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AppRole } from '@prisma/client';
@@ -8,6 +9,7 @@ import {
   type AuthenticatedUser,
 } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { ValidationAppException } from '../../common/exceptions/app.exception';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 
@@ -24,7 +26,8 @@ const completeProfileSchema = z.object({
   iban: z
     .string()
     .transform((value) => value.replace(/\s/g, '').toUpperCase())
-    .pipe(z.string().regex(/^TR\d{24}$/, 'Geçerli bir Türkiye IBAN numarası giriniz.')),
+    .pipe(z.string().regex(/^TR\d{24}$/, 'Geçerli bir Türkiye IBAN numarası giriniz.'))
+    .optional(),
 });
 
 const setRoleSchema = z.object({
@@ -49,7 +52,7 @@ const createUserSchema = z.object({
   firstName: z.string().trim().min(1).max(100),
   lastName: z.string().trim().min(1).max(100),
   phone: z.string().min(10, 'Telefon numarası zorunludur.').max(20),
-  email: z.union([z.literal(''), z.string().email()]).optional(),
+  email: z.union([z.literal(''), emailSchema]).optional(),
   roleName: z.enum(['USER', 'MANAGER']),
   tempPassword: z.string().min(8, 'Geçici şifre en az 8 karakter olmalıdır.').max(72),
   status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
@@ -59,10 +62,16 @@ const updateUserSchema = z.object({
   firstName: z.string().trim().min(1).max(100).optional(),
   lastName: z.string().trim().min(1).max(100).optional(),
   phone: z.string().min(10).max(20).optional(),
-  email: z.string().email().optional(),
-  iban: z.string().max(34).nullable().optional(),
-  company: z.string().max(200).nullable().optional(),
-  jobTitle: z.string().max(100).nullable().optional(),
+  email: emailSchema.optional(),
+  iban: z
+    .union([
+      z.null(),
+      z
+        .string()
+        .transform((value) => value.replace(/\s/g, '').toUpperCase())
+        .pipe(z.string().regex(/^TR\d{24}$/, 'Geçerli bir Türkiye IBAN numarası giriniz.')),
+    ])
+    .optional(),
 });
 
 const listUsersQuerySchema = z.object({
@@ -100,7 +109,12 @@ export class UsersController {
     @Body(new ZodValidationPipe(completeProfileSchema)) body: z.infer<typeof completeProfileSchema>,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.usersService.completeProfile(user.id, body);
+    if (user.role === 'USER' && !body.iban) {
+      throw new ValidationAppException([
+        { field: 'iban', message: 'Kullanıcı profili için IBAN zorunludur.' },
+      ]);
+    }
+    return this.usersService.completeProfile(user.id, body, user.role);
   }
 
   @Patch('me/password')

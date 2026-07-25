@@ -559,6 +559,11 @@ export class ExpensesService {
 
     if (!expense.user) return expense;
 
+    if (actorRole === 'MANAGER' || actorRole === 'ADMIN') {
+      const { phone: _phone, ...managerUser } = expense.user;
+      return { ...expense, user: managerUser };
+    }
+
     const { phone: _phone, iban: _iban, ...safeUser } = expense.user;
     return { ...expense, user: safeUser };
   }

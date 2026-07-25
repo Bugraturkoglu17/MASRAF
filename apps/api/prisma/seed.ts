@@ -2,10 +2,30 @@ import { AppRole, PermissionAction, PermissionResource, PrismaClient } from '@pr
 import * as argon2 from 'argon2';
 
 const prisma = new PrismaClient();
+const DEMO_PASSWORD = 'Bugra.441';
 
 const ALL_PERMISSIONS: { action: PermissionAction; resource: PermissionResource }[] = Object.values(
   PermissionResource,
 ).flatMap((resource) => Object.values(PermissionAction).map((action) => ({ action, resource })));
+
+async function renameSeedAccount(
+  role: AppRole,
+  previousEmail: string,
+  targetEmail: string,
+): Promise<void> {
+  const target = await prisma.user.findUnique({ where: { email: targetEmail } });
+  if (target) {
+    if (target.role !== role) {
+      throw new Error(`${targetEmail} adresi başka bir role ait.`);
+    }
+    return;
+  }
+
+  const previous = await prisma.user.findFirst({ where: { email: previousEmail, role } });
+  if (previous) {
+    await prisma.user.update({ where: { id: previous.id }, data: { email: targetEmail } });
+  }
+}
 
 async function main() {
   if (process.env.NODE_ENV === 'production' || process.env.APP_ENVIRONMENT === 'production') {
@@ -57,10 +77,18 @@ async function main() {
   }
 
   // Admin kullanıcı
-  const adminHash = await argon2.hash('Admin123!');
+  await renameSeedAccount(AppRole.MANAGER, 'manager@masraf.local', 'müdür@masraf.local');
+  await renameSeedAccount(AppRole.USER, 'user@masraf.local', 'kullanıcı@masraf.local');
+
+  const adminHash = await argon2.hash(DEMO_PASSWORD);
   const admin = await prisma.user.upsert({
     where: { email: 'admin@masraf.local' },
-    update: {},
+    update: {
+      passwordHash: adminHash,
+      mustChangePassword: false,
+      passwordChangedAt: new Date(),
+      iban: null,
+    },
     create: {
       organizationId: organization.id,
       departmentId: department.id,
@@ -71,7 +99,6 @@ async function main() {
       role: AppRole.ADMIN,
       profileCompleted: true,
       phone: '+905001234567',
-      iban: 'TR000000000000000000000001',
     },
   });
   await prisma.userRole.upsert({
@@ -81,21 +108,25 @@ async function main() {
   });
 
   // Manager kullanıcı
-  const managerHash = await argon2.hash('Manager123!');
+  const managerHash = await argon2.hash(DEMO_PASSWORD);
   const manager = await prisma.user.upsert({
-    where: { email: 'manager@masraf.local' },
-    update: {},
+    where: { email: 'müdür@masraf.local' },
+    update: {
+      passwordHash: managerHash,
+      mustChangePassword: false,
+      passwordChangedAt: new Date(),
+      iban: null,
+    },
     create: {
       organizationId: organization.id,
       departmentId: department.id,
-      email: 'manager@masraf.local',
+      email: 'müdür@masraf.local',
       passwordHash: managerHash,
       firstName: 'Ahmet',
       lastName: 'Yönetici',
       role: AppRole.MANAGER,
       profileCompleted: true,
       phone: '+905001234568',
-      iban: 'TR000000000000000000000002',
     },
   });
   const managerRoleId = roleRecords.get('MANAGER_ROLE')!;
@@ -106,14 +137,18 @@ async function main() {
   });
 
   // Normal kullanıcı
-  const userHash = await argon2.hash('User123!');
+  const userHash = await argon2.hash(DEMO_PASSWORD);
   const user = await prisma.user.upsert({
-    where: { email: 'user@masraf.local' },
-    update: {},
+    where: { email: 'kullanıcı@masraf.local' },
+    update: {
+      passwordHash: userHash,
+      mustChangePassword: false,
+      passwordChangedAt: new Date(),
+    },
     create: {
       organizationId: organization.id,
       departmentId: department.id,
-      email: 'user@masraf.local',
+      email: 'kullanıcı@masraf.local',
       passwordHash: userHash,
       firstName: 'Ayşe',
       lastName: 'Çalışan',
@@ -128,6 +163,11 @@ async function main() {
     where: { userId_roleId: { userId: user.id, roleId: userRoleId } },
     update: {},
     create: { userId: user.id, roleId: userRoleId },
+  });
+
+  await prisma.refreshToken.updateMany({
+    where: { userId: { in: [admin.id, manager.id, user.id] }, revokedAt: null },
+    data: { revokedAt: new Date() },
   });
 
   // Expense categories
@@ -165,9 +205,9 @@ async function main() {
 
   console.log('\n✅ Seed tamamlandı.\n');
   console.log('Test hesapları (YALNIZCA development):');
-  console.log('  ADMIN   → admin@masraf.local   / Admin123!');
-  console.log('  MANAGER → manager@masraf.local / Manager123!');
-  console.log('  USER    → user@masraf.local    / User123!');
+  console.log(`  ADMIN   → admin@masraf.local     / ${DEMO_PASSWORD}`);
+  console.log(`  MANAGER → müdür@masraf.local     / ${DEMO_PASSWORD}`);
+  console.log(`  USER    → kullanıcı@masraf.local / ${DEMO_PASSWORD}`);
 }
 
 main()

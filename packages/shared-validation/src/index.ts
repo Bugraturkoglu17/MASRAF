@@ -3,6 +3,8 @@
 // (apps/web'in Vite build'i) bunun hangi isimleri dışa aktardığını statik
 // olarak çözemez ve "X is not exported" hatası verir.
 export {
+  emailSchema,
+  loginIdentifierSchema,
   loginSchema,
   refreshTokenSchema,
   changePasswordSchema,

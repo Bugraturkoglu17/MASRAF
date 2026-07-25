@@ -15,7 +15,7 @@ export interface CompleteProfileInput {
   firstName: string;
   lastName: string;
   phone: string;
-  iban: string;
+  iban?: string;
 }
 
 export interface CreateUserInput {
@@ -43,8 +43,6 @@ export interface AdminUpdateUserDto {
   phone?: string;
   email?: string;
   iban?: string | null;
-  company?: string | null;
-  jobTitle?: string | null;
 }
 
 export interface AdminListUsersFilter {
@@ -62,7 +60,6 @@ const ADMIN_USER_SELECT = {
   lastName: true,
   phone: true,
   iban: true,
-  company: true,
   jobTitle: true,
   role: true,
   profileCompleted: true,
@@ -117,15 +114,15 @@ export class UsersService {
     return user;
   }
 
-  async completeProfile(id: string, input: CompleteProfileInput) {
+  async completeProfile(id: string, input: CompleteProfileInput, role: AppRole) {
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.user.update({
         where: { id },
         data: {
           firstName: input.firstName,
           lastName: input.lastName,
-          phone: input.phone,
-          iban: input.iban,
+          phone: normalizeTurkishPhone(input.phone),
+          iban: role === 'USER' ? input.iban : null,
           profileCompleted: true,
         },
         select: {
@@ -371,6 +368,7 @@ export class UsersService {
           phone,
           passwordHash,
           role: dto.roleName,
+          jobTitle: dto.roleName === 'MANAGER' ? 'Yönetici' : 'Kullanıcı',
           status: dto.status ?? 'ACTIVE',
           mustChangePassword: true,
           profileCompleted: false,
@@ -401,12 +399,16 @@ export class UsersService {
   ) {
     const existing = await this.findByIdInOrganization(id, organizationId);
 
+    if (existing.role !== 'USER' && dto.iban !== undefined) {
+      throw new ValidationAppException([
+        { field: 'iban', message: 'IBAN yalnızca kullanıcı hesaplarında tanımlanabilir.' },
+      ]);
+    }
+
     const data: Prisma.UserUpdateInput = {
       ...(dto.firstName !== undefined ? { firstName: dto.firstName } : {}),
       ...(dto.lastName !== undefined ? { lastName: dto.lastName } : {}),
       ...(dto.iban !== undefined ? { iban: dto.iban } : {}),
-      ...(dto.company !== undefined ? { company: dto.company } : {}),
-      ...(dto.jobTitle !== undefined ? { jobTitle: dto.jobTitle } : {}),
     };
 
     if (dto.phone !== undefined) {
@@ -585,7 +587,11 @@ export class UsersService {
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.user.update({
         where: { id },
-        data: { role },
+        data: {
+          role,
+          jobTitle: role === 'MANAGER' ? 'Yönetici' : role === 'ADMIN' ? 'Admin' : 'Kullanıcı',
+          ...(role === 'USER' ? (target.iban ? {} : { profileCompleted: false }) : { iban: null }),
+        },
         select: { id: true, role: true },
       });
       await tx.userRole.deleteMany({ where: { userId: id } });
