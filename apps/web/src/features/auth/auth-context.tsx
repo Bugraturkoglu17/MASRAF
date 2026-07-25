@@ -22,6 +22,7 @@ export interface CurrentUser {
   iban?: string;
   role: AppRole;
   profileCompleted: boolean;
+  mustChangePassword: boolean;
   organizationId: string;
   organization?: { name: string };
 }

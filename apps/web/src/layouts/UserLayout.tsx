@@ -2,6 +2,7 @@ import { CheckCircle, Clock, FileText, Home, PlusCircle, User, XCircle } from 'l
 import { useEffect, useRef } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate, useNavigation } from 'react-router-dom';
 
+import { BrandLogo } from '@/components/BrandLogo';
 import { RouteTransitionLoader } from '@/components/feedback/RouteTransitionLoader';
 import { useToast } from '@/components/feedback/toast-context';
 import { MobileBottomNavigation } from '@/components/navigation/MobileBottomNavigation';
@@ -46,8 +47,7 @@ export function UserLayout(): JSX.Element {
       {/* Sidebar */}
       <aside style={sidebarStyle} className="app-sidebar">
         <div style={brandStyle}>
-          <span style={brandIconStyle}>₺</span>
-          <span style={brandTextStyle}>Masraf</span>
+          <BrandLogo />
         </div>
 
         <nav style={navStyle}>
@@ -116,25 +116,6 @@ const brandStyle: React.CSSProperties = {
   gap: 10,
   padding: '20px 20px 16px',
   borderBottom: '1px solid rgba(255,255,255,0.06)',
-};
-
-const brandIconStyle: React.CSSProperties = {
-  width: 32,
-  height: 32,
-  borderRadius: 8,
-  background: 'var(--color-primary)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  fontSize: 16,
-  fontWeight: 700,
-  color: '#fff',
-};
-
-const brandTextStyle: React.CSSProperties = {
-  fontSize: 18,
-  fontWeight: 700,
-  color: '#f1f5f9',
 };
 
 const navStyle: React.CSSProperties = {

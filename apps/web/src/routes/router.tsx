@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { createBrowserRouter } from 'react-router-dom';
 
+import { ChangePasswordGuard } from './ChangePasswordGuard';
 import { ProfileGuard } from './ProfileGuard';
 import { ProtectedRoute } from './ProtectedRoute';
 import { RoleRoute } from './RoleRoute';
@@ -9,6 +10,7 @@ import { FullScreenLoader } from '@/components/feedback/FullScreenLoader';
 import { OfflinePage } from '@/components/pwa/OfflinePage';
 import { AuthLayout } from '@/layouts/AuthLayout';
 import { UserLayout } from '@/layouts/UserLayout';
+import { ChangePasswordPage } from '@/pages/ChangePasswordPage';
 import { ErrorPage } from '@/pages/ErrorPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
@@ -59,11 +61,22 @@ const AdminDashboard = lazy(() =>
 const AdminUsersPage = lazy(() =>
   import('@/pages/admin/AdminUsersPage').then((m) => ({ default: m.AdminUsersPage })),
 );
+const AdminNewUserPage = lazy(() =>
+  import('@/pages/admin/AdminNewUserPage').then((m) => ({ default: m.AdminNewUserPage })),
+);
+const AdminUserDetailPage = lazy(() =>
+  import('@/pages/admin/AdminUserDetailPage').then((m) => ({ default: m.AdminUserDetailPage })),
+);
+const AdminManagerPage = lazy(() =>
+  import('@/pages/admin/AdminManagerPage').then((m) => ({ default: m.AdminManagerPage })),
+);
 const AdminAuditLogsPage = lazy(() =>
   import('@/pages/admin/AdminAuditLogsPage').then((m) => ({ default: m.AdminAuditLogsPage })),
 );
-const PwaDiagnosticsPage = lazy(() =>
-  import('@/pages/admin/PwaDiagnosticsPage').then((m) => ({ default: m.PwaDiagnosticsPage })),
+const AdminSystemOverviewPage = lazy(() =>
+  import('@/pages/admin/AdminSystemOverviewPage').then((m) => ({
+    default: m.AdminSystemOverviewPage,
+  })),
 );
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -78,18 +91,36 @@ export const router = createBrowserRouter([
     children: [{ path: '/login', element: <LoginPage /> }],
   },
 
+  // Zorunlu şifre değiştirme — giriş zorunlu, mustChangePassword=true.
+  // ChangePasswordGuard hem içeri zorlar hem de artık gerekmiyorsa dışarı çıkarır.
+  {
+    element: <ProtectedRoute />,
+    errorElement: <ErrorPage />,
+    children: [
+      {
+        element: <ChangePasswordGuard />,
+        children: [{ path: '/change-password', element: <ChangePasswordPage /> }],
+      },
+    ],
+  },
+
   // Profil tamamlama — giriş zorunlu ama profil tamamlanmamış
   {
     element: <ProtectedRoute />,
     errorElement: <ErrorPage />,
     children: [
       {
-        path: '/complete-profile',
-        element: (
-          <S>
-            <ProfileCompletePage />
-          </S>
-        ),
+        element: <ChangePasswordGuard />,
+        children: [
+          {
+            path: '/complete-profile',
+            element: (
+              <S>
+                <ProfileCompletePage />
+              </S>
+            ),
+          },
+        ],
       },
     ],
   },
@@ -100,45 +131,50 @@ export const router = createBrowserRouter([
     errorElement: <ErrorPage />,
     children: [
       {
-        element: <ProfileGuard />,
+        element: <ChangePasswordGuard />,
         children: [
           {
-            element: <RoleRoute allowed={['USER', 'ADMIN']} />,
+            element: <ProfileGuard />,
             children: [
               {
-                element: <UserLayout />,
+                element: <RoleRoute allowed={['USER', 'ADMIN']} />,
                 children: [
                   {
-                    path: '/',
-                    element: <UserDashboard />,
-                  },
-                  {
-                    path: '/expenses',
-                    element: <UserExpensesPage />,
-                  },
-                  {
-                    path: '/expenses/new',
-                    element: (
-                      <S>
-                        <CreateExpensePage />
-                      </S>
-                    ),
-                  },
-                  {
-                    path: '/approvals',
-                    element: <UserApprovalsPage />,
-                  },
-                  {
-                    path: '/profile',
-                    element: <UserProfilePage />,
-                  },
-                  {
-                    path: '/notifications',
-                    element: (
-                      <S>
-                        <NotificationsPage />
-                      </S>
-                    ),
+                    element: <UserLayout />,
+                    children: [
+                      {
+                        path: '/',
+                        element: <UserDashboard />,
+                      },
+                      {
+                        path: '/expenses',
+                        element: <UserExpensesPage />,
+                      },
+                      {
+                        path: '/expenses/new',
+                        element: (
+                          <S>
+                            <CreateExpensePage />
+                          </S>
+                        ),
+                      },
+                      {
+                        path: '/approvals',
+                        element: <UserApprovalsPage />,
+                      },
+                      {
+                        path: '/profile',
+                        element: <UserProfilePage />,
+                      },
+                      {
+                        path: '/notifications',
+                        element: (
+                          <S>
+                            <NotificationsPage />
+                          </S>
+                        ),
+                      },
+                    ],
                   },
                 ],
               },
@@ -155,65 +191,70 @@ export const router = createBrowserRouter([
     errorElement: <ErrorPage />,
     children: [
       {
-        element: <ProfileGuard />,
+        element: <ChangePasswordGuard />,
         children: [
           {
-            element: <RoleRoute allowed={['MANAGER', 'ADMIN']} />,
+            element: <ProfileGuard />,
             children: [
               {
-                element: (
-                  <S>
-                    <ManagerLayout />
-                  </S>
-                ),
+                element: <RoleRoute allowed={['MANAGER', 'ADMIN']} />,
                 children: [
                   {
-                    path: '/manager',
                     element: (
                       <S>
-                        <ManagerDashboard />
+                        <ManagerLayout />
                       </S>
                     ),
-                  },
-                  {
-                    path: '/manager/pending',
-                    element: (
-                      <S>
-                        <ManagerPendingPage />
-                      </S>
-                    ),
-                  },
-                  {
-                    path: '/manager/approved',
-                    element: (
-                      <S>
-                        <ManagerApprovedPage />
-                      </S>
-                    ),
-                  },
-                  {
-                    path: '/manager/rejected',
-                    element: (
-                      <S>
-                        <ManagerRejectedPage />
-                      </S>
-                    ),
-                  },
-                  {
-                    path: '/manager/profile',
-                    element: (
-                      <S>
-                        <UserProfilePage />
-                      </S>
-                    ),
-                  },
-                  {
-                    path: '/manager/notifications',
-                    element: (
-                      <S>
-                        <NotificationsPage />
-                      </S>
-                    ),
+                    children: [
+                      {
+                        path: '/manager',
+                        element: (
+                          <S>
+                            <ManagerDashboard />
+                          </S>
+                        ),
+                      },
+                      {
+                        path: '/manager/pending',
+                        element: (
+                          <S>
+                            <ManagerPendingPage />
+                          </S>
+                        ),
+                      },
+                      {
+                        path: '/manager/approved',
+                        element: (
+                          <S>
+                            <ManagerApprovedPage />
+                          </S>
+                        ),
+                      },
+                      {
+                        path: '/manager/rejected',
+                        element: (
+                          <S>
+                            <ManagerRejectedPage />
+                          </S>
+                        ),
+                      },
+                      {
+                        path: '/manager/profile',
+                        element: (
+                          <S>
+                            <UserProfilePage />
+                          </S>
+                        ),
+                      },
+                      {
+                        path: '/manager/notifications',
+                        element: (
+                          <S>
+                            <NotificationsPage />
+                          </S>
+                        ),
+                      },
+                    ],
                   },
                 ],
               },
@@ -230,70 +271,95 @@ export const router = createBrowserRouter([
     errorElement: <ErrorPage />,
     children: [
       {
-        element: <ProfileGuard />,
+        element: <ChangePasswordGuard />,
         children: [
           {
-            element: <RoleRoute allowed={['ADMIN']} />,
+            element: <ProfileGuard />,
             children: [
               {
-                element: (
-                  <S>
-                    <AdminLayout />
-                  </S>
-                ),
+                element: <RoleRoute allowed={['ADMIN']} />,
                 children: [
                   {
-                    path: '/admin',
                     element: (
                       <S>
-                        <AdminDashboard />
+                        <AdminLayout />
                       </S>
                     ),
+                    children: [
+                      {
+                        path: '/admin',
+                        element: (
+                          <S>
+                            <AdminDashboard />
+                          </S>
+                        ),
+                      },
+                      {
+                        path: '/admin/users',
+                        element: (
+                          <S>
+                            <AdminUsersPage />
+                          </S>
+                        ),
+                      },
+                      {
+                        path: '/admin/users/new',
+                        element: (
+                          <S>
+                            <AdminNewUserPage />
+                          </S>
+                        ),
+                      },
+                      {
+                        path: '/admin/users/:id',
+                        element: (
+                          <S>
+                            <AdminUserDetailPage />
+                          </S>
+                        ),
+                      },
+                      {
+                        path: '/admin/manager',
+                        element: (
+                          <S>
+                            <AdminManagerPage />
+                          </S>
+                        ),
+                      },
+                      {
+                        path: '/admin/audit-logs',
+                        element: (
+                          <S>
+                            <AdminAuditLogsPage />
+                          </S>
+                        ),
+                      },
+                      {
+                        path: '/admin/settings',
+                        element: (
+                          <S>
+                            <AdminSystemOverviewPage />
+                          </S>
+                        ),
+                      },
+                      {
+                        path: '/admin/profile',
+                        element: (
+                          <S>
+                            <UserProfilePage />
+                          </S>
+                        ),
+                      },
+                      {
+                        path: '/admin/notifications',
+                        element: (
+                          <S>
+                            <NotificationsPage />
+                          </S>
+                        ),
+                      },
+                    ],
                   },
-                  {
-                    path: '/admin/users',
-                    element: (
-                      <S>
-                        <AdminUsersPage />
-                      </S>
-                    ),
-                  },
-                  {
-                    path: '/admin/audit-logs',
-                    element: (
-                      <S>
-                        <AdminAuditLogsPage />
-                      </S>
-                    ),
-                  },
-                  {
-                    path: '/admin/profile',
-                    element: (
-                      <S>
-                        <UserProfilePage />
-                      </S>
-                    ),
-                  },
-                  {
-                    path: '/admin/notifications',
-                    element: (
-                      <S>
-                        <NotificationsPage />
-                      </S>
-                    ),
-                  },
-                  ...(import.meta.env.DEV
-                    ? [
-                        {
-                          path: '/admin/pwa-diagnostics',
-                          element: (
-                            <S>
-                              <PwaDiagnosticsPage />
-                            </S>
-                          ),
-                        },
-                      ]
-                    : []),
                 ],
               },
             ],

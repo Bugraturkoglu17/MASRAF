@@ -40,6 +40,32 @@ export class AuditLogsService {
     });
   }
 
+  /** Belirli bir kullanıcıyı etkileyen veya onun gerçekleştirdiği kayıtlar. */
+  async listForUser(organizationId: string, userId: string, query: PaginationQuery) {
+    const { skip, take } = toPrismaSkipTake(query);
+    const where: Prisma.AuditLogWhereInput = {
+      organizationId,
+      OR: [{ resourceId: userId }, { actorId: userId }],
+    };
+    const [logs, totalItems] = await Promise.all([
+      this.prisma.auditLog.findMany({ where, skip, take, orderBy: { createdAt: 'desc' } }),
+      this.prisma.auditLog.count({ where }),
+    ]);
+    const actorIds = [...new Set(logs.flatMap((log) => (log.actorId ? [log.actorId] : [])))];
+    const actors = actorIds.length
+      ? await this.prisma.user.findMany({
+          where: { id: { in: actorIds }, organizationId },
+          select: { id: true, firstName: true, lastName: true, email: true },
+        })
+      : [];
+    const actorsById = new Map(actors.map((actor) => [actor.id, actor]));
+    const items = logs.map((log) => ({
+      ...log,
+      actor: log.actorId ? (actorsById.get(log.actorId) ?? null) : null,
+    }));
+    return buildPaginatedResult(items, totalItems, query);
+  }
+
   async listForOrganization(organizationId: string, query: PaginationQuery) {
     const { skip, take } = toPrismaSkipTake(query);
     const where = { organizationId };

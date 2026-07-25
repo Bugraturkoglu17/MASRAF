@@ -3,6 +3,7 @@ import { Bell, CheckCircle, Clock, Home, User, XCircle } from 'lucide-react';
 import { useEffect, useMemo, useRef } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate, useNavigation } from 'react-router-dom';
 
+import { BrandLogo } from '@/components/BrandLogo';
 import { RouteTransitionLoader } from '@/components/feedback/RouteTransitionLoader';
 import { useToast } from '@/components/feedback/toast-context';
 import { MobileBottomNavigation } from '@/components/navigation/MobileBottomNavigation';
@@ -61,11 +62,7 @@ export function ManagerLayout(): JSX.Element {
     <div className="app-shell" style={{ display: 'flex', height: '100dvh', overflow: 'hidden' }}>
       <aside style={sidebarStyle} className="app-sidebar">
         <div style={brandStyle}>
-          <span style={brandIconStyle}>₺</span>
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#f1f5f9' }}>Masraf</div>
-            <div style={{ fontSize: 10, color: '#64748b', fontWeight: 500 }}>YÖNETİCİ PANELİ</div>
-          </div>
+          <BrandLogo subtitle="YÖNETİCİ PANELİ" />
         </div>
 
         <nav style={navStyle}>
@@ -157,20 +154,6 @@ const brandStyle: React.CSSProperties = {
   gap: 10,
   padding: '20px 20px 16px',
   borderBottom: '1px solid rgba(255,255,255,0.06)',
-};
-
-const brandIconStyle: React.CSSProperties = {
-  width: 36,
-  height: 36,
-  borderRadius: 8,
-  background: '#1e3a8a',
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  fontSize: 18,
-  fontWeight: 700,
-  color: '#fff',
-  flexShrink: 0,
 };
 
 const navStyle: React.CSSProperties = {

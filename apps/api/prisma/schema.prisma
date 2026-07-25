@@ -23,6 +23,7 @@ model Organization {
   id        String   @id @default(uuid()) @db.Uuid
   name      String
   slug      String   @unique
+  userLimit Int      @default(25)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -86,9 +87,13 @@ model User {
   passwordHash     String
   firstName        String
   lastName         String
-  phone            String?
-  iban             String?
-  role             AppRole    @default(USER)
+  phone              String?    @unique
+  iban               String?
+  company            String?
+  jobTitle           String?
+  role               AppRole    @default(USER)
+  mustChangePassword Boolean    @default(false)
+  passwordChangedAt  DateTime?
   profileCompleted Boolean    @default(false)
   status           UserStatus @default(ACTIVE)
   lastLoginAt      DateTime?
@@ -405,6 +410,11 @@ enum AuditAction {
   LOGIN
   LOGOUT
   UPLOAD
+  ACTIVATE
+  DEACTIVATE
+  ASSIGN
+  PASSWORD_RESET
+  SESSIONS_REVOKED
 }
 
 model AuditLog {

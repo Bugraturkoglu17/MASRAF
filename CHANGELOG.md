@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+### feat: ADMIN panelini kullanıcı/yetki yönetimine odakla, giriş ekranı logosu (2026-07-25)
+
+**ADMIN Paneli Yeniden Yapılandırıldı**
+- Masraf onay istatistikleri (Onay Bekleyen/Onaylanan/Reddedilen) admin panelinden kaldırıldı — bu Yönetici (MANAGER) sorumluluğu, admin ile karışmasın diye ayrıştırıldı
+- Yeni ana sayfa: Toplam/Aktif/Pasif Kullanıcı, Yönetici (X/1), Profili Eksik, İlk Girişini Tamamlamayan kartları + Son Eklenen Kullanıcılar listesi
+- Yeni menü: Ana Sayfa, Kullanıcılar, Yeni Kullanıcı, Yönetici Hesabı, İşlem Kayıtları, Sistem Ayarları
+
+**Kullanıcı Yönetimi**
+- Kullanıcılar sayfasına arama (ad/telefon), rol/durum/hızlı filtreler eklendi; masaüstünde tablo, mobilde kart görünümü
+- Yeni Kullanıcı formu: zorunlu+benzersiz Türkiye telefon numarası (`+905XXXXXXXXX` normalize), isteğe bağlı e-posta, geçici şifre (çift giriş doğrulamalı)
+- Kullanıcı Detay sayfası: Hesap/Profil/Güvenlik bilgileri + işlem geçmişi
+- Admin artık kullanıcı şifresini asla göremez; yalnızca yeni geçici şifre tanımlayabilir (çift giriş, oturumlar otomatik kapatılır, `mustChangePassword=true`)
+- Yönetici Hesabı ekranı: sistemde en fazla bir aktif MANAGER kuralı backend'de zorunlu kılındı (ikinci aktif yönetici oluşturma/atama/aktifleştirme reddedilir)
+- Sistem Ayarları ekranı: kullanıcı limiti, kullanılan/kalan hak (DB'den, `Organization.userLimit`)
+
+**Zorunlu İlk Giriş Şifre Değişikliği**
+- Yeni `mustChangePassword` alanı + `/change-password` ekranı: geçici şifreyle giriş yapan kullanıcı devam etmeden önce kendi şifresini belirlemek zorunda
+- `ChangePasswordGuard`: hem içeri zorlar hem de işlem tamamlanınca otomatik çıkarır
+
+**Marka/Logo**
+- Giriş ekranı ve her 3 panelin (Kullanıcı/Yönetici/Admin) kenar çubuğu logosu güncellendi (`BrandLogo` bileşeni, şeffaf yüksek çözünürlüklü varlıklar)
+
+**Backend**
+- `User` modeline `phone` (unique), `company`, `jobTitle`, `mustChangePassword`, `passwordChangedAt` eklendi; `Organization.userLimit` eklendi
+- `AuditAction` enumuna `ACTIVATE/DEACTIVATE/ASSIGN/PASSWORD_RESET/SESSIONS_REVOKED` eklendi
+- `/users` uçları genişletildi: filtreli liste, admin oluşturma/güncelleme, şifre sıfırlama, oturum kapatma, yönetici hesabı, admin istatistikleri, sistem özeti, kullanıcı bazlı işlem geçmişi
+
 ### feat: fatura yönetimi, fotoğraf düzenleyici ve taslak aksiyonları (2026-07-23)
 
 **Fatura Yönetimi**

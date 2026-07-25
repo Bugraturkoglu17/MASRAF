@@ -1,10 +1,11 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { loginSchema, type LoginInput } from '@masraf/shared-validation';
-import { Eye, EyeOff, Receipt } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useLocation, useNavigate, type Location } from 'react-router-dom';
 
+import { BrandLogo } from '@/components/BrandLogo';
 import { useAuth } from '@/features/auth/auth-context';
 import { ApiError } from '@/lib/api-client';
 
@@ -42,10 +43,7 @@ export function LoginPage(): JSX.Element {
       <div style={cardStyle}>
         {/* Logo / başlık */}
         <div style={logoAreaStyle}>
-          <div style={iconWrapStyle}>
-            <Receipt size={28} color="#fff" />
-          </div>
-          <h1 style={titleStyle}>Masraf Uygulaması</h1>
+          <BrandLogo />
           <p style={subtitleStyle}>Hesabınıza giriş yapın</p>
         </div>
 
@@ -139,26 +137,12 @@ const cardStyle: React.CSSProperties = {
 };
 
 const logoAreaStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
   textAlign: 'center',
   marginBottom: 32,
-};
-
-const iconWrapStyle: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  width: 56,
-  height: 56,
-  borderRadius: 16,
-  background: 'var(--color-primary)',
-  marginBottom: 16,
-};
-
-const titleStyle: React.CSSProperties = {
-  fontSize: 22,
-  fontWeight: 700,
-  color: 'var(--color-text)',
-  margin: '0 0 6px',
+  gap: 10,
 };
 
 const subtitleStyle: React.CSSProperties = {

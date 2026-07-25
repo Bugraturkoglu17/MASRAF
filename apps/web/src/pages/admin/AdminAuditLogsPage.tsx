@@ -33,6 +33,11 @@ const actionLabels: Record<string, string> = {
   LOGIN: 'Giriş',
   LOGOUT: 'Çıkış',
   UPLOAD: 'Dosya yükleme',
+  ACTIVATE: 'Hesap aktif edildi',
+  DEACTIVATE: 'Hesap pasife alındı',
+  ASSIGN: 'Rol değiştirildi',
+  PASSWORD_RESET: 'Şifre sıfırlandı',
+  SESSIONS_REVOKED: 'Oturumlar kapatıldı',
 };
 
 export function AdminAuditLogsPage(): JSX.Element {

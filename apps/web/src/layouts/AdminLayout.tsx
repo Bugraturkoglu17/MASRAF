@@ -1,25 +1,20 @@
-import { FileClock, Home, Layout, Settings, User, Users } from 'lucide-react';
+import { FileClock, Home, Settings, ShieldCheck, UserPlus, Users } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate, useNavigation } from 'react-router-dom';
 
+import { BrandLogo } from '@/components/BrandLogo';
 import { RouteTransitionLoader } from '@/components/feedback/RouteTransitionLoader';
 import { useToast } from '@/components/feedback/toast-context';
 import { MobileBottomNavigation } from '@/components/navigation/MobileBottomNavigation';
 import { useAuth } from '@/features/auth/auth-context';
 
 const navItems = [
-  { to: '/admin', label: 'Admin Paneli', icon: Home, exact: true },
-  { to: '/admin/users', label: 'Kullanıcı Yönetimi', icon: Users },
-  { to: '/admin/audit-logs', label: 'Denetim Kayıtları', icon: FileClock },
-  { to: '/admin/profile', label: 'Profilim', icon: User },
-  ...(import.meta.env.DEV
-    ? [{ to: '/admin/pwa-diagnostics', label: 'PWA Tanılama', icon: Settings }]
-    : []),
-];
-
-const viewItems = [
-  { to: '/', label: 'Kullanıcı Görünümü', icon: Layout },
-  { to: '/manager', label: 'Yönetici Görünümü', icon: Settings },
+  { to: '/admin', label: 'Ana Sayfa', icon: Home, exact: true },
+  { to: '/admin/users', label: 'Kullanıcılar', icon: Users, exact: true },
+  { to: '/admin/users/new', label: 'Yeni Kullanıcı', icon: UserPlus },
+  { to: '/admin/manager', label: 'Yönetici Hesabı', icon: ShieldCheck },
+  { to: '/admin/audit-logs', label: 'İşlem Kayıtları', icon: FileClock },
+  { to: '/admin/settings', label: 'Sistem Ayarları', icon: Settings },
 ];
 
 export function AdminLayout(): JSX.Element {
@@ -37,9 +32,11 @@ export function AdminLayout(): JSX.Element {
 
   useEffect(() => {
     void import('@/pages/admin/AdminUsersPage');
+    void import('@/pages/admin/AdminNewUserPage');
+    void import('@/pages/admin/AdminUserDetailPage');
+    void import('@/pages/admin/AdminManagerPage');
     void import('@/pages/admin/AdminAuditLogsPage');
-    void import('@/pages/user/UserProfilePage');
-    void import('@/pages/NotificationsPage');
+    void import('@/pages/admin/AdminSystemOverviewPage');
   }, []);
 
   const handleLogout = async () => {
@@ -52,34 +49,16 @@ export function AdminLayout(): JSX.Element {
     <div className="app-shell" style={{ display: 'flex', height: '100dvh', overflow: 'hidden' }}>
       <aside style={sidebarStyle} className="app-sidebar">
         <div style={brandStyle}>
-          <span style={brandIconStyle}>₺</span>
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#f1f5f9' }}>Masraf</div>
-            <div style={{ fontSize: 10, color: '#64748b', fontWeight: 500 }}>ADMİN PANELİ</div>
-          </div>
+          <BrandLogo subtitle="ADMİN PANELİ" />
         </div>
 
         <nav style={navStyle}>
-          <div style={sectionLabel}>YÖNETİM</div>
           {navItems.map(({ to, label, icon: Icon, exact }) => (
             <NavLink
               key={to}
               to={to}
               end={exact}
               style={({ isActive }) => navLinkStyle(isActive, '#a78bfa')}
-            >
-              <Icon size={18} />
-              <span>{label}</span>
-            </NavLink>
-          ))}
-
-          <div style={{ ...sectionLabel, marginTop: 16 }}>GÖRÜNÜM DEĞİŞTİR</div>
-          {viewItems.map(({ to, label, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end
-              style={({ isActive }) => navLinkStyle(isActive, '#60a5fa')}
             >
               <Icon size={18} />
               <span>{label}</span>
@@ -101,7 +80,7 @@ export function AdminLayout(): JSX.Element {
             </div>
           </div>
           <button onClick={handleLogout} style={logoutBtnStyle}>
-            Çıkış
+            Çıkış Yap
           </button>
         </div>
       </aside>
@@ -131,25 +110,8 @@ const sidebarStyle: React.CSSProperties = {
 };
 
 const brandStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 10,
-  padding: '20px 20px 16px',
+  padding: '18px 20px 16px',
   borderBottom: '1px solid rgba(255,255,255,0.06)',
-};
-
-const brandIconStyle: React.CSSProperties = {
-  width: 36,
-  height: 36,
-  borderRadius: 8,
-  background: '#7c3aed',
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  fontSize: 18,
-  fontWeight: 700,
-  color: '#fff',
-  flexShrink: 0,
 };
 
 const navStyle: React.CSSProperties = {
@@ -158,15 +120,6 @@ const navStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: 2,
-};
-
-const sectionLabel: React.CSSProperties = {
-  fontSize: 10,
-  fontWeight: 700,
-  color: '#475569',
-  letterSpacing: '0.1em',
-  padding: '4px 12px 6px',
-  marginTop: 4,
 };
 
 const navLinkStyle = (isActive: boolean, accent: string): React.CSSProperties => ({
@@ -207,11 +160,12 @@ const avatarStyle: React.CSSProperties = {
 
 const logoutBtnStyle: React.CSSProperties = {
   width: '100%',
-  padding: '8px',
-  borderRadius: 6,
-  border: '1px solid rgba(255,255,255,0.1)',
+  padding: '10px',
+  borderRadius: 8,
+  border: '1px solid rgba(255,255,255,0.12)',
   background: 'transparent',
-  color: '#94a3b8',
-  fontSize: 12,
+  color: '#cbd5e1',
+  fontSize: 13,
+  fontWeight: 500,
   cursor: 'pointer',
 };
