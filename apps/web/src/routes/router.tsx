@@ -84,292 +84,299 @@ function S({ children }: { children: React.ReactNode }) {
   return <Suspense fallback={<FullScreenLoader />}>{children}</Suspense>;
 }
 
-export const router = createBrowserRouter([
-  {
-    element: <AuthLayout />,
-    errorElement: <ErrorPage />,
-    children: [{ path: '/login', element: <LoginPage /> }],
-  },
+export const router = createBrowserRouter(
+  [
+    {
+      element: <AuthLayout />,
+      errorElement: <ErrorPage />,
+      children: [{ path: '/login', element: <LoginPage /> }],
+    },
 
-  // Zorunlu şifre değiştirme — giriş zorunlu, mustChangePassword=true.
-  // ChangePasswordGuard hem içeri zorlar hem de artık gerekmiyorsa dışarı çıkarır.
-  {
-    element: <ProtectedRoute />,
-    errorElement: <ErrorPage />,
-    children: [
-      {
-        element: <ChangePasswordGuard />,
-        children: [{ path: '/change-password', element: <ChangePasswordPage /> }],
-      },
-    ],
-  },
+    // Zorunlu şifre değiştirme — giriş zorunlu, mustChangePassword=true.
+    // ChangePasswordGuard hem içeri zorlar hem de artık gerekmiyorsa dışarı çıkarır.
+    {
+      element: <ProtectedRoute />,
+      errorElement: <ErrorPage />,
+      children: [
+        {
+          element: <ChangePasswordGuard />,
+          children: [{ path: '/change-password', element: <ChangePasswordPage /> }],
+        },
+      ],
+    },
 
-  // Profil tamamlama — giriş zorunlu ama profil tamamlanmamış
-  {
-    element: <ProtectedRoute />,
-    errorElement: <ErrorPage />,
-    children: [
-      {
-        element: <ChangePasswordGuard />,
-        children: [
-          {
-            path: '/complete-profile',
-            element: (
-              <S>
-                <ProfileCompletePage />
-              </S>
-            ),
-          },
-        ],
-      },
-    ],
-  },
+    // Profil tamamlama — giriş zorunlu ama profil tamamlanmamış
+    {
+      element: <ProtectedRoute />,
+      errorElement: <ErrorPage />,
+      children: [
+        {
+          element: <ChangePasswordGuard />,
+          children: [
+            {
+              path: '/complete-profile',
+              element: (
+                <S>
+                  <ProfileCompletePage />
+                </S>
+              ),
+            },
+          ],
+        },
+      ],
+    },
 
-  // USER paneli
-  {
-    element: <ProtectedRoute />,
-    errorElement: <ErrorPage />,
-    children: [
-      {
-        element: <ChangePasswordGuard />,
-        children: [
-          {
-            element: <ProfileGuard />,
-            children: [
-              {
-                element: <RoleRoute allowed={['USER', 'ADMIN']} />,
-                children: [
-                  {
-                    element: <UserLayout />,
-                    children: [
-                      {
-                        path: '/',
-                        element: <UserDashboard />,
-                      },
-                      {
-                        path: '/expenses',
-                        element: <UserExpensesPage />,
-                      },
-                      {
-                        path: '/expenses/new',
-                        element: (
-                          <S>
-                            <CreateExpensePage />
-                          </S>
-                        ),
-                      },
-                      {
-                        path: '/approvals',
-                        element: <UserApprovalsPage />,
-                      },
-                      {
-                        path: '/profile',
-                        element: <UserProfilePage />,
-                      },
-                      {
-                        path: '/notifications',
-                        element: (
-                          <S>
-                            <NotificationsPage />
-                          </S>
-                        ),
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  },
+    // USER paneli
+    {
+      element: <ProtectedRoute />,
+      errorElement: <ErrorPage />,
+      children: [
+        {
+          element: <ChangePasswordGuard />,
+          children: [
+            {
+              element: <ProfileGuard />,
+              children: [
+                {
+                  element: <RoleRoute allowed={['USER', 'ADMIN']} />,
+                  children: [
+                    {
+                      element: <UserLayout />,
+                      children: [
+                        {
+                          path: '/',
+                          element: <UserDashboard />,
+                        },
+                        {
+                          path: '/expenses',
+                          element: <UserExpensesPage />,
+                        },
+                        {
+                          path: '/expenses/new',
+                          element: (
+                            <S>
+                              <CreateExpensePage />
+                            </S>
+                          ),
+                        },
+                        {
+                          path: '/approvals',
+                          element: <UserApprovalsPage />,
+                        },
+                        {
+                          path: '/profile',
+                          element: <UserProfilePage />,
+                        },
+                        {
+                          path: '/notifications',
+                          element: (
+                            <S>
+                              <NotificationsPage />
+                            </S>
+                          ),
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
 
-  // MANAGER paneli
-  {
-    element: <ProtectedRoute />,
-    errorElement: <ErrorPage />,
-    children: [
-      {
-        element: <ChangePasswordGuard />,
-        children: [
-          {
-            element: <ProfileGuard />,
-            children: [
-              {
-                element: <RoleRoute allowed={['MANAGER', 'ADMIN']} />,
-                children: [
-                  {
-                    element: (
-                      <S>
-                        <ManagerLayout />
-                      </S>
-                    ),
-                    children: [
-                      {
-                        path: '/manager',
-                        element: (
-                          <S>
-                            <ManagerDashboard />
-                          </S>
-                        ),
-                      },
-                      {
-                        path: '/manager/pending',
-                        element: (
-                          <S>
-                            <ManagerPendingPage />
-                          </S>
-                        ),
-                      },
-                      {
-                        path: '/manager/approved',
-                        element: (
-                          <S>
-                            <ManagerApprovedPage />
-                          </S>
-                        ),
-                      },
-                      {
-                        path: '/manager/rejected',
-                        element: (
-                          <S>
-                            <ManagerRejectedPage />
-                          </S>
-                        ),
-                      },
-                      {
-                        path: '/manager/profile',
-                        element: (
-                          <S>
-                            <UserProfilePage />
-                          </S>
-                        ),
-                      },
-                      {
-                        path: '/manager/notifications',
-                        element: (
-                          <S>
-                            <NotificationsPage />
-                          </S>
-                        ),
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  },
+    // MANAGER paneli
+    {
+      element: <ProtectedRoute />,
+      errorElement: <ErrorPage />,
+      children: [
+        {
+          element: <ChangePasswordGuard />,
+          children: [
+            {
+              element: <ProfileGuard />,
+              children: [
+                {
+                  element: <RoleRoute allowed={['MANAGER', 'ADMIN']} />,
+                  children: [
+                    {
+                      element: (
+                        <S>
+                          <ManagerLayout />
+                        </S>
+                      ),
+                      children: [
+                        {
+                          path: '/manager',
+                          element: (
+                            <S>
+                              <ManagerDashboard />
+                            </S>
+                          ),
+                        },
+                        {
+                          path: '/manager/pending',
+                          element: (
+                            <S>
+                              <ManagerPendingPage />
+                            </S>
+                          ),
+                        },
+                        {
+                          path: '/manager/approved',
+                          element: (
+                            <S>
+                              <ManagerApprovedPage />
+                            </S>
+                          ),
+                        },
+                        {
+                          path: '/manager/rejected',
+                          element: (
+                            <S>
+                              <ManagerRejectedPage />
+                            </S>
+                          ),
+                        },
+                        {
+                          path: '/manager/profile',
+                          element: (
+                            <S>
+                              <UserProfilePage />
+                            </S>
+                          ),
+                        },
+                        {
+                          path: '/manager/notifications',
+                          element: (
+                            <S>
+                              <NotificationsPage />
+                            </S>
+                          ),
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
 
-  // ADMIN paneli
-  {
-    element: <ProtectedRoute />,
-    errorElement: <ErrorPage />,
-    children: [
-      {
-        element: <ChangePasswordGuard />,
-        children: [
-          {
-            element: <ProfileGuard />,
-            children: [
-              {
-                element: <RoleRoute allowed={['ADMIN']} />,
-                children: [
-                  {
-                    element: (
-                      <S>
-                        <AdminLayout />
-                      </S>
-                    ),
-                    children: [
-                      {
-                        path: '/admin',
-                        element: (
-                          <S>
-                            <AdminDashboard />
-                          </S>
-                        ),
-                      },
-                      {
-                        path: '/admin/users',
-                        element: (
-                          <S>
-                            <AdminUsersPage />
-                          </S>
-                        ),
-                      },
-                      {
-                        path: '/admin/users/new',
-                        element: (
-                          <S>
-                            <AdminNewUserPage />
-                          </S>
-                        ),
-                      },
-                      {
-                        path: '/admin/users/:id',
-                        element: (
-                          <S>
-                            <AdminUserDetailPage />
-                          </S>
-                        ),
-                      },
-                      {
-                        path: '/admin/manager',
-                        element: (
-                          <S>
-                            <AdminManagerPage />
-                          </S>
-                        ),
-                      },
-                      {
-                        path: '/admin/audit-logs',
-                        element: (
-                          <S>
-                            <AdminAuditLogsPage />
-                          </S>
-                        ),
-                      },
-                      {
-                        path: '/admin/settings',
-                        element: (
-                          <S>
-                            <AdminSystemOverviewPage />
-                          </S>
-                        ),
-                      },
-                      {
-                        path: '/admin/profile',
-                        element: (
-                          <S>
-                            <UserProfilePage />
-                          </S>
-                        ),
-                      },
-                      {
-                        path: '/admin/notifications',
-                        element: (
-                          <S>
-                            <NotificationsPage />
-                          </S>
-                        ),
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  },
+    // ADMIN paneli
+    {
+      element: <ProtectedRoute />,
+      errorElement: <ErrorPage />,
+      children: [
+        {
+          element: <ChangePasswordGuard />,
+          children: [
+            {
+              element: <ProfileGuard />,
+              children: [
+                {
+                  element: <RoleRoute allowed={['ADMIN']} />,
+                  children: [
+                    {
+                      element: (
+                        <S>
+                          <AdminLayout />
+                        </S>
+                      ),
+                      children: [
+                        {
+                          path: '/admin',
+                          element: (
+                            <S>
+                              <AdminDashboard />
+                            </S>
+                          ),
+                        },
+                        {
+                          path: '/admin/users',
+                          element: (
+                            <S>
+                              <AdminUsersPage />
+                            </S>
+                          ),
+                        },
+                        {
+                          path: '/admin/users/new',
+                          element: (
+                            <S>
+                              <AdminNewUserPage />
+                            </S>
+                          ),
+                        },
+                        {
+                          path: '/admin/users/:id',
+                          element: (
+                            <S>
+                              <AdminUserDetailPage />
+                            </S>
+                          ),
+                        },
+                        {
+                          path: '/admin/manager',
+                          element: (
+                            <S>
+                              <AdminManagerPage />
+                            </S>
+                          ),
+                        },
+                        {
+                          path: '/admin/audit-logs',
+                          element: (
+                            <S>
+                              <AdminAuditLogsPage />
+                            </S>
+                          ),
+                        },
+                        {
+                          path: '/admin/settings',
+                          element: (
+                            <S>
+                              <AdminSystemOverviewPage />
+                            </S>
+                          ),
+                        },
+                        {
+                          path: '/admin/profile',
+                          element: (
+                            <S>
+                              <UserProfilePage />
+                            </S>
+                          ),
+                        },
+                        {
+                          path: '/admin/notifications',
+                          element: (
+                            <S>
+                              <NotificationsPage />
+                            </S>
+                          ),
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
 
-  { path: '/403', element: <UnauthorizedPage /> },
-  { path: '/offline', element: <OfflinePage /> },
-  { path: '*', element: <NotFoundPage /> },
-]);
+    { path: '/403', element: <UnauthorizedPage /> },
+    { path: '/offline', element: <OfflinePage /> },
+    { path: '*', element: <NotFoundPage /> },
+  ],
+  {
+    future: {
+      v7_relativeSplatPath: true,
+    },
+  },
+);

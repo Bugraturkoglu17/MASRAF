@@ -24,7 +24,7 @@ describe('Auth (e2e)', () => {
   it('/api/v1/auth/login (POST) geçersiz istekte VALIDATION_ERROR döner', () => {
     return request(app.getHttpServer())
       .post('/api/v1/auth/login')
-      .send({ email: 'gecersiz', password: '123' })
+      .send({ identifier: 'gecersiz', password: '123' })
       .expect(400)
       .expect((res) => {
         expect(res.body.code).toBe('VALIDATION_ERROR');
@@ -35,7 +35,7 @@ describe('Auth (e2e)', () => {
   it('/api/v1/auth/login (POST) yanlış kimlik bilgisiyle 401 döner', () => {
     return request(app.getHttpServer())
       .post('/api/v1/auth/login')
-      .send({ email: 'olmayan@example.com', password: 'YanlisSifre123' })
+      .send({ identifier: 'olmayan@example.com', password: 'YanlisSifre123' })
       .expect(401);
   });
 

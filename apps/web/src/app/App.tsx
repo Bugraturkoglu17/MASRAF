@@ -27,7 +27,7 @@ export function App(): JSX.Element {
                 <OfflineBanner />
                 <MaintenanceBanner />
                 <OnlineRestoredToast />
-                <RouterProvider router={router} />
+                <RouterProvider router={router} future={{ v7_startTransition: true }} />
                 <ToastViewport />
                 <PwaInstallBanner />
                 <IosInstallGuide />

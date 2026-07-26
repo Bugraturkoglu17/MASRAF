@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { detectIosSafari } from './usePwaInstall';
@@ -35,13 +35,16 @@ describe('PWA cihaz ve görünüm tespiti', () => {
   });
 });
 
+function renderNav(element: React.ReactElement) {
+  const r = createMemoryRouter([{ path: '/', element }], {
+    future: { v7_relativeSplatPath: true },
+  });
+  return render(<RouterProvider router={r} future={{ v7_startTransition: true }} />);
+}
+
 describe('mobil alt navigasyon', () => {
   it('USER rolünde dört hedef ve yalnızca üç seçenekli hızlı masraf menüsü gösterir', () => {
-    render(
-      <MemoryRouter>
-        <MobileBottomNavigation role="USER" />
-      </MemoryRouter>,
-    );
+    renderNav(<MobileBottomNavigation role="USER" />);
     expect(screen.getAllByRole('link')).toHaveLength(4);
     fireEvent.click(screen.getByRole('button', { name: 'Yeni masraf ekle' }));
     expect(screen.getAllByRole('button', { name: /Galeri|Kamera|Manuel/ })).toHaveLength(3);
@@ -56,21 +59,13 @@ describe('mobil alt navigasyon', () => {
   });
 
   it('MANAGER rolünde hızlı masraf düğmesi olmadan dört hedef gösterir', () => {
-    render(
-      <MemoryRouter>
-        <MobileBottomNavigation role="MANAGER" />
-      </MemoryRouter>,
-    );
+    renderNav(<MobileBottomNavigation role="MANAGER" />);
     expect(screen.getAllByRole('link')).toHaveLength(4);
     expect(screen.queryByRole('button', { name: 'Yeni masraf ekle' })).not.toBeInTheDocument();
   });
 
   it('ADMIN Menü düğmesi profile yönlendirmek yerine yönetim panelini açar', () => {
-    render(
-      <MemoryRouter>
-        <MobileBottomNavigation role="ADMIN" />
-      </MemoryRouter>,
-    );
+    renderNav(<MobileBottomNavigation role="ADMIN" />);
     expect(screen.getAllByRole('link')).toHaveLength(4);
     expect(screen.queryByRole('link', { name: /Menü/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Menü/ }));
