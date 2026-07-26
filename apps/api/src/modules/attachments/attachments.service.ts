@@ -1,3 +1,5 @@
+import { extname } from 'node:path';
+
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
@@ -92,6 +94,15 @@ export class AttachmentsService {
       throw new NotFoundAppException('Yüklenen dosya');
     }
 
+    const existingCount = await this.prisma.attachment.count({
+      where: { expenseId, deletedAt: null },
+    });
+    const ext = extname(fileName).toLowerCase();
+    const displayFileName =
+      existingCount === 0
+        ? `${expense.expenseCode}${ext}`
+        : `${expense.expenseCode}-${existingCount + 1}${ext}`;
+
     try {
       return await this.prisma.$transaction(async (tx) => {
         const attachment = await tx.attachment.create({
@@ -99,7 +110,7 @@ export class AttachmentsService {
             organizationId,
             expenseId,
             fileKey,
-            fileName,
+            fileName: displayFileName,
             mimeType,
             sizeBytes: fileSize,
             sha256: fileHash ?? '',
