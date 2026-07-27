@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Camera, FileText, ImagePlus, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
@@ -11,10 +11,11 @@ import { NetworkRequiredDialog } from '@/components/pwa/NetworkRequiredDialog';
 import { AttachmentUploader } from '@/components/ui/AttachmentUploader';
 import { DatePickerTr } from '@/components/ui/DatePickerTr';
 import { useAuth } from '@/features/auth/auth-context';
+import { useAttachmentUploads, type UploadedFile } from '@/hooks/useAttachmentUploads';
 import { useLocalExpenseDraft } from '@/hooks/useLocalExpenseDraft';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { apiFetch, getApiErrorMessage } from '@/lib/api-client';
-import { getAttachmentValidationError } from '@/lib/attachment-validation';
+import { DEFAULT_MAX_ATTACHMENT_SIZE } from '@/lib/attachment-validation';
 import { getExpenseDateMax, toLocalIsoDate } from '@/lib/date-limits';
 import { decimalToTurkishInput, formatTurkishMoneyInput, toDecimalString } from '@/lib/money';
 
@@ -39,6 +40,7 @@ const schema = z.object({
 });
 
 type FormValues = z.infer<typeof schema>;
+type Payload = FormValues & { amount: string };
 
 interface Category {
   id: string;
@@ -57,13 +59,11 @@ interface Expense {
   status: string;
 }
 
-interface UploadedFile {
-  id: string;
-  fileKey: string;
-  fileName: string;
-  mimeType: string;
-  sizeBytes: number;
+interface UploadConfig {
+  uploads?: { maxFiles: number; maxFileSizeBytes: number; allowedMimeTypes: string[] };
 }
+
+type SubmitPhase = 'idle' | 'uploading' | 'saving';
 
 export function CreateExpensePage(): JSX.Element {
   const navigate = useNavigate();
@@ -71,35 +71,31 @@ export function CreateExpensePage(): JSX.Element {
   const [params] = useSearchParams();
   const editId = params.get('edit');
   const savedId = params.get('saved');
-  const persistedExpenseId = editId ?? savedId;
   const { showToast } = useToast();
   const { user } = useAuth();
   const { isOnline } = useNetworkStatus();
   const qc = useQueryClient();
 
-  const [savedExpenseId, setSavedExpenseId] = useState<string | null>(persistedExpenseId);
-  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
-  const [showNetworkDialog, setShowNetworkDialog] = useState(false);
-  const [uploadState, setUploadState] = useState({ pending: 0, failed: 0 });
-  const [isPreparingAttachment, setIsPreparingAttachment] = useState(false);
-  const [initialUploadStarted, setInitialUploadStarted] = useState(false);
-  const uploadCompletionShown = useRef(false);
+  // Masraf taslağının kimliği. State render için, ref ise senkron okuma içindir —
+  // aynı taslağın iki kez oluşturulmasını ref engeller.
+  const [savedExpenseId, setSavedExpenseId] = useState<string | null>(editId ?? savedId);
+  const expenseIdRef = useRef<string | null>(editId ?? savedId);
+  const submitLockRef = useRef(false);
   const autoRecoveredRef = useRef(false);
+  const initialFilesHandledRef = useRef(false);
 
-  // Pending files — local queue before draft is saved
-  const [pendingFiles, setPendingFiles] = useState<File[]>(() => {
-    const state = location.state as { initialFiles?: unknown } | null;
-    return Array.isArray(state?.initialFiles) &&
-      state.initialFiles.every((item) => item instanceof File)
-      ? state.initialFiles
-      : [];
+  const [showNetworkDialog, setShowNetworkDialog] = useState(false);
+  const [submitPhase, setSubmitPhase] = useState<SubmitPhase>('idle');
+  const [uploadLimits, setUploadLimits] = useState({
+    maxFiles: 5,
+    maxFileSizeBytes: DEFAULT_MAX_ATTACHMENT_SIZE,
   });
 
-  const pendingCameraRef = useRef<HTMLInputElement>(null);
-  const pendingGalleryRef = useRef<HTMLInputElement>(null);
-
-  const isSaved = Boolean(savedExpenseId);
-  const removePending = (file: File) => setPendingFiles((prev) => prev.filter((f) => f !== file));
+  const uploads = useAttachmentUploads({
+    maxFiles: uploadLimits.maxFiles,
+    maxFileSizeBytes: uploadLimits.maxFileSizeBytes,
+    onError: (message) => showToast(message, 'error'),
+  });
 
   const {
     draft,
@@ -113,10 +109,12 @@ export function CreateExpensePage(): JSX.Element {
     queryFn: () => apiFetch('/expense-categories'),
   });
 
+  // Yalnızca düzenleme modunda sunucudaki değerler forma yazılır. `?saved=` modunda
+  // form kullanıcının yazdığı hâliyle kalır — reset kullanıcının girdisini silmemeli.
   const { data: editingExpense } = useQuery<Expense>({
-    queryKey: ['expense', persistedExpenseId],
-    queryFn: () => apiFetch(`/expenses/${persistedExpenseId}`),
-    enabled: Boolean(persistedExpenseId),
+    queryKey: ['expense', editId],
+    queryFn: () => apiFetch(`/expenses/${editId}`),
+    enabled: Boolean(editId),
   });
 
   const {
@@ -135,6 +133,12 @@ export function CreateExpensePage(): JSX.Element {
   const requiresDueDate = selectedCategory?.requiresDueDate ?? false;
 
   useEffect(() => {
+    void apiFetch<UploadConfig>('/app/config')
+      .then((value) => value.uploads && setUploadLimits(value.uploads))
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
     if (editingExpense) {
       reset({
         categoryId: editingExpense.categoryId,
@@ -146,6 +150,29 @@ export function CreateExpensePage(): JSX.Element {
       });
     }
   }, [editingExpense, reset]);
+
+  // Mevcut ekleri (düzenleme veya sayfa yenilemesi sonrası) kuyruğa yansıt.
+  useEffect(() => {
+    const expenseId = editId ?? savedId;
+    if (!expenseId) return;
+    void apiFetch<UploadedFile[]>(`/attachments/expense/${expenseId}`)
+      .then((files) => files.length > 0 && uploads.hydrate(files))
+      .catch(() => undefined);
+    uploads.attachExpense(expenseId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editId, savedId]);
+
+  // Başka bir ekrandan dosya ile gelindiyse (ör. PWA paylaşım hedefi) kuyruğa al.
+  useEffect(() => {
+    if (initialFilesHandledRef.current) return;
+    initialFilesHandledRef.current = true;
+    const state = location.state as { initialFiles?: unknown } | null;
+    const files = Array.isArray(state?.initialFiles)
+      ? state.initialFiles.filter((item): item is File => item instanceof File)
+      : [];
+    if (files.length > 0) uploads.addFiles(files);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (editId || isDraftLoading || autoRecoveredRef.current) return;
@@ -163,11 +190,11 @@ export function CreateExpensePage(): JSX.Element {
   }, [draft, editId, isDraftLoading, reset]);
 
   useEffect(() => {
-    document.documentElement.dataset.unsavedForm = String(isDirty && !isSaved);
+    document.documentElement.dataset.unsavedForm = String(isDirty && !savedExpenseId);
     return () => {
       delete document.documentElement.dataset.unsavedForm;
     };
-  }, [isDirty, isSaved]);
+  }, [isDirty, savedExpenseId]);
 
   useEffect(() => {
     const hasContent = Boolean(
@@ -178,8 +205,8 @@ export function CreateExpensePage(): JSX.Element {
       formValues.expenseDate ||
       formValues.dueDate,
     );
-    if (editId || isSaved || !isDirty || !user || !hasContent) return;
-    const t = window.setTimeout(() => {
+    if (editId || !isDirty || !user || !hasContent) return;
+    const timer = window.setTimeout(() => {
       void saveDraft({
         categoryId: formValues.categoryId,
         title: formValues.title,
@@ -189,162 +216,143 @@ export function CreateExpensePage(): JSX.Element {
         dueDate: formValues.dueDate,
       }).catch(() => showToast('Yerel taslak kaydedilemedi.', 'error'));
     }, 500);
-    return () => window.clearTimeout(t);
-  }, [editId, formValues, isDirty, isSaved, saveDraft, showToast, user]);
+    return () => window.clearTimeout(timer);
+  }, [editId, formValues, isDirty, saveDraft, showToast, user]);
 
+  // Hata mesajını burada göstermiyoruz: taslak oluşturma hem dosya seçiminde
+  // (arka planda, sessiz) hem de kaydederken denenir. Arka plan denemesi
+  // başarısız olursa kullanıcı rahatsız edilmez; hata yalnızca kullanıcı
+  // "kaydet" dediğinde onSubmit tarafından gösterilir.
   const createMut = useMutation({
-    mutationFn: (data: FormValues & { amount: string }) =>
+    mutationFn: (data: Payload) =>
       apiFetch<{ id: string }>('/expenses', { method: 'POST', body: data }),
-    onSuccess: (expense) => {
-      setSavedExpenseId(expense.id);
+  });
+
+  // Hata mesajı onSubmit'teki tek catch bloğunda gösterilir (çift toast olmasın).
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Payload }) =>
+      apiFetch(`/expenses/${id}`, { method: 'PATCH', body: data }),
+  });
+
+  const buildPayload = (values: FormValues): Payload | null => {
+    const amount = toDecimalString(values.amount);
+    if (!amount) return null;
+    const payload: Payload = { ...values, amount };
+    if (!payload.dueDate) delete (payload as Partial<FormValues>).dueDate;
+    return payload;
+  };
+
+  /**
+   * Masraf taslağını oluşturur (yoksa) ve kimliğini döndürür.
+   * `expenseIdRef` senkron okunduğu için aynı taslak asla iki kez yaratılmaz.
+   * `created`, çağıranın gereksiz bir PATCH atmasını önlemek için döndürülür.
+   */
+  const ensureExpense = async (payload: Payload): Promise<{ id: string; created: boolean }> => {
+    const existing = expenseIdRef.current;
+    if (existing) return { id: existing, created: false };
+    const created = await createMut.mutateAsync(payload);
+    expenseIdRef.current = created.id;
+    setSavedExpenseId(created.id);
+    // Sayfa yenilenirse aynı taslağa devam edilsin diye kimlik URL'de tutulur.
+    navigate(`/expenses/new?saved=${created.id}`, { replace: true });
+    uploads.attachExpense(created.id);
+    return { id: created.id, created: true };
+  };
+
+  // ── Dosya seçimi: yükleme burada başlar, "kaydet" butonunda değil ──────────
+
+  useEffect(() => {
+    if (uploads.items.length === 0 || expenseIdRef.current || !isOnline) return;
+    // Yeni dosya kuyruğa girdi ve henüz taslak yok: form geçerliyse taslağı
+    // hemen oluşturup yüklemeyi başlat, böylece kullanıcı beklemek zorunda kalmaz.
+    let cancelled = false;
+    void (async () => {
+      const isValid = await trigger();
+      if (cancelled || !isValid || expenseIdRef.current) return;
+      const payload = buildPayload(getValues());
+      if (!payload) return;
+      try {
+        await ensureExpense(payload);
+      } catch {
+        // createMut hatayı kullanıcıya gösterir; dosyalar kuyrukta bekler.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uploads.items.length, isOnline]);
+
+  // ── Tek tıklamalı kaydetme ────────────────────────────────────────────────
+
+  const submitValues = async (values: FormValues) => {
+    if (submitLockRef.current) return; // çift kayıt koruması
+    submitLockRef.current = true;
+    try {
+      if (!isOnline) {
+        setShowNetworkDialog(true);
+        return;
+      }
+      const payload = buildPayload(values);
+      if (!payload) return;
+
+      setSubmitPhase('saving');
+      let expenseId: string;
+      try {
+        const ensured = editId ? { id: editId, created: false } : await ensureExpense(payload);
+        expenseId = ensured.id;
+
+        // Taslak `ensureExpense` içinde yeni oluştuysa değerler zaten yazıldı;
+        // aksi hâlde (dosya seçiminde oluşmuş taslak veya edit modu) güncellenir.
+        if (!ensured.created) {
+          await updateMut.mutateAsync({ id: expenseId, data: payload });
+        }
+      } catch (error) {
+        showToast(getApiErrorMessage(error, 'Kaydedilemedi.'), 'error');
+        return;
+      }
+
+      // Devam eden yüklemeler aynı tıklamanın içinde beklenir; kullanıcıdan
+      // ikinci kez butona basması istenmez.
+      if (uploads.items.some((item) => item.status !== 'done')) {
+        setSubmitPhase('uploading');
+      }
+      const result = await uploads.flush(expenseId);
+
+      if (result.failed.length > 0) {
+        showToast(
+          `${result.failed.length} belge yüklenemedi. Yeniden deneyip tekrar kaydedin.`,
+          'error',
+        );
+        return; // başarısız dosya varken taslak kaydı başarılı gösterilmez
+      }
+
       qc.invalidateQueries({ queryKey: ['expenses'] });
       qc.invalidateQueries({ queryKey: ['expense-counts'] });
-    },
-    onError: (error) => showToast(getApiErrorMessage(error, 'Kaydedilemedi.'), 'error'),
-  });
-
-  const updateMut = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: FormValues & { amount: string } }) =>
-      apiFetch(`/expenses/${id}`, { method: 'PATCH', body: data }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['expenses'] });
-    },
-    onError: (error) => showToast(getApiErrorMessage(error, 'Güncellenemedi.'), 'error'),
-  });
-
-  const onSubmit = handleSubmit(async (values) => {
-    if (!isOnline) {
-      setShowNetworkDialog(true);
-      return;
-    }
-    const fileError = pendingFiles.map((file) => getAttachmentValidationError(file)).find(Boolean);
-    if (fileError) {
-      showToast(fileError, 'error');
-      return;
-    }
-    if (pendingFiles.length > 5) {
-      showToast('En fazla 5 belge eklenebilir.', 'error');
-      return;
-    }
-
-    const amount = toDecimalString(values.amount);
-    if (!amount) return;
-    const payload: FormValues & { amount: string } = { ...values, amount };
-    if (!payload.dueDate) delete (payload as Partial<FormValues>).dueDate;
-
-    if (editId) {
-      await updateMut.mutateAsync({ id: editId, data: payload });
-      showToast('Masraf güncellendi.', 'success');
-      navigate('/expenses?status=DRAFT');
-    } else if (savedExpenseId) {
-      if (uploadState.pending > 0 || uploadState.failed > 0 || isPreparingAttachment) {
-        showToast('Taslağı kaydetmeden önce belge yüklemesinin tamamlanmasını bekleyin.', 'info');
-        return;
-      }
-      await updateMut.mutateAsync({ id: savedExpenseId, data: payload });
       await clearDraft();
-      showToast('Masraf ve faturası taslak olarak kaydedildi.', 'success');
+      showToast(editId ? 'Masraf güncellendi.' : 'Taslak kaydedildi.', 'success');
       navigate('/expenses?status=DRAFT');
-    } else {
-      const created = await createMut.mutateAsync(payload);
-      if (pendingFiles.length > 0) {
-        setInitialUploadStarted(false);
-        setSavedExpenseId(created.id);
-        navigate(`/expenses/new?saved=${created.id}`, { replace: true });
-        showToast('Taslak hazırlandı. Fatura şimdi yükleniyor…', 'info');
-        return;
-      }
-      await clearDraft();
-      showToast('Masraf taslak olarak kaydedildi.', 'success');
-      navigate('/expenses?status=DRAFT');
-    }
-  });
-
-  const uploadIsBusy =
-    isPreparingAttachment ||
-    uploadState.pending > 0 ||
-    (Boolean(savedExpenseId) &&
-      pendingFiles.length > uploadedFiles.length &&
-      uploadState.failed === 0);
-  const loading = isSubmitting || createMut.isPending || updateMut.isPending;
-
-  // ── Pre-save file selection ───────────────────────────────────────────────
-
-  const onPendingFileInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    e.target.value = '';
-    const error = files.map((file) => getAttachmentValidationError(file)).find(Boolean);
-    if (error) {
-      showToast(error, 'error');
-      return;
-    }
-    if (pendingFiles.length + files.length > 5) {
-      showToast('En fazla 5 belge eklenebilir.', 'error');
-      return;
-    }
-    if (files.length === 0) return;
-    if (!isOnline) {
-      setShowNetworkDialog(true);
-      return;
-    }
-
-    setIsPreparingAttachment(true);
-    try {
-      const formIsValid = await trigger();
-      if (!formIsValid) {
-        showToast('Faturayı yüklemek için önce zorunlu masraf alanlarını doldurun.', 'info');
-        return;
-      }
-
-      const values = getValues();
-      const amount = toDecimalString(values.amount);
-      if (!amount) return;
-      const payload: FormValues & { amount: string } = { ...values, amount };
-      if (!payload.dueDate) delete (payload as Partial<FormValues>).dueDate;
-
-      const created = await createMut.mutateAsync(payload);
-      uploadCompletionShown.current = false;
-      setInitialUploadStarted(false);
-      setPendingFiles(files);
-      setSavedExpenseId(created.id);
-      navigate(`/expenses/new?saved=${created.id}`, { replace: true });
-      showToast('Taslak hazırlandı. Fatura şimdi yükleniyor…', 'info');
-    } catch {
-      // createMut hata mesajını kullanıcıya gösterir.
     } finally {
-      setIsPreparingAttachment(false);
+      submitLockRef.current = false;
+      setSubmitPhase('idle');
     }
   };
 
-  const handleUploadStateChange = useCallback((next: { pending: number; failed: number }) => {
-    setUploadState((current) =>
-      current.pending === next.pending && current.failed === next.failed ? current : next,
-    );
-    if (next.pending > 0) setInitialUploadStarted(true);
-  }, []);
+  // handleSubmit() render sırasında değil, submit anında çağrılır — böylece
+  // submitLockRef render fazında okunmuş olmaz.
+  const onSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    void handleSubmit(submitValues)(event);
+  };
 
-  useEffect(() => {
-    if (
-      editId ||
-      !initialUploadStarted ||
-      uploadCompletionShown.current ||
-      uploadState.pending > 0 ||
-      uploadState.failed > 0 ||
-      uploadedFiles.length < pendingFiles.length
-    ) {
-      return;
-    }
-    uploadCompletionShown.current = true;
-    setPendingFiles([]);
-    showToast('Fatura yüklendi. Taslağı kaydedebilirsiniz.', 'success');
-  }, [
-    editId,
-    initialUploadStarted,
-    pendingFiles.length,
-    showToast,
-    uploadState,
-    uploadedFiles.length,
-  ]);
+  const loading = isSubmitting || submitPhase !== 'idle';
+  const submitLabel =
+    submitPhase === 'uploading'
+      ? 'Fatura yükleniyor…'
+      : loading
+        ? 'Kaydediliyor...'
+        : editId
+          ? 'Güncelle'
+          : 'Taslak olarak kaydet';
 
   const inp = (hasErr: boolean): React.CSSProperties => ({
     width: '100%',
@@ -403,7 +411,6 @@ export function CreateExpensePage(): JSX.Element {
       </div>
 
       <div style={{ padding: '16px' }}>
-        {/* Form */}
         <form onSubmit={onSubmit} noValidate>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {/* Category */}
@@ -515,30 +522,16 @@ export function CreateExpensePage(): JSX.Element {
             <div>
               <label htmlFor="expense-due-date" style={labelSt}>
                 Vade Tarihi{requiresDueDate ? ' *' : ''}
-                {requiresDueDate && (
-                  <span
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 400,
-                      color: 'var(--color-text-muted)',
-                      marginLeft: 4,
-                    }}
-                  >
-                    ({selectedCategory?.name} için zorunlu)
-                  </span>
-                )}
-                {!requiresDueDate && (
-                  <span
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 400,
-                      color: 'var(--color-text-muted)',
-                      marginLeft: 4,
-                    }}
-                  >
-                    (opsiyonel)
-                  </span>
-                )}
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 400,
+                    color: 'var(--color-text-muted)',
+                    marginLeft: 4,
+                  }}
+                >
+                  {requiresDueDate ? `(${selectedCategory?.name} için zorunlu)` : '(opsiyonel)'}
+                </span>
               </label>
               <Controller
                 control={control}
@@ -582,41 +575,27 @@ export function CreateExpensePage(): JSX.Element {
             </div>
 
             {/* Submit */}
-            {(!isSaved || editId || Boolean(savedId)) && (
-              <button
-                type="submit"
-                disabled={loading || uploadIsBusy || uploadState.failed > 0}
-                style={{
-                  padding: '14px',
-                  borderRadius: 12,
-                  border: 'none',
-                  background:
-                    loading || uploadIsBusy || uploadState.failed > 0
-                      ? 'var(--color-border)'
-                      : 'var(--color-primary)',
-                  color: '#fff',
-                  fontWeight: 700,
-                  fontSize: 16,
-                  cursor:
-                    loading || uploadIsBusy || uploadState.failed > 0 ? 'not-allowed' : 'pointer',
-                  width: '100%',
-                }}
-              >
-                {loading
-                  ? 'Kaydediliyor...'
-                  : uploadIsBusy
-                    ? 'Fatura yükleniyor…'
-                    : uploadState.failed > 0
-                      ? 'Yüklemeyi tamamlayın'
-                      : editId
-                        ? 'Güncelle'
-                        : 'Taslak olarak kaydet'}
-              </button>
-            )}
+            <button
+              type="submit"
+              disabled={loading}
+              style={{
+                padding: '14px',
+                borderRadius: 12,
+                border: 'none',
+                background: loading ? 'var(--color-border)' : 'var(--color-primary)',
+                color: '#fff',
+                fontWeight: 700,
+                fontSize: 16,
+                cursor: loading ? 'not-allowed' : 'pointer',
+                width: '100%',
+              }}
+            >
+              {submitLabel}
+            </button>
           </div>
         </form>
 
-        {/* ── Belge / Fatura alanı — her zaman görünür ── */}
+        {/* ── Belge / Fatura alanı ── */}
         <div style={{ marginTop: 24 }}>
           <div
             style={{
@@ -630,80 +609,13 @@ export function CreateExpensePage(): JSX.Element {
             FATURALAR (opsiyonel)
           </div>
 
-          {/* Edit mode OR post-save: real uploader with view/replace/delete */}
-          {isSaved && savedExpenseId ? (
-            <AttachmentUploader
-              expenseId={savedExpenseId}
-              onFilesChange={setUploadedFiles}
-              disabled={!isOnline}
-              initialFiles={pendingFiles}
-              onUploadStateChange={handleUploadStateChange}
-            />
-          ) : (
-            /* Pre-save: local pending queue */
-            <div className="attachment-uploader">
-              {/* Hidden inputs */}
-              <input
-                ref={pendingCameraRef}
-                className="visually-hidden"
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                capture="environment"
-                onChange={(event) => void onPendingFileInput(event)}
-              />
-              <input
-                ref={pendingGalleryRef}
-                className="visually-hidden"
-                type="file"
-                accept="image/jpeg,image/png,image/webp,application/pdf"
-                multiple
-                onChange={(event) => void onPendingFileInput(event)}
-              />
-
-              {/* Buttons — always visible */}
-              <div className="attachment-action-row">
-                <button
-                  type="button"
-                  className="upload-action-btn"
-                  onClick={() => pendingCameraRef.current?.click()}
-                >
-                  <Camera size={20} />
-                  <span>Fotoğraf Çek</span>
-                </button>
-                <button
-                  type="button"
-                  className="upload-action-btn"
-                  onClick={() => pendingGalleryRef.current?.click()}
-                >
-                  <ImagePlus size={20} />
-                  <span>Fotoğraf Yükle</span>
-                </button>
-                {pendingFiles.length > 0 && (
-                  <small className="attachment-count">{pendingFiles.length} belge hazır</small>
-                )}
-              </div>
-
-              {/* Pending file cards */}
-              {pendingFiles.length > 0 && (
-                <div className="attachment-list">
-                  {pendingFiles.map((file) => (
-                    <PendingFileCard
-                      key={`${file.name}-${file.lastModified}`}
-                      file={file}
-                      onRemove={() => removePending(file)}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {pendingFiles.length === 0 && (
-                <p className="attachment-help">
-                  Fatura orijinal ölçüleriyle eklenecek; kırpma veya yeniden boyutlandırma
-                  uygulanmayacak. Zorunlu alanlar doluysa seçtiğiniz fatura hemen yüklenecek.
-                </p>
-              )}
-            </div>
-          )}
+          <AttachmentUploader
+            uploads={uploads}
+            maxFiles={uploadLimits.maxFiles}
+            maxFileSizeBytes={uploadLimits.maxFileSizeBytes}
+            disabled={!isOnline}
+            awaitingExpense={!savedExpenseId}
+          />
         </div>
       </div>
 
@@ -724,37 +636,3 @@ const errSt: React.CSSProperties = {
   fontSize: 12,
   margin: '4px 0 0',
 };
-
-// ── PendingFileCard ───────────────────────────────────────────────────────────
-
-function PendingFileCard({ file, onRemove }: { file: File; onRemove: () => void }) {
-  const url = useMemo(
-    () => (file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined),
-    [file],
-  );
-  useEffect(() => {
-    return () => {
-      if (url) URL.revokeObjectURL(url);
-    };
-  }, [url]);
-
-  return (
-    <article className="attachment-preview">
-      <span className="attachment-thumbnail">{url ? <img src={url} alt="" /> : <FileText />}</span>
-      <div className="attachment-meta">
-        <strong title={file.name}>{file.name}</strong>
-        <small>{Math.ceil(file.size / 1024)} KB · Yükleme hazırlanıyor…</small>
-      </div>
-      <div className="attachment-card-actions">
-        <button
-          type="button"
-          className="attachment-icon-button danger"
-          aria-label={`${file.name} kaldır`}
-          onClick={onRemove}
-        >
-          <X size={14} />
-        </button>
-      </div>
-    </article>
-  );
-}

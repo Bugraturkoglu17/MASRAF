@@ -51,11 +51,11 @@ export default (): { app: AppConfig } => {
   return {
     app: {
       env: env.NODE_ENV,
-      environment: env.APP_ENVIRONMENT ?? env.NODE_ENV,
+      environment: env.APP_ENVIRONMENT || env.NODE_ENV,
       version: env.APP_VERSION,
       commitSha: env.APP_COMMIT_SHA,
       buildDate: env.APP_BUILD_DATE,
-      port: Number(env.PORT ?? env.API_PORT ?? 4000),
+      port: Number(env.PORT || env.API_PORT || 4000),
       webUrl: env.WEB_URL,
       apiUrl: env.API_URL,
       corsOrigins: env.CORS_ORIGINS.split(',').map((origin) => origin.trim()),
@@ -75,9 +75,12 @@ export default (): { app: AppConfig } => {
       storage: {
         provider: 's3',
         endpoint: env.R2_ENDPOINT,
-        publicEndpoint: env.R2_PUBLIC_ENDPOINT ?? env.R2_ENDPOINT,
+        // `||` şart: process.env ham okunduğu için boş string gelebilir ve `??`
+        // boş string'e düşmez. Boş bırakılan R2_PUBLIC_ENDPOINT, S3Client'ı
+        // sessizce AWS varsayılanına (s3.<region>.amazonaws.com) yönlendirirdi.
+        publicEndpoint: env.R2_PUBLIC_ENDPOINT || env.R2_ENDPOINT,
         region: env.R2_REGION,
-        bucket: env.R2_BUCKET ?? env.R2_BUCKET_NAME ?? '',
+        bucket: env.R2_BUCKET || env.R2_BUCKET_NAME || '',
         accessKeyId: env.R2_ACCESS_KEY_ID,
         secretAccessKey: env.R2_SECRET_ACCESS_KEY,
         forcePathStyle: isEnabled(env.R2_FORCE_PATH_STYLE),
