@@ -3,6 +3,8 @@
 # ─────────────────────────────────────────────────────────────────────────────
 FROM node:22.23.1-alpine3.23 AS deps
 
+# Prisma query engine OpenSSL'e dinamik bağlanır.
+RUN apk add --no-cache openssl
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 
 WORKDIR /app
@@ -38,9 +40,11 @@ RUN cd apps/api && \
 
 RUN pnpm --filter @masraf/api build
 
-# Doğrulama: enum'lar erişilebilir mi?
+# Doğrulama: enum'lar erişilebilir mi ve musl/openssl-3.0 engine üretildi mi?
 RUN cd apps/api && \
-    node -e "const c=require('@prisma/client'); if(!c.PermissionAction){console.error('HATA: PermissionAction tanimsiz');process.exit(1);} console.log('Prisma client dogrulandi.')"
+    node -e "const c=require('@prisma/client'); if(!c.PermissionAction){console.error('HATA: PermissionAction tanimsiz');process.exit(1);} console.log('Prisma enum dogrulandi.')"
+RUN find /app -name 'libquery_engine-linux-musl-openssl-3.0.x*' | grep -q . \
+      || (echo "HATA: linux-musl-openssl-3.0.x query engine bulunamadi" && exit 1)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Aşama 3: Production imajı
@@ -48,6 +52,7 @@ RUN cd apps/api && \
 # ─────────────────────────────────────────────────────────────────────────────
 FROM node:22.23.1-alpine3.23 AS production
 
+RUN apk add --no-cache openssl
 RUN addgroup -S masraf && adduser -S masraf -G masraf
 
 COPY --from=builder /app /app
