@@ -33,7 +33,8 @@ RUN pnpm --filter @masraf/api build
 # `pnpm deploy --prod` izole bir node_modules üretir, ancak @prisma/client'ın
 # `require('.prisma/client/default')` çağrısı generate edilmiş client'a ulaşamaz.
 # Bu yüzden builder ağacı olduğu gibi taşınır; generate'in yazdığı yapı korunur.
-RUN node -e "const c=require('@prisma/client'); if(!c.PermissionAction) { console.error('DOGRULAMA BASARISIZ: Prisma enum export edilmemis'); process.exit(1); } console.log('Prisma client dogrulandi.')"
+# @prisma/client workspace bağımlılığıdır; root değil apps/api altında çözümlenir.
+RUN cd apps/api && node -e "const c=require('@prisma/client'); if(!c.PermissionAction) { console.error('DOGRULAMA BASARISIZ: Prisma enum export edilmemis'); process.exit(1); } console.log('Prisma client dogrulandi.')"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Aşama 3: Production imajı
