@@ -31,20 +31,20 @@ RUN pnpm --filter @masraf/api db:generate
 RUN pnpm --filter @masraf/api build
 RUN pnpm --filter @masraf/api --prod deploy /prod/api
 
-# pnpm deploy, @prisma/client'ı orijinal npm paketinden kopyalar;
-# prisma generate'in virtual store'a yazdığı schema export'ları (PermissionAction vb.)
-# ve .prisma/client (runtime) production node_modules'e manuel olarak taşınır.
+# @prisma/client/index.js `require('.prisma/client/default')` yapar — Node bu bare
+# specifier'ı kendi *realpath*'inden yukarı arar. pnpm symlink kullandığı için hedef,
+# deploy içindeki gerçek @prisma/client dizininin node_modules kardeşi olmalıdır.
 RUN set -e; \
-    VSTORE=/app/node_modules/.pnpm; \
-    PKG=$(find "$VSTORE" -maxdepth 5 -path "*/@prisma/client" -type d 2>/dev/null | head -1); \
-    CLIENT=$(find "$VSTORE" -maxdepth 5 -path "*/.prisma/client" -type d 2>/dev/null | head -1); \
-    if [ -z "$PKG" ] || [ -z "$CLIENT" ]; then \
-      echo "HATA: pnpm virtual store'da Prisma generated client bulunamadi"; \
+    CLIENT=$(find /app/node_modules/.pnpm -maxdepth 5 -path "*/node_modules/.prisma/client" -type d | head -1); \
+    REAL=$(realpath /prod/api/node_modules/@prisma/client); \
+    DEST=$(dirname "$(dirname "$REAL")"); \
+    if [ -z "$CLIENT" ] || [ ! -d "$DEST" ]; then \
+      echo "HATA: Prisma generated client veya hedef node_modules bulunamadi"; \
       exit 1; \
     fi; \
-    cp -rf "$PKG/" /prod/api/node_modules/@prisma/client/; \
-    mkdir -p /prod/api/node_modules/.prisma; \
-    cp -r "$CLIENT" /prod/api/node_modules/.prisma/client
+    mkdir -p "$DEST/.prisma"; \
+    cp -r "$CLIENT" "$DEST/.prisma/client"; \
+    node -e "const c=require('/prod/api/node_modules/@prisma/client'); if(!c.PermissionAction) { console.error('DOGRULAMA BASARISIZ: PermissionAction export edilmemis'); process.exit(1); } console.log('Prisma client dogrulandi.')"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Aşama 3: Production imajı
