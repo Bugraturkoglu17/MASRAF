@@ -41,9 +41,9 @@ RUN addgroup -S masraf && adduser -S masraf -G masraf
 WORKDIR /app
 
 COPY --from=builder /prod/api/node_modules ./node_modules
-# Prisma client devDep olduğu için prod deploy'a dahil değil;
-# builder'dan doğrudan kopyalanır
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+# pnpm, Prisma client'ı schema'nın bulunduğu paketin node_modules'una yazar:
+# apps/api/node_modules/.prisma/client (kök node_modules değil)
+COPY --from=builder /app/apps/api/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/apps/api/dist ./dist
 COPY --from=builder /app/apps/api/prisma ./prisma
 
