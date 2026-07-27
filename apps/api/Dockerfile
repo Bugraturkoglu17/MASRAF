@@ -33,7 +33,7 @@ RUN pnpm --filter @masraf/api --prod deploy /prod/api
 
 # pnpm .prisma/client'ı virtual store içine yazar; konumu değişken olduğu için
 # build sırasında bulunup sabit bir yola taşınır
-RUN find / -name "client" -path "*.prisma*" -type d 2>/dev/null | head -1 | xargs -I{} cp -r {} /prisma-client
+RUN find /app -path "*/.prisma/client" -type d 2>/dev/null | head -1 | xargs -I{} cp -r {} /prisma-client
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Aşama 3: Production imajı
