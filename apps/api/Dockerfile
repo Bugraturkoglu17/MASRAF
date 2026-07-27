@@ -39,6 +39,9 @@ RUN pnpm --filter @masraf/api build
 # Üretim bağımlılıklarını izole et (pnpm deploy, workspace symlink'lerini çözer)
 RUN pnpm --filter @masraf/api --prod deploy /prod/api
 
+# pnpm deploy yeni node_modules oluşturur; Prisma client'ı bu dizinde yeniden üret
+RUN cd /prod/api && npx prisma generate
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Aşama 3: Üretim imajı (minimal, non-root)
 # ─────────────────────────────────────────────────────────────────────────────
