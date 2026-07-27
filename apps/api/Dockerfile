@@ -31,6 +31,10 @@ RUN pnpm --filter @masraf/api db:generate
 RUN pnpm --filter @masraf/api build
 RUN pnpm --filter @masraf/api --prod deploy /prod/api
 
+# pnpm .prisma/client'ı virtual store içine yazar; konumu değişken olduğu için
+# build sırasında bulunup sabit bir yola taşınır
+RUN find / -name "client" -path "*.prisma*" -type d 2>/dev/null | head -1 | xargs -I{} cp -r {} /prisma-client
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Aşama 3: Production imajı
 # ─────────────────────────────────────────────────────────────────────────────
@@ -41,9 +45,7 @@ RUN addgroup -S masraf && adduser -S masraf -G masraf
 WORKDIR /app
 
 COPY --from=builder /prod/api/node_modules ./node_modules
-# pnpm, Prisma client'ı schema'nın bulunduğu paketin node_modules'una yazar:
-# apps/api/node_modules/.prisma/client (kök node_modules değil)
-COPY --from=builder /app/apps/api/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /prisma-client ./node_modules/.prisma/client
 COPY --from=builder /app/apps/api/dist ./dist
 COPY --from=builder /app/apps/api/prisma ./prisma
 
