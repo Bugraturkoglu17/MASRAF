@@ -18,7 +18,7 @@ for (const [name, path, expected] of checks) {
   const response = await fetch(`${baseUrl}${path}`, {
     method: name === 'login-contract' ? 'POST' : 'GET',
     headers: name === 'login-contract' ? { 'content-type': 'application/json' } : undefined,
-    body: name === 'login-contract' ? JSON.stringify({ email: 'invalid', password: 'invalid' }) : undefined,
+    body: name === 'login-contract' ? JSON.stringify({ identifier: 'invalid', password: 'invalid' }) : undefined,
     redirect: 'manual',
   });
   if (!expected.includes(response.status)) {

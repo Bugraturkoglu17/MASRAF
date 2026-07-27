@@ -24,6 +24,16 @@ import { AuthService } from './auth.service';
 const REFRESH_COOKIE_NAME = 'masraf_refresh_token';
 
 /**
+ * @Throttle decorator'ı sınıf tanımlanırken değerlendiği için ConfigService
+ * enjekte edilemez; değerler doğrudan process.env'den okunur. ConfigModule
+ * (app.module.ts'te bu modülden önce import edilir) .env dosyasını senkron
+ * yüklediği için bu noktada değerler hazırdır. Env yoksa güvenli varsayılana
+ * düşülür — üretimde kaba kuvvet denemelerine karşı koruma korunur.
+ */
+const AUTH_RATE_TTL_MS = Number(process.env.RATE_LIMIT_TTL_MS) || 60_000;
+const AUTH_RATE_MAX = Number(process.env.AUTH_RATE_LIMIT_MAX) || 5;
+
+/**
  * Karar: access token yalnızca JSON gövdesinde döner ve frontend'de yalnızca
  * bellekte (React state) tutulur, localStorage'a yazılmaz — XSS ile çalınma
  * riskini azaltır. Refresh token httpOnly + Secure + SameSite=Strict cookie
@@ -39,7 +49,7 @@ export class AuthController {
   ) {}
 
   @Public()
-  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Throttle({ default: { limit: AUTH_RATE_MAX, ttl: AUTH_RATE_TTL_MS } })
   @Post('login')
   @UsePipes(new ZodValidationPipe(loginSchema))
   async login(
@@ -53,7 +63,7 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Throttle({ default: { limit: AUTH_RATE_MAX * 2, ttl: AUTH_RATE_TTL_MS } })
   @Post('refresh')
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response, @Ip() ip: string) {
     this.assertTrustedOrigin(req);
@@ -67,7 +77,7 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @Throttle({ default: { limit: AUTH_RATE_MAX * 4, ttl: AUTH_RATE_TTL_MS } })
   @Post('logout')
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     this.assertTrustedOrigin(req);

@@ -23,26 +23,48 @@ export function LoginPage(): JSX.Element {
     formState: { errors, isSubmitting },
   } = useForm<LoginInput>({ resolver: zodResolver(loginSchema) });
 
-  const onSubmit = handleSubmit(async (values) => {
-    setFormError(null);
-    try {
-      const currentUser = await login(values.identifier, values.password);
-      const from = (location.state as { from?: Location })?.from;
-      const requestedPath = from ? `${from.pathname}${from.search}${from.hash}` : undefined;
-      const redirectTo = currentUser.mustChangePassword
-        ? '/change-password'
-        : !currentUser.profileCompleted
-          ? '/complete-profile'
-          : getPostLoginPath(currentUser.role, requestedPath);
-      navigate(redirectTo, { replace: true });
-    } catch (error) {
-      if (error instanceof ApiError && error.statusCode === 401) {
-        setFormError('E-posta, telefon veya şifre hatalı.');
-      } else {
-        setFormError('Giriş yapılamadı. Lütfen tekrar deneyin.');
+  const onSubmit = handleSubmit(
+    async (values) => {
+      setFormError(null);
+      try {
+        const currentUser = await login(values.identifier, values.password);
+        const from = (location.state as { from?: Location })?.from;
+        const requestedPath = from ? `${from.pathname}${from.search}${from.hash}` : undefined;
+        const redirectTo = currentUser.mustChangePassword
+          ? '/change-password'
+          : !currentUser.profileCompleted
+            ? '/complete-profile'
+            : getPostLoginPath(currentUser.role, requestedPath);
+        navigate(redirectTo, { replace: true });
+      } catch (error) {
+        if (error instanceof ApiError && error.statusCode === 401) {
+          setFormError('E-posta, telefon veya şifre hatalı.');
+        } else if (error instanceof ApiError && error.statusCode === 429) {
+          // Ard arda denemede sunucu 429 döner; genel "tekrar deneyin" mesajı
+          // kullanıcıyı hemen yeniden denemeye itip kilidi sürekli yeniler.
+          setFormError(
+            'Çok fazla giriş denemesi yapıldı. Lütfen 1 dakika bekleyip tekrar deneyin.',
+          );
+        } else {
+          setFormError('Giriş yapılamadı. Lütfen tekrar deneyin.');
+        }
       }
-    }
-  });
+    },
+    (validationErrors) => {
+      // Doğrulama, bu formda karşılığı olmayan bir alanda patlarsa (istemci ile
+      // sunucu şema sürümleri ayrışmışsa — ör. eski bir service worker önbelleği
+      // hâlâ eski paketi çalıştırıyorsa) hiçbir alan hatası render edilemez ve
+      // buton kullanıcıya sessizce ölü görünür. Bu durumda form seviyesinde uyar.
+      const renderable = Object.keys(validationErrors).some(
+        (field) => field === 'identifier' || field === 'password',
+      );
+      if (!renderable) {
+        setFormError(
+          'Uygulamanın eski bir sürümü çalışıyor. Lütfen sayfayı yenileyin (Ctrl+Shift+R).',
+        );
+      }
+    },
+  );
 
   return (
     <main className="auth-shell">
