@@ -28,14 +28,15 @@ COPY packages/ ./packages/
 COPY apps/api/ ./apps/api/
 
 RUN pnpm --filter @masraf/shared-types build && pnpm --filter @masraf/shared-validation build
-RUN pnpm --filter @masraf/api build
 
-# Prisma generate: sanal depodaki @prisma/client'a şema özgü kodu yazar.
+# Prisma generate: nest build'den ÖNCE çalışmalı — TypeScript tip üretimi için gerekli.
 # DATABASE_URL/DIRECT_URL generate için sahte ama geçerli formatta olmalı.
 RUN cd apps/api && \
     DATABASE_URL="postgresql://x:x@localhost/x?sslmode=require" \
     DIRECT_URL="postgresql://x:x@localhost/x?sslmode=require" \
     pnpm exec prisma generate
+
+RUN pnpm --filter @masraf/api build
 
 # Doğrulama: enum'lar erişilebilir mi?
 RUN cd apps/api && \
