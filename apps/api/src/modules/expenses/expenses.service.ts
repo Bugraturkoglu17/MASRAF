@@ -1,5 +1,5 @@
 import type { PaginationQuery } from '@masraf/shared-types';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 import { ConflictAppException, NotFoundAppException } from '../../common/exceptions/app.exception';
@@ -32,6 +32,8 @@ export interface UpdateExpenseInput {
 
 @Injectable()
 export class ExpensesService {
+  private readonly logger = new Logger(ExpensesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditLogs: AuditLogsService,
@@ -599,25 +601,16 @@ export class ExpensesService {
       await tx.approval.create({
         data: { expenseId: expense.id, approverId, decision: 'APPROVED', decidedAt: new Date() },
       });
-      await this.auditLogs.record(
-        {
-          organizationId,
-          actorId: approverId,
-          action: 'APPROVE',
-          resource: 'EXPENSE',
-          resourceId: expense.id,
-        },
-        tx,
-      );
-      await this.notifications.create(
-        organizationId,
-        expense.userId,
-        'Masrafınız onaylandı',
-        `${expense.title} başlıklı masrafınız onaylandı.`,
-        'IN_APP',
-        tx,
-        { expenseId: expense.id, eventKey: `expense-approved:${expense.id}` },
-      );
+    });
+    await this.recordDecisionSideEffects({
+      organizationId,
+      actorId: approverId,
+      action: 'APPROVE',
+      expenseId: expense.id,
+      userId: expense.userId,
+      notificationTitle: 'Masrafınız onaylandı',
+      notificationBody: `${expense.title} başlıklı masrafınız onaylandı.`,
+      eventKey: `expense-approved:${expense.id}`,
     });
     this.realtime.emit({
       type: 'EXPENSE_APPROVED',
@@ -662,26 +655,17 @@ export class ExpensesService {
           decidedAt: new Date(),
         },
       });
-      await this.auditLogs.record(
-        {
-          organizationId,
-          actorId: approverId,
-          action: 'REJECT',
-          resource: 'EXPENSE',
-          resourceId: expense.id,
-          metadata: { reason },
-        },
-        tx,
-      );
-      await this.notifications.create(
-        organizationId,
-        expense.userId,
-        'Masrafınız reddedildi',
-        `${expense.title} başlıklı masrafınız reddedildi: ${reason}`,
-        'IN_APP',
-        tx,
-        { expenseId: expense.id, eventKey: `expense-rejected:${expense.id}` },
-      );
+    });
+    await this.recordDecisionSideEffects({
+      organizationId,
+      actorId: approverId,
+      action: 'REJECT',
+      expenseId: expense.id,
+      userId: expense.userId,
+      metadata: { reason },
+      notificationTitle: 'Masrafınız reddedildi',
+      notificationBody: `${expense.title} başlıklı masrafınız reddedildi: ${reason}`,
+      eventKey: `expense-rejected:${expense.id}`,
     });
     this.realtime.emit({
       type: 'EXPENSE_REJECTED',
@@ -737,28 +721,21 @@ export class ExpensesService {
           reason,
         },
       });
-      await this.auditLogs.record(
-        {
-          organizationId,
-          actorId,
-          action: 'UPDATE',
-          resource: 'EXPENSE',
-          resourceId: id,
-          metadata: { transition: `${expense.status}->CANCELLED`, reason },
-        },
-        tx,
-      );
-      if (!isOwner) {
-        await this.notifications.create(
-          organizationId,
-          expense.userId,
-          'Masrafınız iptal edildi',
-          `${expense.title} başlıklı masrafınız iptal edildi: ${reason}`,
-          'IN_APP',
-          tx,
-          { expenseId: expense.id, eventKey: `expense-cancelled:${expense.id}` },
-        );
-      }
+    });
+    await this.recordDecisionSideEffects({
+      organizationId,
+      actorId,
+      action: 'UPDATE',
+      expenseId: id,
+      metadata: { transition: `${expense.status}->CANCELLED`, reason },
+      ...(isOwner
+        ? {}
+        : {
+            userId: expense.userId,
+            notificationTitle: 'Masrafınız iptal edildi',
+            notificationBody: `${expense.title} başlıklı masrafınız iptal edildi: ${reason}`,
+            eventKey: `expense-cancelled:${expense.id}`,
+          }),
     });
     this.realtime.emit({
       type: 'EXPENSE_CANCELLED',
@@ -766,6 +743,60 @@ export class ExpensesService {
       payload: { expenseId: id, expenseNumber: expense.expenseNumber, reason },
     });
     return this.findByIdScoped(id, organizationId);
+  }
+
+  private async recordDecisionSideEffects(input: {
+    organizationId: string;
+    actorId: string;
+    action: 'APPROVE' | 'REJECT' | 'UPDATE';
+    expenseId: string;
+    metadata?: Record<string, unknown>;
+    userId?: string;
+    notificationTitle?: string;
+    notificationBody?: string;
+    eventKey?: string;
+  }): Promise<void> {
+    const jobs: Array<{ name: 'audit' | 'notification'; run: () => Promise<unknown> }> = [
+      {
+        name: 'audit',
+        run: () =>
+          this.auditLogs.record({
+            organizationId: input.organizationId,
+            actorId: input.actorId,
+            action: input.action,
+            resource: 'EXPENSE',
+            resourceId: input.expenseId,
+            metadata: input.metadata,
+          }),
+      },
+    ];
+
+    if (input.userId && input.notificationTitle && input.notificationBody && input.eventKey) {
+      const { userId, notificationTitle, notificationBody, eventKey } = input;
+      jobs.push({
+        name: 'notification',
+        run: () =>
+          this.notifications.create(
+            input.organizationId,
+            userId,
+            notificationTitle,
+            notificationBody,
+            'IN_APP',
+            this.prisma,
+            { expenseId: input.expenseId, eventKey },
+          ),
+      });
+    }
+
+    const results = await Promise.allSettled(jobs.map((job) => job.run()));
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') return;
+      const job = jobs[index]!;
+      this.logger.error(
+        `Masraf kararı ${job.name} yan etkisi kaydedilemedi. expenseId=${input.expenseId} organizationId=${input.organizationId}`,
+        result.reason instanceof Error ? result.reason.stack : String(result.reason),
+      );
+    });
   }
 
   private async assertPending(id: string, organizationId: string) {

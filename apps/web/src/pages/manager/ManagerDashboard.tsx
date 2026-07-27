@@ -18,7 +18,7 @@ import { useToast } from '@/components/feedback/toast-context';
 import { PanelBrandMark } from '@/components/PanelBrandMark';
 import { ExpenseDetailSheet } from '@/components/ui/ExpenseDetailSheet';
 import { useAuth } from '@/features/auth/auth-context';
-import { apiFetch, getApiErrorMessage } from '@/lib/api-client';
+import { ApiError, apiFetch, getApiErrorMessage } from '@/lib/api-client';
 import { formatTry } from '@/lib/money';
 
 interface ManagerCounts {
@@ -210,7 +210,12 @@ export function ManagerDashboard(): JSX.Element {
             ? 'Masraf reddedildi.'
             : 'Masraf iptal edildi.',
       ),
-    onError: (error) => showToast(getApiErrorMessage(error, 'İşlem tamamlanamadı.'), 'error'),
+    onError: (error) =>
+      showToast(
+        'İşlem tamamlanamadı. Lütfen tekrar deneyin.',
+        'error',
+        error instanceof ApiError && error.requestId ? `Talep: ${error.requestId}` : undefined,
+      ),
   });
 
   return (

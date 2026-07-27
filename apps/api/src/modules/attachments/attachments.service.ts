@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 
 import {
   ConflictAppException,
+  ExternalServiceAppException,
   ForbiddenAppException,
   NotFoundAppException,
 } from '../../common/exceptions/app.exception';
@@ -100,7 +101,20 @@ export class AttachmentsService {
     if (!fileKey.startsWith(`attachments/${organizationId}/`)) {
       throw new ForbiddenAppException('Dosya anahtarı organizasyon kapsamı dışında.');
     }
-    if (!(await this.storageService.fileExists(fileKey))) {
+    let uploadedFileExists = false;
+    try {
+      uploadedFileExists = await this.storageService.fileExists(fileKey);
+    } catch (error) {
+      this.logger.error(
+        `Yüklenen R2 objesi doğrulanamadı. expenseId=${expenseId}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+      throw new ExternalServiceAppException(
+        'Yüklenen dosya depolama servisinde doğrulanamadı. Lütfen tekrar deneyin.',
+        'STORAGE_VERIFY_FAILED',
+      );
+    }
+    if (!uploadedFileExists) {
       throw new NotFoundAppException('Yüklenen dosya');
     }
 
@@ -150,7 +164,14 @@ export class AttachmentsService {
           error: cleanupError instanceof Error ? cleanupError.name : 'UnknownError',
         });
       }
-      throw error;
+      this.logger.error(
+        `Attachment metadata kaydı başarısız. expenseId=${expenseId}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+      throw new ExternalServiceAppException(
+        'Dosya aktarıldı ancak kaydı tamamlanamadı. Lütfen yeniden deneyin.',
+        'ATTACHMENT_METADATA_FAILED',
+      );
     }
   }
 

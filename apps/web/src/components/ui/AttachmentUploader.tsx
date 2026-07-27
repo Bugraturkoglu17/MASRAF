@@ -2,11 +2,12 @@ import { Camera, Eye, FileText, ImagePlus, RefreshCw, RepeatIcon, Trash2, X } fr
 import { useEffect, useRef, useState } from 'react';
 
 import { useToast } from '@/components/feedback/toast-context';
-import { apiFetch, getApiErrorMessage } from '@/lib/api-client';
+import { ApiError, apiFetch, getApiErrorMessage } from '@/lib/api-client';
 import {
   DEFAULT_MAX_ATTACHMENT_SIZE,
   getAttachmentMimeType,
   getAttachmentValidationError,
+  getUploadTimeoutMs,
 } from '@/lib/attachment-validation';
 
 export interface UploadedFile {
@@ -41,6 +42,48 @@ const FALLBACK_CONFIG = {
   maxFileSizeBytes: DEFAULT_MAX_ATTACHMENT_SIZE,
   allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf'],
 };
+
+class StorageUploadError extends Error {
+  constructor(
+    public readonly code: string,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+function getStorageHttpError(status: number): StorageUploadError {
+  if (status === 400)
+    return new StorageUploadError(
+      'R2_BAD_REQUEST',
+      'Depolama isteği reddedildi. Dosya türü veya imzalı URL geçersiz.',
+    );
+  if (status === 401 || status === 403)
+    return new StorageUploadError(
+      'R2_ACCESS_DENIED',
+      'Depolama servisi yükleme yetkisini reddetti.',
+    );
+  if (status === 404)
+    return new StorageUploadError(
+      'R2_BUCKET_NOT_FOUND',
+      'Depolama alanı bulunamadı veya endpoint hatalı.',
+    );
+  if (status >= 500)
+    return new StorageUploadError(
+      'R2_UNAVAILABLE',
+      'Depolama servisi geçici olarak yanıt veremiyor.',
+    );
+  return new StorageUploadError(
+    'R2_UPLOAD_REJECTED',
+    `Depolama servisi yüklemeyi reddetti (HTTP ${status}).`,
+  );
+}
+
+function getUploadErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) return `${error.message} (${error.code})`;
+  if (error instanceof StorageUploadError) return `${error.message} (${error.code})`;
+  return getApiErrorMessage(error, 'Yükleme başarısız. (UPLOAD_UNKNOWN)');
+}
 
 export function AttachmentUploader({
   expenseId,
@@ -103,12 +146,18 @@ export function AttachmentUploader({
 
   // ── Upload helpers ────────────────────────────────────────────────────────
 
-  const putWithProgress = (url: string, file: File, mimeType: string, localId: string) =>
+  const putWithProgress = (
+    url: string,
+    file: File,
+    mimeType: string,
+    localId: string,
+    timeoutMs: number,
+  ) =>
     new Promise<void>((resolve, reject) => {
       const req = new XMLHttpRequest();
       req.open('PUT', url);
       req.setRequestHeader('Content-Type', mimeType);
-      req.timeout = 60_000;
+      req.timeout = timeoutMs;
       req.upload.onprogress = (ev) => {
         if (!ev.lengthComputable) return;
         const pct = Math.max(1, Math.min(95, Math.round((ev.loaded / ev.total) * 95)));
@@ -117,16 +166,21 @@ export function AttachmentUploader({
         );
       };
       req.onload = () =>
-        req.status >= 200 && req.status < 300
-          ? resolve()
-          : reject(new Error(`Dosya depolamaya aktarılamadı (HTTP ${req.status}).`));
+        req.status >= 200 && req.status < 300 ? resolve() : reject(getStorageHttpError(req.status));
       req.onerror = () =>
         reject(
-          new Error(
-            'Dosya depolama servisine ulaşılamadı. Bağlantı veya depolama CORS ayarını kontrol edin.',
+          new StorageUploadError(
+            'R2_CORS_OR_NETWORK',
+            'Depolama servisine ulaşılamadı. Ağ bağlantısı veya R2 CORS ayarı geçersiz.',
           ),
         );
-      req.ontimeout = () => reject(new Error('Dosya yükleme 60 saniye içinde tamamlanamadı.'));
+      req.ontimeout = () =>
+        reject(
+          new StorageUploadError(
+            'R2_UPLOAD_TIMEOUT',
+            'Dosya yükleme bağlantısı zaman aşımına uğradı.',
+          ),
+        );
       req.send(file);
     });
 
@@ -136,14 +190,15 @@ export function AttachmentUploader({
       items.map((i) => (i.localId === localId ? { ...i, progress: 0, error: undefined } : i)),
     );
     try {
-      const signed = await apiFetch<{ uploadUrl: string; fileKey: string }>(
+      const signed = await apiFetch<{ uploadUrl: string; fileKey: string; expiresIn: number }>(
         '/attachments/upload-url',
         {
           method: 'POST',
           body: { expenseId, fileName: file.name, mimeType, fileSize: file.size },
         },
       );
-      await putWithProgress(signed.uploadUrl, file, mimeType, localId);
+      const uploadTimeoutMs = getUploadTimeoutMs(signed.expiresIn);
+      await putWithProgress(signed.uploadUrl, file, mimeType, localId, uploadTimeoutMs);
       const completed = await apiFetch<UploadedFile>('/attachments/complete', {
         method: 'POST',
         body: {
@@ -160,9 +215,7 @@ export function AttachmentUploader({
     } catch (error) {
       setQueue((items) =>
         items.map((i) =>
-          i.localId === localId
-            ? { ...i, progress: 0, error: getApiErrorMessage(error, 'Yükleme başarısız.') }
-            : i,
+          i.localId === localId ? { ...i, progress: 0, error: getUploadErrorMessage(error) } : i,
         ),
       );
     }
@@ -222,10 +275,7 @@ export function AttachmentUploader({
 
   // ── File selection ────────────────────────────────────────────────────────
 
-  const onFileInputChange = (
-    e: React.ChangeEvent<HTMLInputElement>,
-    replaceId?: string,
-  ) => {
+  const onFileInputChange = (e: React.ChangeEvent<HTMLInputElement>, replaceId?: string) => {
     const files = Array.from(e.target.files ?? []);
     e.target.value = '';
     if (files.length === 0) return;
@@ -255,7 +305,8 @@ export function AttachmentUploader({
       const { url } = await apiFetch<{ url: string }>(`/attachments/${item.id}/download-url`);
       if (item.mimeType === 'application/pdf') {
         const opened = window.open(url, '_blank', 'noopener,noreferrer');
-        if (!opened) showToast('PDF açılamadı. Tarayıcı açılır pencere iznini kontrol edin.', 'error');
+        if (!opened)
+          showToast('PDF açılamadı. Tarayıcı açılır pencere iznini kontrol edin.', 'error');
       } else {
         setLightbox(url);
       }

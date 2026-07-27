@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react';
 import { ManagerExpenseCard, type ManagerExpense } from '@/components/expenses/ExpenseCards';
 import { useToast } from '@/components/feedback/toast-context';
 import { ExpenseDetailSheet } from '@/components/ui/ExpenseDetailSheet';
-import { apiFetch, getApiErrorMessage } from '@/lib/api-client';
+import { ApiError, apiFetch } from '@/lib/api-client';
 
 interface PagedResult {
   items: ManagerExpense[];
@@ -103,7 +103,12 @@ export function ManagerPendingPage(): JSX.Element {
             ? 'Masraf reddedildi.'
             : 'Masraf iptal edildi.',
       ),
-    onError: (error) => showToast(getApiErrorMessage(error, 'İşlem tamamlanamadı.'), 'error'),
+    onError: (error) =>
+      showToast(
+        'İşlem tamamlanamadı. Lütfen tekrar deneyin.',
+        'error',
+        error instanceof ApiError && error.requestId ? `Talep: ${error.requestId}` : undefined,
+      ),
   });
 
   return (

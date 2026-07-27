@@ -78,8 +78,16 @@ export class S3StorageProvider implements StorageProvider {
     try {
       await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
       return true;
-    } catch {
-      return false;
+    } catch (error) {
+      const storageError = error as { name?: string; $metadata?: { httpStatusCode?: number } };
+      if (
+        storageError.name === 'NotFound' ||
+        storageError.name === 'NoSuchKey' ||
+        storageError.$metadata?.httpStatusCode === 404
+      ) {
+        return false;
+      }
+      throw error;
     }
   }
 
@@ -87,9 +95,13 @@ export class S3StorageProvider implements StorageProvider {
     key: string,
     expiresInSeconds = this.defaultSignedUrlTtl,
   ): Promise<string> {
-    return getSignedUrl(this.signingClient, new GetObjectCommand({ Bucket: this.bucket, Key: key }), {
-      expiresIn: expiresInSeconds,
-    });
+    return getSignedUrl(
+      this.signingClient,
+      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      {
+        expiresIn: expiresInSeconds,
+      },
+    );
   }
 
   /** @deprecated getSignedDownloadUrl() kullanın. */

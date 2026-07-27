@@ -51,6 +51,16 @@ describe('validateEnv', () => {
     expect(() => validateEnv(rest)).toThrow(/R2_ENDPOINT/);
   });
 
+  it('R2_BUCKET_NAME değişkenini R2_BUCKET alternatifi olarak kabul eder', () => {
+    const { R2_BUCKET, ...rest } = validEnv;
+    expect(validateEnv({ ...rest, R2_BUCKET_NAME: R2_BUCKET }).R2_BUCKET_NAME).toBe(R2_BUCKET);
+  });
+
+  it('R2 bucket adı tamamen eksikse anlaşılır hata verir', () => {
+    const { R2_BUCKET, ...rest } = validEnv;
+    expect(() => validateEnv(rest)).toThrow(/R2_BUCKET/);
+  });
+
   it('production ortamında HTTP origin ve SSL olmayan veritabanını reddeder', () => {
     expect(() =>
       validateEnv({

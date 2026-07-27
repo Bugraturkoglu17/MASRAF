@@ -86,7 +86,7 @@ describe('ExpensesService security invariants', () => {
     expect(tx.approval.create).not.toHaveBeenCalled();
   });
 
-  it('onay, audit ve bildirimi aynı transaction içinde kaydeder', async () => {
+  it('onayı atomik kaydeder, audit ve bildirimi ana transaction sonrasında oluşturur', async () => {
     const expense = {
       id: 'expense-1',
       organizationId: 'org-1',
@@ -110,15 +110,45 @@ describe('ExpensesService security invariants', () => {
 
     await service.approve('expense-1', 'org-1', 'manager-1');
 
-    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ action: 'APPROVE' }), tx);
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ action: 'APPROVE' }));
     expect(notifications.create).toHaveBeenCalledWith(
       'org-1',
       'user-1',
       expect.any(String),
       expect.any(String),
       'IN_APP',
-      tx,
+      prisma,
       { expenseId: 'expense-1', eventKey: 'expense-approved:expense-1' },
+    );
+  });
+
+  it('audit veya bildirim hatası ana masraf onayını geri almaz', async () => {
+    const expense = {
+      id: 'expense-1',
+      organizationId: 'org-1',
+      userId: 'user-1',
+      status: 'PENDING',
+      title: 'Konaklama',
+      expenseNumber: '1001',
+    };
+    const tx = {
+      expense: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      expenseStatusHistory: { create: jest.fn().mockResolvedValue({}) },
+      approval: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      expense: { findFirst: jest.fn().mockResolvedValue(expense) },
+      $transaction: jest.fn(async (callback) => callback(tx)),
+    } as unknown as PrismaService;
+    const service = new ExpensesService(prisma, audit, notifications, realtime);
+    jest.mocked(audit.record).mockRejectedValueOnce(new Error('audit unavailable'));
+    jest.mocked(notifications.create).mockRejectedValueOnce(new Error('notification unavailable'));
+
+    await expect(service.approve('expense-1', 'org-1', 'manager-1')).resolves.toEqual(
+      expect.objectContaining(expense),
+    );
+    expect(tx.expense.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'APPROVED' }) }),
     );
   });
 });

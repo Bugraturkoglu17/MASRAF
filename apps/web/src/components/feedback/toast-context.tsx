@@ -14,11 +14,12 @@ export interface Toast {
   id: number;
   message: string;
   variant: ToastVariant;
+  detail?: string;
 }
 
 interface ToastContextValue {
   toasts: Toast[];
-  showToast: (message: string, variant?: ToastVariant) => void;
+  showToast: (message: string, variant?: ToastVariant, detail?: string) => void;
   dismissToast: (id: number) => void;
 }
 
@@ -35,9 +36,9 @@ export function ToastProvider({ children }: { children: ReactNode }): JSX.Elemen
   }, []);
 
   const showToast = useCallback(
-    (message: string, variant: ToastVariant = 'info') => {
+    (message: string, variant: ToastVariant = 'info', detail?: string) => {
       const id = ++idRef.current;
-      setToasts((current) => [...current, { id, message, variant }]);
+      setToasts((current) => [...current.slice(-1), { id, message, variant, detail }]);
       window.setTimeout(() => dismissToast(id), AUTO_DISMISS_MS);
     },
     [dismissToast],

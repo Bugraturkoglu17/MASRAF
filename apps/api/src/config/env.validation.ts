@@ -42,7 +42,8 @@ export const envSchema = z
       z.string().url().optional(),
     ),
     R2_REGION: z.string().default('auto'),
-    R2_BUCKET: z.string().min(1, 'R2_BUCKET zorunludur.'),
+    R2_BUCKET: z.string().min(1).optional(),
+    R2_BUCKET_NAME: z.string().min(1).optional(),
     R2_ACCESS_KEY_ID: z.string().min(1, 'R2_ACCESS_KEY_ID zorunludur.'),
     R2_SECRET_ACCESS_KEY: z.string().min(1, 'R2_SECRET_ACCESS_KEY zorunludur.'),
     R2_FORCE_PATH_STYLE: boolFromString,
@@ -90,6 +91,13 @@ export const envSchema = z
     MAINTENANCE_MESSAGE: z.string().max(300).default('Planlı bakım çalışması devam ediyor.'),
   })
   .superRefine((env, ctx) => {
+    if (!env.R2_BUCKET && !env.R2_BUCKET_NAME) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['R2_BUCKET'],
+        message: 'R2_BUCKET veya R2_BUCKET_NAME zorunludur.',
+      });
+    }
     if (env.NODE_ENV !== 'production') return;
 
     const issue = (path: string, message: string) =>
@@ -114,6 +122,13 @@ export const envSchema = z
     }
     if (!env.R2_ACCOUNT_ID)
       issue('R2_ACCOUNT_ID', 'Production ortamında R2_ACCOUNT_ID zorunludur.');
+    if (env.R2_ACCOUNT_ID) {
+      const endpointHost = new URL(env.R2_ENDPOINT).hostname.toLowerCase();
+      const expectedHost = `${env.R2_ACCOUNT_ID.toLowerCase()}.r2.cloudflarestorage.com`;
+      if (endpointHost.endsWith('.r2.cloudflarestorage.com') && endpointHost !== expectedHost) {
+        issue('R2_ENDPOINT', 'R2_ENDPOINT, tanımlı R2_ACCOUNT_ID ile eşleşmiyor.');
+      }
+    }
     if (env.APP_ENVIRONMENT !== 'production') {
       issue('APP_ENVIRONMENT', 'Production ortamında APP_ENVIRONMENT=production olmalıdır.');
     }
@@ -133,9 +148,11 @@ export const envSchema = z
       issue('JWT_ACCESS_SECRET', 'Production secret değerleri placeholder olamaz.');
     }
     if (
-      [env.R2_ACCESS_KEY_ID, env.R2_SECRET_ACCESS_KEY, env.R2_BUCKET].some((value) =>
-        placeholder.test(value),
-      )
+      [
+        env.R2_ACCESS_KEY_ID,
+        env.R2_SECRET_ACCESS_KEY,
+        env.R2_BUCKET ?? env.R2_BUCKET_NAME ?? '',
+      ].some((value) => placeholder.test(value))
     ) {
       issue('R2_ACCESS_KEY_ID', 'Production R2 değerleri placeholder olamaz.');
     }

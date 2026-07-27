@@ -106,9 +106,16 @@ describe('S3StorageProvider (R2 uyumlu)', () => {
       await expect(provider.exists('org/key')).resolves.toBe(true);
     });
 
-    it('HeadObject başarısız olursa false döner', async () => {
-      mockSend.mockRejectedValueOnce(new Error('Not Found'));
+    it('HeadObject gerçekten bulunamadıysa false döner', async () => {
+      mockSend.mockRejectedValueOnce(Object.assign(new Error('Not Found'), { name: 'NotFound' }));
       await expect(provider.exists('org/missing')).resolves.toBe(false);
+    });
+
+    it('yetki veya bağlantı hatasını bulunamadı gibi gizlemez', async () => {
+      mockSend.mockRejectedValueOnce(
+        Object.assign(new Error('Access denied'), { name: 'AccessDenied' }),
+      );
+      await expect(provider.exists('org/denied')).rejects.toThrow('Access denied');
     });
   });
 

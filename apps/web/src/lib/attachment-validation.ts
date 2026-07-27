@@ -1,5 +1,9 @@
 export const DEFAULT_MAX_ATTACHMENT_SIZE = 15 * 1024 * 1024;
 
+export function getUploadTimeoutMs(expiresInSeconds: number): number {
+  return Math.max(120_000, Math.min(Math.max(1, expiresInSeconds - 30) * 1000, 600_000));
+}
+
 const SUPPORTED_MIME_TYPES = [
   'image/jpeg',
   'image/png',

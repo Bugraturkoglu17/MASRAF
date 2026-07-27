@@ -18,14 +18,14 @@ export function ToastViewport(): JSX.Element {
       aria-label="Bildirimler"
       style={{
         position: 'fixed',
-        bottom: 'max(16px, env(safe-area-inset-bottom))',
+        top: 'max(12px, env(safe-area-inset-top))',
         left: '50%',
         transform: 'translateX(-50%)',
         display: 'flex',
         flexDirection: 'column',
         gap: 8,
         zIndex: 1000,
-        width: 'min(420px, calc(100vw - 32px))',
+        width: 'min(360px, calc(100vw - 24px))',
       }}
     >
       {toasts.map((toast) => {
@@ -39,7 +39,7 @@ export function ToastViewport(): JSX.Element {
               color: style.fg,
               border: '1px solid var(--color-border)',
               borderRadius: 'var(--radius-md)',
-              padding: '12px 16px',
+              padding: '10px 12px',
               boxShadow: 'var(--shadow-md)',
               display: 'flex',
               justifyContent: 'space-between',
@@ -48,7 +48,14 @@ export function ToastViewport(): JSX.Element {
               fontSize: 14,
             }}
           >
-            <span>{toast.message}</span>
+            <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+              <strong style={{ display: 'block', fontWeight: 600 }}>{toast.message}</strong>
+              {toast.detail && (
+                <small style={{ display: 'block', marginTop: 3, opacity: 0.75, fontSize: 11 }}>
+                  {toast.detail}
+                </small>
+              )}
+            </span>
             <button
               type="button"
               onClick={() => dismissToast(toast.id)}

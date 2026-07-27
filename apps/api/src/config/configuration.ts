@@ -77,7 +77,7 @@ export default (): { app: AppConfig } => {
         endpoint: env.R2_ENDPOINT,
         publicEndpoint: env.R2_PUBLIC_ENDPOINT ?? env.R2_ENDPOINT,
         region: env.R2_REGION,
-        bucket: env.R2_BUCKET,
+        bucket: env.R2_BUCKET ?? env.R2_BUCKET_NAME ?? '',
         accessKeyId: env.R2_ACCESS_KEY_ID,
         secretAccessKey: env.R2_SECRET_ACCESS_KEY,
         forcePathStyle: isEnabled(env.R2_FORCE_PATH_STYLE),

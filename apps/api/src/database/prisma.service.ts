@@ -26,6 +26,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
   async isHealthy(): Promise<boolean> {
     await this.$queryRaw`SELECT 1`;
+    // Bağlantı tek başına yeterli değildir: production image yeni Prisma
+    // client ile açılıp migration uygulanmadıysa karar/bildirim akışı 500 verir.
+    await this.$queryRaw`SELECT "expenseId", "eventKey" FROM "notifications" LIMIT 0`;
     return true;
   }
 }

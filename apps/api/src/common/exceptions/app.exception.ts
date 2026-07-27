@@ -38,3 +38,9 @@ export class ValidationAppException extends AppException {
     super('VALIDATION_ERROR', message, HttpStatus.BAD_REQUEST, details);
   }
 }
+
+export class ExternalServiceAppException extends AppException {
+  constructor(message: string, code = 'EXTERNAL_SERVICE_UNAVAILABLE') {
+    super(code, message, HttpStatus.SERVICE_UNAVAILABLE);
+  }
+}

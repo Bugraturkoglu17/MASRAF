@@ -1,3 +1,5 @@
+/* eslint-disable no-console, no-undef */
+
 import fs from 'node:fs';
 
 import { DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3';
@@ -11,6 +13,20 @@ const prisma = new PrismaClient();
 let expenseId;
 let createdAttachments = [];
 
+function createStorageClient() {
+  return new S3Client({
+    region: process.env.R2_REGION || 'auto',
+    endpoint: process.env.R2_ENDPOINT,
+    forcePathStyle: process.env.R2_FORCE_PATH_STYLE === 'true',
+    credentials: {
+      accessKeyId: process.env.R2_ACCESS_KEY_ID,
+      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+    },
+    requestChecksumCalculation: 'WHEN_REQUIRED',
+    responseChecksumValidation: 'WHEN_REQUIRED',
+  });
+}
+
 async function request(path, options = {}) {
   const response = await fetch(`${api}${path}`, options);
   const text = await response.text();
@@ -19,7 +35,10 @@ async function request(path, options = {}) {
   return body;
 }
 
-const authHeaders = (token) => ({ Authorization: `Bearer ${token}`, Origin: 'http://localhost:3001' });
+const authHeaders = (token) => ({
+  Authorization: `Bearer ${token}`,
+  Origin: 'http://localhost:3001',
+});
 const login = async (identifier) =>
   (
     await request('/auth/login', {
@@ -44,17 +63,7 @@ async function expectExpenseError(token, payload, expected) {
 
 async function cleanup() {
   if (!expenseId) return;
-  const storage = new S3Client({
-    region: process.env.R2_REGION || 'auto',
-    endpoint: process.env.R2_ENDPOINT,
-    forcePathStyle: process.env.R2_FORCE_PATH_STYLE === 'true',
-    credentials: {
-      accessKeyId: process.env.R2_ACCESS_KEY_ID,
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-    },
-    requestChecksumCalculation: 'WHEN_REQUIRED',
-    responseChecksumValidation: 'WHEN_REQUIRED',
-  });
+  const storage = createStorageClient();
   for (const attachment of createdAttachments) {
     await storage
       .send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET, Key: attachment.fileKey }))
@@ -75,7 +84,43 @@ async function cleanup() {
   ]);
 }
 
+async function cleanupStaleRegressionData() {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const stale = await prisma.expense.findMany({
+    where: {
+      title: 'Otomatik Entegrasyon Testi',
+      description: 'Geçici test kaydı',
+      createdAt: { gte: since },
+    },
+    select: { id: true, attachments: { select: { id: true, fileKey: true } } },
+  });
+  if (!stale.length) return;
+
+  const staleExpenseIds = stale.map((item) => item.id);
+  const staleAttachments = stale.flatMap((item) => item.attachments);
+  const storage = createStorageClient();
+  for (const attachment of staleAttachments) {
+    await storage
+      .send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET, Key: attachment.fileKey }))
+      .catch(() => undefined);
+  }
+  await prisma.$transaction([
+    prisma.notification.deleteMany({ where: { expenseId: { in: staleExpenseIds } } }),
+    prisma.auditLog.deleteMany({
+      where: {
+        OR: [
+          { resourceId: { in: staleExpenseIds } },
+          { resourceId: { in: staleAttachments.map((item) => item.id) } },
+        ],
+      },
+    }),
+    prisma.attachment.deleteMany({ where: { expenseId: { in: staleExpenseIds } } }),
+    prisma.expense.deleteMany({ where: { id: { in: staleExpenseIds } } }),
+  ]);
+}
+
 try {
+  await cleanupStaleRegressionData();
   const userToken = await login(process.env.MASRAF_TEST_USER ?? 'kullanıcı@masraf.local');
   const categories = await request('/expense-categories', { headers: authHeaders(userToken) });
   const category = categories.find((item) => !item.requiresDueDate) ?? categories[0];
@@ -117,7 +162,17 @@ try {
     throw new Error(`Decimal tutar bozuldu: ${expense.amount}`);
   }
 
+  const jpegSeed = Buffer.from(
+    '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABBQJ//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPwF//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPwF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQAGPwJ//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPyF//9oADAMBAAIAAwAAABD/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/EH//xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/EH//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/EH//2Q==',
+    'base64',
+  );
+  const largeJpegSize = Math.floor(4.9 * 1024 * 1024);
   const files = [
+    {
+      bytes: jpegSeed,
+      name: 'fatura.jpg',
+      mime: 'image/jpeg',
+    },
     {
       path: new URL('../../web/public/icons/icon-192.png', import.meta.url),
       name: 'fatura.png',
@@ -128,9 +183,14 @@ try {
       name: 'fatura.pdf',
       mime: 'application/pdf',
     },
+    {
+      bytes: Buffer.concat([jpegSeed, Buffer.alloc(largeJpegSize - jpegSeed.length)]),
+      name: 'fatura-4-9mb.jpeg',
+      mime: 'image/jpeg',
+    },
   ];
   for (const file of files) {
-    const bytes = fs.readFileSync(file.path);
+    const bytes = file.bytes ?? fs.readFileSync(file.path);
     const signed = await request('/attachments/upload-url', {
       method: 'POST',
       headers: { ...authHeaders(userToken), 'content-type': 'application/json' },
@@ -168,7 +228,7 @@ try {
   const listedAfterRefresh = await request(`/attachments/expense/${expenseId}`, {
     headers: authHeaders(userToken),
   });
-  if (listed.length !== 2 || listedAfterRefresh.length !== 2) {
+  if (listed.length !== files.length || listedAfterRefresh.length !== files.length) {
     throw new Error('Ekler yenileme sonrası kalıcı değil.');
   }
   for (const attachment of listed) {
@@ -196,7 +256,7 @@ try {
     throw new Error(`Yönetici bildirimi tekil değil: ${managerEvents.length}`);
   }
   const detail = await request(`/expenses/${expenseId}`, { headers: authHeaders(managerToken) });
-  if (detail.attachments.length !== 2) throw new Error('Yönetici ekleri göremiyor.');
+  if (detail.attachments.length !== files.length) throw new Error('Yönetici ekleri göremiyor.');
 
   await request(`/expenses/${expenseId}/approve`, {
     method: 'POST',
@@ -225,8 +285,10 @@ try {
   console.log(
     JSON.stringify({
       ok: true,
+      jpgUpload: true,
       pngUpload: true,
       pdfUpload: true,
+      largeJpegUploadBytes: largeJpegSize,
       persistedAfterRefresh: true,
       managerCanOpen: true,
       dateLimits: true,
