@@ -61,7 +61,7 @@ export function UserExpensesPage(): JSX.Element {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['expenses'] });
       qc.invalidateQueries({ queryKey: ['expense-counts'] });
-      showToast('Masraf onaya gönderildi.', 'success');
+      showToast('Onaya gönderildi.', 'success');
       setSubmitTarget(null);
     },
     onError: (e: Error) => {

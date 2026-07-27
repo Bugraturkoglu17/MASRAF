@@ -749,6 +749,175 @@ textarea::placeholder {
   margin-left: 0.75rem;
 }
 
+.toast-viewport {
+  position: fixed;
+  z-index: 1250;
+  top: calc(env(safe-area-inset-top) + 68px);
+  right: max(12px, env(safe-area-inset-right));
+  width: min(
+    340px,
+    calc(100vw - 24px - env(safe-area-inset-left) - env(safe-area-inset-right))
+  );
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.app-toast {
+  --toast-accent: var(--color-info);
+  --toast-tint: var(--color-info-bg);
+  min-width: 0;
+  padding: 10px 8px 10px 11px;
+  border: 1px solid color-mix(in srgb, var(--toast-accent) 28%, var(--color-border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--toast-tint) 24%, var(--color-surface));
+  color: var(--color-text);
+  box-shadow: 0 12px 30px color-mix(in srgb, var(--color-sidebar-bg) 20%, transparent);
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 32px;
+  align-items: center;
+  gap: 9px;
+  pointer-events: auto;
+  will-change: transform, opacity;
+}
+
+.app-toast--success {
+  --toast-accent: var(--color-success);
+  --toast-tint: var(--color-success-bg);
+}
+
+.app-toast--error {
+  --toast-accent: var(--color-danger);
+  --toast-tint: var(--color-danger-bg);
+}
+
+.app-toast--warning {
+  --toast-accent: var(--color-warning);
+  --toast-tint: var(--color-warning-bg);
+}
+
+.app-toast--visible {
+  animation: toast-slide-in 260ms cubic-bezier(0.2, 0.75, 0.3, 1) both;
+}
+
+.app-toast--exiting {
+  animation: toast-slide-out 220ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+.app-toast__icon {
+  width: 20px;
+  height: 20px;
+  color: var(--toast-accent);
+  display: grid;
+  place-items: center;
+}
+
+.app-toast__icon svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.2;
+}
+
+.app-toast__content {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.app-toast__content strong {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.app-toast__content small {
+  overflow-wrap: anywhere;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.app-toast__content .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.app-toast__close {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.app-toast__close:hover {
+  background: color-mix(in srgb, var(--toast-accent) 10%, transparent);
+  color: var(--toast-accent);
+}
+
+.app-toast__close:active {
+  transform: scale(0.94);
+}
+
+.app-toast__close svg {
+  width: 16px;
+  height: 16px;
+}
+
+@keyframes toast-slide-in {
+  from {
+    opacity: 0;
+    transform: translate3d(calc(100% + 20px), 0, 0) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes toast-slide-out {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(calc(100% + 20px), 0, 0);
+  }
+}
+
+@media (min-width: 768px) {
+  .toast-viewport {
+    top: max(20px, env(safe-area-inset-top));
+    right: max(20px, env(safe-area-inset-right));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-toast--visible,
+  .app-toast--exiting {
+    animation-duration: 1ms;
+  }
+}
+
 .online-restored-toast,
 .pwa-update-toast,
 .pwa-install-banner {
@@ -2090,19 +2259,20 @@ textarea::placeholder {
 .user-home-tabs {
   flex: 1;
   min-width: 0;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  padding-left: 4px;
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+  padding: 0 4px;
 }
 
 .user-home-tabs button {
-  min-width: 0;
-  padding: 10px 3px 9px;
+  flex-shrink: 0;
+  padding: 12px 4px 11px;
   border: 0;
-  border-bottom: 2px solid transparent;
+  border-bottom: 3px solid transparent;
   background: transparent;
   color: var(--color-text-muted);
-  font-size: clamp(10px, 2.9vw, 11px);
+  font-size: 11px;
   font-weight: 600;
   display: inline-flex;
   align-items: center;
@@ -2138,13 +2308,14 @@ textarea::placeholder {
 }
 
 .user-home-tab-toolbar {
-  padding: 0 8px 0 4px;
+  flex: 0 0 auto;
+  padding: 0 12px 0 4px;
 }
 
 .user-home-tab-toolbar button {
-  width: 32px;
-  height: 32px;
-  min-height: 32px;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
   border: 1px solid var(--color-border);
   border-radius: 10px;
   background: transparent;
@@ -2153,6 +2324,26 @@ textarea::placeholder {
   display: grid;
   place-items: center;
   cursor: pointer;
+}
+
+@media (max-width: 359px) {
+  .user-home-tabs button {
+    padding-right: 2px;
+    padding-left: 2px;
+    font-size: 10px;
+    gap: 2px;
+  }
+
+  .user-home-tabs button small {
+    min-width: 14px;
+    padding-right: 3px;
+    padding-left: 3px;
+    font-size: 8px;
+  }
+
+  .user-home-tab-toolbar {
+    padding-right: 8px;
+  }
 }
 
 .expense-status-tabs {

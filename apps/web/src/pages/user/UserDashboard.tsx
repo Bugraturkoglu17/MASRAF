@@ -90,7 +90,7 @@ export function UserDashboard(): JSX.Element {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['expenses-home'] });
       void qc.invalidateQueries({ queryKey: ['expense-counts'] });
-      showToast('Masraf onaya gönderildi.', 'success');
+      showToast('Onaya gönderildi.', 'success');
       setSubmitTarget(null);
     },
     onError: (e: Error) => {
@@ -128,7 +128,9 @@ export function UserDashboard(): JSX.Element {
             onClick={() => navigate('/notifications')}
           >
             <Bell />
-            {unreadCount > 0 && <span className="notification-icon-badge">{Math.min(unreadCount, 99)}</span>}
+            {unreadCount > 0 && (
+              <span className="notification-icon-badge">{Math.min(unreadCount, 99)}</span>
+            )}
           </button>
         </div>
       </header>
