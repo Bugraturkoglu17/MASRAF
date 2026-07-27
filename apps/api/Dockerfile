@@ -27,6 +27,9 @@ WORKDIR /app
 COPY packages/ ./packages/
 COPY apps/api/ ./apps/api/
 
+# Workspace bağımlılıkları: shared paketler API'den önce derlenmeli
+RUN pnpm --filter @masraf/shared-types build && pnpm --filter @masraf/shared-validation build
+
 # Prisma şemasını generate et
 RUN pnpm --filter @masraf/api db:generate
 

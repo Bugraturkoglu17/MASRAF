@@ -39,6 +39,9 @@ WORKDIR /app
 COPY packages/ ./packages/
 COPY apps/web/ ./apps/web/
 
+# Workspace bağımlılıkları: shared paketler web'den önce derlenmeli
+RUN pnpm --filter @masraf/shared-types build && pnpm --filter @masraf/shared-validation build
+
 RUN pnpm --filter @masraf/web build
 
 # ─────────────────────────────────────────────────────────────────────────────
