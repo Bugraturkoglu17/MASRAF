@@ -17,7 +17,8 @@ COPY packages/tsconfig/package.json        ./packages/tsconfig/
 RUN pnpm install --frozen-lockfile --ignore-scripts
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Aşama 2: Build
+# Aşama 2: Build + Prisma generate
+# pnpm sanal deposunda generate → .prisma/client doğru sembolik bağ yoluna yazar.
 # ─────────────────────────────────────────────────────────────────────────────
 FROM deps AS builder
 
@@ -27,29 +28,32 @@ COPY packages/ ./packages/
 COPY apps/api/ ./apps/api/
 
 RUN pnpm --filter @masraf/shared-types build && pnpm --filter @masraf/shared-validation build
-RUN pnpm --filter @masraf/api db:generate
 RUN pnpm --filter @masraf/api build
 
-# `pnpm deploy --prod` izole bir node_modules üretir, ancak @prisma/client'ın
-# `require('.prisma/client/default')` çağrısı generate edilmiş client'a ulaşamaz.
-# Bu yüzden builder ağacı olduğu gibi taşınır; generate'in yazdığı yapı korunur.
-# @prisma/client workspace bağımlılığıdır; root değil apps/api altında çözümlenir.
-RUN cd apps/api && node -e "const c=require('@prisma/client'); if(!c.PermissionAction) { console.error('DOGRULAMA BASARISIZ: Prisma enum export edilmemis'); process.exit(1); } console.log('Prisma client dogrulandi.')"
+# Prisma generate: sanal depodaki @prisma/client'a şema özgü kodu yazar.
+# DATABASE_URL/DIRECT_URL generate için sahte ama geçerli formatta olmalı.
+RUN cd apps/api && \
+    DATABASE_URL="postgresql://x:x@localhost/x?sslmode=require" \
+    DIRECT_URL="postgresql://x:x@localhost/x?sslmode=require" \
+    pnpm exec prisma generate
+
+# Doğrulama: enum'lar erişilebilir mi?
+RUN cd apps/api && \
+    node -e "const c=require('@prisma/client'); if(!c.PermissionAction){console.error('HATA: PermissionAction tanimsiz');process.exit(1);} console.log('Prisma client dogrulandi.')"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Aşama 3: Production imajı
+# pnpm sembolik bağ yapısı bütünüyle kopyalanır; Node .prisma/client'ı bulabilir.
 # ─────────────────────────────────────────────────────────────────────────────
 FROM node:22.23.1-alpine3.23 AS production
 
 RUN addgroup -S masraf && adduser -S masraf -G masraf
 
-# Symlink yapısı pnpm için kritik: ağaç bir bütün olarak kopyalanır.
 COPY --from=builder /app /app
 
 RUN chown -R masraf:masraf /app
 
 WORKDIR /app/apps/api
-
 USER masraf
 
 ENV NODE_ENV=production
