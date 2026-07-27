@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Aşama 1: Bağımlılıkları kur (workspace symlink'leri dahil)
+# Aşama 1: Bağımlılıkları kur
 # ─────────────────────────────────────────────────────────────────────────────
 FROM node:22.23.1-alpine3.23 AS deps
 
@@ -7,7 +7,6 @@ RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 
 WORKDIR /app
 
-# Workspace manifest'lerini kopyala (önbellek katmanını maksimize eder)
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json                 ./apps/api/
 COPY packages/shared-types/package.json    ./packages/shared-types/
@@ -18,7 +17,7 @@ COPY packages/tsconfig/package.json        ./packages/tsconfig/
 RUN pnpm install --frozen-lockfile --ignore-scripts
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Aşama 2: Prisma client üret + TypeScript derle + prod deploy
+# Aşama 2: Build
 # ─────────────────────────────────────────────────────────────────────────────
 FROM deps AS builder
 
@@ -27,24 +26,13 @@ WORKDIR /app
 COPY packages/ ./packages/
 COPY apps/api/ ./apps/api/
 
-# Workspace bağımlılıkları: shared paketler API'den önce derlenmeli
 RUN pnpm --filter @masraf/shared-types build && pnpm --filter @masraf/shared-validation build
-
-# Prisma şemasını generate et
 RUN pnpm --filter @masraf/api db:generate
-
-# NestJS build
 RUN pnpm --filter @masraf/api build
-
-# Üretim bağımlılıklarını izole et (pnpm deploy, workspace symlink'lerini çözer)
 RUN pnpm --filter @masraf/api --prod deploy /prod/api
 
-# prisma CLI devDep olduğu için prod deploy'a dahil değil; generate edilmiş
-# client'ı builder aşamasından kopyala
-RUN cp -r /app/node_modules/.prisma /prod/api/node_modules/.prisma
-
 # ─────────────────────────────────────────────────────────────────────────────
-# Aşama 3: Üretim imajı (minimal, non-root)
+# Aşama 3: Production imajı
 # ─────────────────────────────────────────────────────────────────────────────
 FROM node:22.23.1-alpine3.23 AS production
 
@@ -52,13 +40,11 @@ RUN addgroup -S masraf && adduser -S masraf -G masraf
 
 WORKDIR /app
 
-# Üretim node_modules (pnpm deploy çıktısı)
 COPY --from=builder /prod/api/node_modules ./node_modules
-
-# Derleme çıktısı
+# Prisma client devDep olduğu için prod deploy'a dahil değil;
+# builder'dan doğrudan kopyalanır
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/apps/api/dist ./dist
-
-# Prisma migration dosyaları (production'da migrate deploy için gerekli)
 COPY --from=builder /app/apps/api/prisma ./prisma
 
 RUN chown -R masraf:masraf /app
