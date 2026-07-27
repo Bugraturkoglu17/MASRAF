@@ -29,22 +29,11 @@ COPY apps/api/ ./apps/api/
 RUN pnpm --filter @masraf/shared-types build && pnpm --filter @masraf/shared-validation build
 RUN pnpm --filter @masraf/api db:generate
 RUN pnpm --filter @masraf/api build
-RUN pnpm --filter @masraf/api --prod deploy /prod/api
 
-# @prisma/client/index.js `require('.prisma/client/default')` yapar — Node bu bare
-# specifier'ı kendi *realpath*'inden yukarı arar. pnpm symlink kullandığı için hedef,
-# deploy içindeki gerçek @prisma/client dizininin node_modules kardeşi olmalıdır.
-RUN set -e; \
-    CLIENT=$(find /app/node_modules/.pnpm -maxdepth 5 -path "*/node_modules/.prisma/client" -type d | head -1); \
-    REAL=$(realpath /prod/api/node_modules/@prisma/client); \
-    DEST=$(dirname "$(dirname "$REAL")"); \
-    if [ -z "$CLIENT" ] || [ ! -d "$DEST" ]; then \
-      echo "HATA: Prisma generated client veya hedef node_modules bulunamadi"; \
-      exit 1; \
-    fi; \
-    mkdir -p "$DEST/.prisma"; \
-    cp -r "$CLIENT" "$DEST/.prisma/client"; \
-    node -e "const c=require('/prod/api/node_modules/@prisma/client'); if(!c.PermissionAction) { console.error('DOGRULAMA BASARISIZ: PermissionAction export edilmemis'); process.exit(1); } console.log('Prisma client dogrulandi.')"
+# `pnpm deploy --prod` izole bir node_modules üretir, ancak @prisma/client'ın
+# `require('.prisma/client/default')` çağrısı generate edilmiş client'a ulaşamaz.
+# Bu yüzden builder ağacı olduğu gibi taşınır; generate'in yazdığı yapı korunur.
+RUN node -e "const c=require('@prisma/client'); if(!c.PermissionAction) { console.error('DOGRULAMA BASARISIZ: Prisma enum export edilmemis'); process.exit(1); } console.log('Prisma client dogrulandi.')"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Aşama 3: Production imajı
@@ -53,13 +42,12 @@ FROM node:22.23.1-alpine3.23 AS production
 
 RUN addgroup -S masraf && adduser -S masraf -G masraf
 
-WORKDIR /app
-
-COPY --from=builder /prod/api/node_modules ./node_modules
-COPY --from=builder /app/apps/api/dist ./dist
-COPY --from=builder /app/apps/api/prisma ./prisma
+# Symlink yapısı pnpm için kritik: ağaç bir bütün olarak kopyalanır.
+COPY --from=builder /app /app
 
 RUN chown -R masraf:masraf /app
+
+WORKDIR /app/apps/api
 
 USER masraf
 
