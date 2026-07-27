@@ -393,6 +393,8 @@ model Notification {
   channel        NotificationChannel @default(IN_APP)
   title          String
   body           String
+  expenseId      String?             @db.Uuid
+  eventKey       String?
   readAt         DateTime?
   createdAt      DateTime            @default(now())
 
@@ -400,6 +402,8 @@ model Notification {
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, readAt])
+  @@index([expenseId])
+  @@unique([userId, eventKey])
   @@map("notifications")
 }
 

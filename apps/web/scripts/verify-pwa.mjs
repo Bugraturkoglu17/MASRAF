@@ -19,7 +19,8 @@ assert(existsSync(resolve(dist, 'offline.html')), 'Offline ekranı build çıkt�
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 assert(manifest.name === 'Masraf Uygulaması', 'Manifest adı hatalı.');
 assert(manifest.display === 'standalone', 'Standalone modu eksik.');
-assert(manifest.orientation === 'portrait-primary', 'Portrait orientation eksik.');
+assert(manifest.orientation === 'portrait', 'Portrait orientation eksik.');
+assert(manifest.start_url === '/', 'PWA başlangıç adresi hatalı.');
 assert(manifest.lang === 'tr-TR', 'Manifest dili tr-TR değil.');
 assert(manifest.dir === 'ltr', 'Manifest yönü eksik.');
 assert(

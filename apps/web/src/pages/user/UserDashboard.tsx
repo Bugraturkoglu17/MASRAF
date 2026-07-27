@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BarChart2, Bell, MessageSquare, RefreshCw } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import {
@@ -36,6 +36,10 @@ interface PagedResult {
   meta: { totalItems: number };
 }
 
+interface NotificationSummary {
+  readAt: string | null;
+}
+
 export function UserDashboard(): JSX.Element {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -46,6 +50,18 @@ export function UserDashboard(): JSX.Element {
   const [deleteTarget, setDeleteTarget] = useState<ExpenseListItem | null>(null);
   const { showToast } = useToast();
   const qc = useQueryClient();
+
+  const { data: notifications = [] } = useQuery<NotificationSummary[]>({
+    queryKey: ['notifications'],
+    queryFn: () => apiFetch('/notifications'),
+    refetchInterval: 30_000,
+  });
+  const unreadCount = useMemo(
+    () => notifications.filter((notification) => !notification.readAt).length,
+    [notifications],
+  );
+
+  const activeDetailId = detailId ?? params.get('expense');
 
   const { data: counts } = useQuery<Counts>({
     queryKey: ['expense-counts'],
@@ -106,8 +122,13 @@ export function UserDashboard(): JSX.Element {
           <button type="button" aria-label="İstatistikler">
             <BarChart2 />
           </button>
-          <button type="button" aria-label="Bildirimler" onClick={() => navigate('/notifications')}>
+          <button
+            type="button"
+            aria-label={unreadCount ? `Bildirimler, ${unreadCount} okunmamış` : 'Bildirimler'}
+            onClick={() => navigate('/notifications')}
+          >
             <Bell />
+            {unreadCount > 0 && <span className="notification-icon-badge">{Math.min(unreadCount, 99)}</span>}
           </button>
         </div>
       </header>
@@ -173,7 +194,19 @@ export function UserDashboard(): JSX.Element {
         )}
       </main>
 
-      {detailId && <ExpenseDetailSheet expenseId={detailId} onClose={() => setDetailId(null)} />}
+      {activeDetailId && (
+        <ExpenseDetailSheet
+          expenseId={activeDetailId}
+          onClose={() => {
+            setDetailId(null);
+            if (params.has('expense')) {
+              const next = new URLSearchParams(params);
+              next.delete('expense');
+              setParams(next, { replace: true });
+            }
+          }}
+        />
+      )}
 
       {submitTarget && (
         <ExpenseSubmitDialog

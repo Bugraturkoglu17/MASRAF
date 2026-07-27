@@ -8,6 +8,7 @@ import { StatusBadge } from './StatusBadge';
 
 import { useToast } from '@/components/feedback/toast-context';
 import { apiFetch } from '@/lib/api-client';
+import { formatTry } from '@/lib/money';
 
 interface Attachment {
   id: string;
@@ -50,8 +51,7 @@ interface ExpenseDetailSheetProps {
   onClose: () => void;
 }
 
-const fmt = (n: string | number) =>
-  new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(Number(n));
+const fmt = formatTry;
 
 function formatDate(d?: string | null) {
   if (!d) return '—';

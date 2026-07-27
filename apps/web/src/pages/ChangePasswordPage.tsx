@@ -1,10 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 
 import { BrandLogo } from '@/components/BrandLogo';
 import { useToast } from '@/components/feedback/toast-context';
 import { useAuth } from '@/features/auth/auth-context';
+import { getRoleHome } from '@/features/auth/role-home';
 import { apiFetch, getApiErrorMessage } from '@/lib/api-client';
 
 const schema = z
@@ -20,8 +22,9 @@ const schema = z
 type FormValues = z.infer<typeof schema>;
 
 export function ChangePasswordPage(): JSX.Element {
-  const { refreshUser, logout } = useAuth();
+  const { user, refreshUser, logout } = useAuth();
   const { showToast } = useToast();
+  const navigate = useNavigate();
 
   const {
     register,
@@ -34,6 +37,7 @@ export function ChangePasswordPage(): JSX.Element {
       await apiFetch('/users/me/password', { method: 'PATCH', body: values });
       await refreshUser();
       showToast('Şifreniz güncellendi.', 'success');
+      navigate(user ? getRoleHome(user.role) : '/login', { replace: true });
     } catch (error) {
       showToast(getApiErrorMessage(error, 'Şifre güncellenemedi. Lütfen tekrar deneyin.'), 'error');
     }
@@ -44,9 +48,11 @@ export function ChangePasswordPage(): JSX.Element {
       <div style={cardStyle}>
         <div style={headerStyle}>
           <BrandLogo />
-          <h1 style={titleStyle}>Yeni Şifre Belirleyin</h1>
+          <h1 style={titleStyle}>{user?.mustChangePassword ? 'Yeni Şifre Belirleyin' : 'Şifre Değiştir'}</h1>
           <p style={subtitleStyle}>
-            Hesabınız geçici bir şifreyle oluşturuldu. Devam etmek için yeni bir şifre belirleyin.
+            {user?.mustChangePassword
+              ? 'Hesabınız geçici bir şifreyle oluşturuldu. Devam etmek için yeni bir şifre belirleyin.'
+              : 'Hesabınız için yeni ve güvenli bir şifre belirleyin.'}
           </p>
         </div>
 
@@ -101,7 +107,7 @@ function Field({
 }
 
 const pageStyle: React.CSSProperties = {
-  minHeight: '100vh',
+  minHeight: '100dvh',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',

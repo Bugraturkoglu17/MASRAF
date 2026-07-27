@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, CheckCheck } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 import { useToast } from '@/components/feedback/toast-context';
+import { useAuth } from '@/features/auth/auth-context';
 import { apiFetch, getApiErrorMessage } from '@/lib/api-client';
 
 interface NotificationItem {
@@ -11,11 +13,14 @@ interface NotificationItem {
   channel: 'IN_APP' | 'EMAIL';
   readAt: string | null;
   createdAt: string;
+  expenseId?: string | null;
 }
 
 export function NotificationsPage(): JSX.Element {
   const qc = useQueryClient();
   const { showToast } = useToast();
+  const { user } = useAuth();
+  const navigate = useNavigate();
 
   const { data: items = [], isLoading } = useQuery<NotificationItem[]>({
     queryKey: ['notifications'],
@@ -31,10 +36,7 @@ export function NotificationsPage(): JSX.Element {
 
   const markAllRead = useMutation({
     mutationFn: async () => {
-      const unread = items.filter((n) => !n.readAt);
-      await Promise.all(
-        unread.map((n) => apiFetch(`/notifications/${n.id}/read`, { method: 'PATCH' })),
-      );
+      await apiFetch('/notifications/read-all', { method: 'PATCH' });
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['notifications'] });
@@ -121,6 +123,16 @@ export function NotificationsPage(): JSX.Element {
                 item={item}
                 onMarkRead={() => markRead.mutate(item.id)}
                 busy={markRead.isPending}
+                onOpen={() => {
+                  markRead.mutate(item.id);
+                  if (item.expenseId) {
+                    navigate(
+                      user?.role === 'USER'
+                        ? `/?expense=${item.expenseId}`
+                        : `/manager?expense=${item.expenseId}`,
+                    );
+                  }
+                }}
               />
             ))}
           </div>
@@ -143,7 +155,21 @@ export function NotificationsPage(): JSX.Element {
           </h2>
           <div style={{ display: 'grid', gap: 8 }}>
             {read.map((item) => (
-              <NotificationCard key={item.id} item={item} busy={false} />
+              <NotificationCard
+                key={item.id}
+                item={item}
+                busy={false}
+                onOpen={
+                  item.expenseId
+                    ? () =>
+                        navigate(
+                          user?.role === 'USER'
+                            ? `/?expense=${item.expenseId}`
+                            : `/manager?expense=${item.expenseId}`,
+                        )
+                    : undefined
+                }
+              />
             ))}
           </div>
         </div>
@@ -156,14 +182,20 @@ function NotificationCard({
   item,
   onMarkRead,
   busy,
+  onOpen,
 }: {
   item: NotificationItem;
   onMarkRead?: () => void;
   busy: boolean;
+  onOpen?: () => void;
 }) {
   const isUnread = !item.readAt;
   return (
     <article
+      onClick={onOpen}
+      onKeyDown={onOpen ? (event) => event.key === 'Enter' && onOpen() : undefined}
+      role={onOpen ? 'button' : undefined}
+      tabIndex={onOpen ? 0 : undefined}
       style={{
         padding: '14px 16px',
         borderRadius: 12,
@@ -172,6 +204,7 @@ function NotificationCard({
         display: 'flex',
         gap: 12,
         alignItems: 'flex-start',
+        cursor: onOpen ? 'pointer' : 'default',
       }}
     >
       <div
@@ -218,7 +251,10 @@ function NotificationCard({
           type="button"
           aria-label="Okundu olarak işaretle"
           disabled={busy}
-          onClick={onMarkRead}
+          onClick={(event) => {
+            event.stopPropagation();
+            onMarkRead();
+          }}
           style={{
             padding: '6px 10px',
             borderRadius: 7,

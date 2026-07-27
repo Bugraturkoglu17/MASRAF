@@ -118,6 +118,7 @@ describe('ExpensesService security invariants', () => {
       expect.any(String),
       'IN_APP',
       tx,
+      { expenseId: 'expense-1', eventKey: 'expense-approved:expense-1' },
     );
   });
 });

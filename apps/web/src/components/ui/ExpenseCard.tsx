@@ -3,6 +3,8 @@ import { Edit2, Eye, Send, Trash2 } from 'lucide-react';
 import { DueDateBadge } from './DueDateBadge';
 import { StatusBadge } from './StatusBadge';
 
+import { formatTry } from '@/lib/money';
+
 type Status = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
 type DueUrgency = 'overdue' | 'today' | 'soon' | 'upcoming';
 
@@ -38,8 +40,7 @@ const statusBorderColors: Record<Status, string> = {
   CANCELLED: '#6b7280',
 };
 
-const fmt = (n: string | number) =>
-  new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(Number(n));
+const fmt = formatTry;
 
 export function ExpenseCard({
   expense,

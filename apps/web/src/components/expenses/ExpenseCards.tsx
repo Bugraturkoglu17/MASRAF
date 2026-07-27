@@ -15,6 +15,7 @@ import {
 
 import { DueDateBadge } from '@/components/ui/DueDateBadge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { formatTry } from '@/lib/money';
 
 export type ExpenseStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
 export type DueUrgency = 'overdue' | 'today' | 'soon' | 'upcoming';
@@ -41,8 +42,7 @@ export interface ExpenseListItem {
   attachments?: ExpenseAttachmentSummary[];
 }
 
-const money = (amount: string | number) =>
-  new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(Number(amount));
+const money = formatTry;
 const date = (value: string) => new Date(value).toLocaleDateString('tr-TR');
 
 export function MobileReceiptExpenseCard({

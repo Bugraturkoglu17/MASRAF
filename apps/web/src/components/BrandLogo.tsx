@@ -9,7 +9,7 @@ interface BrandLogoProps {
 export function BrandLogo({ subtitle, variant = 'full' }: BrandLogoProps): JSX.Element {
   return (
     <div className={`brand-logo brand-logo--${variant}`}>
-      <img className="brand-logo-mark" src="/logo-mark-animated.svg" alt="" aria-hidden="true" />
+      <img className="brand-logo-mark" src="/logo-mark-animated.svg?v=2" alt="" aria-hidden="true" />
       <div className="brand-logo-copy">
         <div className="brand-logo-name">Masraf</div>
         {subtitle && <div className="brand-logo-subtitle">{subtitle}</div>}

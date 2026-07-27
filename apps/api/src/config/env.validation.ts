@@ -37,6 +37,10 @@ export const envSchema = z
     STORAGE_PROVIDER: z.enum(['s3']).default('s3'),
     R2_ACCOUNT_ID: z.string().optional(),
     R2_ENDPOINT: z.string().min(1, 'R2_ENDPOINT zorunludur.'),
+    R2_PUBLIC_ENDPOINT: z.preprocess(
+      (value) => (value === '' ? undefined : value),
+      z.string().url().optional(),
+    ),
     R2_REGION: z.string().default('auto'),
     R2_BUCKET: z.string().min(1, 'R2_BUCKET zorunludur.'),
     R2_ACCESS_KEY_ID: z.string().min(1, 'R2_ACCESS_KEY_ID zorunludur.'),
@@ -105,6 +109,9 @@ export const envSchema = z
     if (!hasSsl(env.DIRECT_URL))
       issue('DIRECT_URL', 'Production DIRECT_URL sslmode=require içermelidir.');
     if (!isHttps(env.R2_ENDPOINT)) issue('R2_ENDPOINT', 'Production R2_ENDPOINT HTTPS olmalıdır.');
+    if (env.R2_PUBLIC_ENDPOINT && !isHttps(env.R2_PUBLIC_ENDPOINT)) {
+      issue('R2_PUBLIC_ENDPOINT', 'Production public depolama endpointi HTTPS olmalıdır.');
+    }
     if (!env.R2_ACCOUNT_ID)
       issue('R2_ACCOUNT_ID', 'Production ortamında R2_ACCOUNT_ID zorunludur.');
     if (env.APP_ENVIRONMENT !== 'production') {

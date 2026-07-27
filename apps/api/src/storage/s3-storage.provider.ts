@@ -25,6 +25,7 @@ import type { StorageProvider, UploadFileInput, UploadFileResult } from './stora
 export class S3StorageProvider implements StorageProvider {
   private readonly logger = new Logger(S3StorageProvider.name);
   private readonly client: S3Client;
+  private readonly signingClient: S3Client;
   private readonly bucket: string;
   private readonly defaultSignedUrlTtl: number;
 
@@ -33,9 +34,8 @@ export class S3StorageProvider implements StorageProvider {
     this.bucket = app.storage.bucket;
     this.defaultSignedUrlTtl = app.storage.signedUrlTtlSeconds;
 
-    this.client = new S3Client({
+    const commonOptions = {
       region: app.storage.region,
-      endpoint: app.storage.endpoint,
       forcePathStyle: app.storage.forcePathStyle,
       credentials: {
         accessKeyId: app.storage.accessKeyId,
@@ -44,6 +44,11 @@ export class S3StorageProvider implements StorageProvider {
       // MinIO ve R2 ile uyumluluk: otomatik CRC32 checksum'u devre dışı bırak
       requestChecksumCalculation: 'WHEN_REQUIRED',
       responseChecksumValidation: 'WHEN_REQUIRED',
+    } as const;
+    this.client = new S3Client({ ...commonOptions, endpoint: app.storage.endpoint });
+    this.signingClient = new S3Client({
+      ...commonOptions,
+      endpoint: app.storage.publicEndpoint,
     });
   }
 
@@ -82,7 +87,7 @@ export class S3StorageProvider implements StorageProvider {
     key: string,
     expiresInSeconds = this.defaultSignedUrlTtl,
   ): Promise<string> {
-    return getSignedUrl(this.client, new GetObjectCommand({ Bucket: this.bucket, Key: key }), {
+    return getSignedUrl(this.signingClient, new GetObjectCommand({ Bucket: this.bucket, Key: key }), {
       expiresIn: expiresInSeconds,
     });
   }
@@ -98,7 +103,7 @@ export class S3StorageProvider implements StorageProvider {
     expiresInSeconds = this.defaultSignedUrlTtl,
   ): Promise<string> {
     return getSignedUrl(
-      this.client,
+      this.signingClient,
       new PutObjectCommand({ Bucket: this.bucket, Key: key, ContentType: contentType }),
       { expiresIn: expiresInSeconds },
     );

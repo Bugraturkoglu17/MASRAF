@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { LogOut } from 'lucide-react';
+import { KeyRound, LogOut } from 'lucide-react';
 import { useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
@@ -63,7 +63,6 @@ export function UserProfilePage(): JSX.Element {
   const isUser = user?.role === 'USER';
   const ibanValue = useWatch({ control, name: 'iban' });
   const ibanDigitCount = (ibanValue ?? '').replace(/\D/g, '').length;
-  const hasRealEmail = Boolean(user?.email && !user.email.endsWith('@masraf.local'));
 
   const onSubmit = handleSubmit(async (values) => {
     const normalizedIban = normalizeTurkeyIban(values.iban ?? '');
@@ -106,15 +105,31 @@ export function UserProfilePage(): JSX.Element {
         <hr style={dividerStyle} />
 
         <form onSubmit={onSubmit} noValidate>
-          <div style={gridStyle}>
-            <Field label="Ad" error={errors.firstName?.message}>
-              <input {...register('firstName')} style={inputStyle(Boolean(errors.firstName))} />
+          <div className="profile-settings-fields">
+            <Field
+              label="Ad Soyad"
+              error={errors.firstName?.message ?? errors.lastName?.message}
+            >
+              <div className="profile-name-fields">
+                <input
+                  {...register('firstName')}
+                  aria-label="Ad"
+                  placeholder="Ad"
+                  style={inputStyle(Boolean(errors.firstName))}
+                />
+                <input
+                  {...register('lastName')}
+                  aria-label="Soyad"
+                  placeholder="Soyad"
+                  style={inputStyle(Boolean(errors.lastName))}
+                />
+              </div>
             </Field>
-            <Field label="Soyad" error={errors.lastName?.message}>
-              <input {...register('lastName')} style={inputStyle(Boolean(errors.lastName))} />
-            </Field>
-            <Field label="Telefon" error={errors.phone?.message}>
+            <Field label="Telefon Numarası" error={errors.phone?.message}>
               <input {...register('phone')} type="tel" style={inputStyle(Boolean(errors.phone))} />
+            </Field>
+            <Field label="E-posta">
+              <input value={user?.email ?? ''} readOnly style={readOnlyInputStyle} />
             </Field>
             {isUser && (
               <Field label="IBAN" error={errors.iban?.message}>
@@ -136,15 +151,20 @@ export function UserProfilePage(): JSX.Element {
                 <p style={ibanHelpStyle}>TR sonrası {ibanDigitCount}/24 rakam</p>
               </Field>
             )}
-            {hasRealEmail && (
-              <Field label="E-posta">
-                <input
-                  value={user?.email ?? ''}
-                  readOnly
-                  style={{ ...inputStyle(false), cursor: 'not-allowed', opacity: 0.7 }}
-                />
+            {!isUser && (
+              <Field label="IBAN">
+                <input value="Yalnızca kullanıcı hesaplarında tanımlanır" readOnly style={readOnlyInputStyle} />
               </Field>
             )}
+            <Field label="Firma">
+              <input value={user?.organization?.name ?? '—'} readOnly style={readOnlyInputStyle} />
+            </Field>
+            <Field label="Para Birimi">
+              <input value="TL" readOnly style={readOnlyInputStyle} />
+            </Field>
+            <Field label="Dil">
+              <input value="TR" readOnly style={readOnlyInputStyle} />
+            </Field>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
@@ -159,22 +179,20 @@ export function UserProfilePage(): JSX.Element {
         </form>
       </div>
 
-      {/* ── Oturumu Kapat ── */}
-      <div
-        style={{
-          marginTop: 24,
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)',
-          padding: '20px 24px',
-          boxShadow: 'var(--shadow-sm)',
-        }}
-      >
+      <div className="profile-account-actions">
+        <button
+          type="button"
+          onClick={() => navigate('/change-password')}
+          className="profile-password-button"
+        >
+          <KeyRound size={16} />
+          Şifre Değiştir
+        </button>
         <div style={{ marginBottom: 14 }}>
           <div
             style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-text)', marginBottom: 3 }}
           >
-            Oturumu Kapat
+            Çıkış Yap
           </div>
           <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
             Bu cihazdan güvenli çıkış yapın. Tüm yerel veriler temizlenir.
@@ -201,7 +219,7 @@ export function UserProfilePage(): JSX.Element {
           }}
         >
           <LogOut size={16} />
-          {loggingOut ? 'Çıkış yapılıyor…' : 'Oturumu Kapat'}
+          {loggingOut ? 'Çıkış yapılıyor…' : 'Çıkış Yap'}
         </button>
       </div>
     </div>
@@ -226,7 +244,7 @@ function Field({
   );
 }
 
-const pageStyle: React.CSSProperties = { padding: '28px 32px', maxWidth: 700 };
+const pageStyle: React.CSSProperties = { padding: '28px 32px 96px', maxWidth: 700, width: '100%' };
 const titleStyle: React.CSSProperties = {
   fontSize: 22,
   fontWeight: 700,
@@ -275,12 +293,6 @@ const dividerStyle: React.CSSProperties = {
   borderTop: '1px solid var(--color-border)',
   margin: '20px 0',
 };
-const gridStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '1fr 1fr',
-  gap: '16px 20px',
-  marginBottom: 24,
-};
 const labelStyle: React.CSSProperties = {
   display: 'block',
   fontSize: 13,
@@ -295,7 +307,7 @@ const inputStyle = (hasErr: boolean): React.CSSProperties => ({
   border: `1px solid ${hasErr ? 'var(--color-danger)' : 'var(--color-border)'}`,
   background: 'var(--color-bg)',
   color: 'var(--color-text)',
-  fontSize: 14,
+  fontSize: 16,
   boxSizing: 'border-box',
 });
 const errStyle: React.CSSProperties = {
@@ -309,6 +321,11 @@ const ibanHelpStyle: React.CSSProperties = {
   color: 'var(--color-text-muted)',
   fontSize: 12,
   textAlign: 'right',
+};
+const readOnlyInputStyle: React.CSSProperties = {
+  ...inputStyle(false),
+  cursor: 'default',
+  color: 'var(--color-text-muted)',
 };
 const saveBtnStyle = (disabled: boolean): React.CSSProperties => ({
   padding: '10px 28px',

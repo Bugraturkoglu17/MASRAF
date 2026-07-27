@@ -1,9 +1,10 @@
 import type { PaginationQuery } from '@masraf/shared-types';
 import { Injectable } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 import { ConflictAppException, NotFoundAppException } from '../../common/exceptions/app.exception';
 import { computeDueInfo } from '../../common/utils/due-date.util';
+import { assertExpenseDates } from '../../common/utils/expense-validation.util';
 import { buildPaginatedResult, toPrismaSkipTake } from '../../common/utils/pagination.util';
 import { PrismaService } from '../../database/prisma.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
@@ -14,7 +15,7 @@ export interface CreateExpenseInput {
   categoryId: string;
   title: string;
   description?: string;
-  amount: number;
+  amount: string;
   currency?: string;
   expenseDate: string;
   dueDate?: string;
@@ -24,7 +25,7 @@ export interface UpdateExpenseInput {
   categoryId?: string;
   title?: string;
   description?: string;
-  amount?: number;
+  amount?: string;
   expenseDate?: string;
   dueDate?: string;
 }
@@ -65,6 +66,7 @@ export class ExpensesService {
   }
 
   async createDraft(organizationId: string, userId: string, input: CreateExpenseInput) {
+    assertExpenseDates(input.expenseDate, input.dueDate);
     const category = await this.prisma.expenseCategory.findFirst({
       where: { id: input.categoryId, organizationId, deletedAt: null },
     });
@@ -85,7 +87,7 @@ export class ExpensesService {
           expenseCode,
           title: input.title,
           description: input.description,
-          amount: input.amount,
+          amount: new Prisma.Decimal(input.amount),
           currency: input.currency ?? 'TRY',
           expenseDate: new Date(input.expenseDate),
           dueDate: input.dueDate ? new Date(input.dueDate) : null,
@@ -129,6 +131,11 @@ export class ExpensesService {
     if (expense.status !== 'DRAFT')
       throw new ConflictAppException('Yalnızca taslak masraflar düzenlenebilir.');
 
+    assertExpenseDates(
+      input.expenseDate ?? expense.expenseDate.toISOString().slice(0, 10),
+      input.dueDate ?? expense.dueDate?.toISOString().slice(0, 10),
+    );
+
     if (input.categoryId || input.dueDate === undefined) {
       const categoryId = input.categoryId ?? expense.categoryId;
       const category = await this.prisma.expenseCategory.findFirst({
@@ -147,7 +154,7 @@ export class ExpensesService {
           ...(input.categoryId && { categoryId: input.categoryId }),
           ...(input.title && { title: input.title }),
           description: input.description,
-          ...(input.amount !== undefined && { amount: input.amount }),
+          ...(input.amount !== undefined && { amount: new Prisma.Decimal(input.amount) }),
           ...(input.expenseDate && { expenseDate: new Date(input.expenseDate) }),
           dueDate: input.dueDate ? new Date(input.dueDate) : expense.dueDate,
           updatedBy: userId,
@@ -264,6 +271,8 @@ export class ExpensesService {
             'Yeni bir masrafınız var.',
             `${userName} · #${expCode} · ${amtStr} · Gönderim: ${timeStr}`,
             'IN_APP',
+            this.prisma,
+            { expenseId: updated.id, eventKey: `expense-submitted:${updated.id}` },
           ),
         ),
       );
@@ -502,8 +511,8 @@ export class ExpensesService {
       approved,
       rejected,
       cancelled,
-      monthlyTotal: monthlyAgg._sum.amount?.toNumber() ?? 0,
-      payableTotal: payableAgg._sum.amount?.toNumber() ?? 0,
+      monthlyTotal: monthlyAgg._sum.amount?.toFixed(2) ?? '0.00',
+      payableTotal: payableAgg._sum.amount?.toFixed(2) ?? '0.00',
     };
   }
 
@@ -607,6 +616,7 @@ export class ExpensesService {
         `${expense.title} başlıklı masrafınız onaylandı.`,
         'IN_APP',
         tx,
+        { expenseId: expense.id, eventKey: `expense-approved:${expense.id}` },
       );
     });
     this.realtime.emit({
@@ -670,6 +680,7 @@ export class ExpensesService {
         `${expense.title} başlıklı masrafınız reddedildi: ${reason}`,
         'IN_APP',
         tx,
+        { expenseId: expense.id, eventKey: `expense-rejected:${expense.id}` },
       );
     });
     this.realtime.emit({
@@ -745,6 +756,7 @@ export class ExpensesService {
           `${expense.title} başlıklı masrafınız iptal edildi: ${reason}`,
           'IN_APP',
           tx,
+          { expenseId: expense.id, eventKey: `expense-cancelled:${expense.id}` },
         );
       }
     });

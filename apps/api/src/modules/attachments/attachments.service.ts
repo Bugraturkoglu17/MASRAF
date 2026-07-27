@@ -56,12 +56,17 @@ export class AttachmentsService {
     if (currentCount >= this.uploadLimits.maxFiles)
       throw new ConflictAppException(`En fazla ${this.uploadLimits.maxFiles} dosya eklenebilir.`);
 
-    assertValidAttachment(fileName, mimeType, fileSize, this.uploadLimits.maxSizeBytes);
+    const normalizedMimeType = assertValidAttachment(
+      fileName,
+      mimeType,
+      fileSize,
+      this.uploadLimits.maxSizeBytes,
+    );
 
     const { fileKey, uploadUrl, expiresIn } = await this.storageService.getSignedUploadUrl(
       organizationId,
       fileName,
-      mimeType,
+      normalizedMimeType,
     );
 
     return { fileKey, uploadUrl, expiresIn };
@@ -86,7 +91,12 @@ export class AttachmentsService {
     if (expense.status !== 'DRAFT')
       throw new ConflictAppException('Yalnızca taslak masraflara dosya eklenebilir.');
 
-    assertValidAttachment(fileName, mimeType, fileSize, this.uploadLimits.maxSizeBytes);
+    const normalizedMimeType = assertValidAttachment(
+      fileName,
+      mimeType,
+      fileSize,
+      this.uploadLimits.maxSizeBytes,
+    );
     if (!fileKey.startsWith(`attachments/${organizationId}/`)) {
       throw new ForbiddenAppException('Dosya anahtarı organizasyon kapsamı dışında.');
     }
@@ -111,7 +121,7 @@ export class AttachmentsService {
             expenseId,
             fileKey,
             fileName: displayFileName,
-            mimeType,
+            mimeType: normalizedMimeType,
             sizeBytes: fileSize,
             sha256: fileHash ?? '',
             uploadedById: userId,

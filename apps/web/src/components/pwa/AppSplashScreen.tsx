@@ -1,5 +1,3 @@
-import { Receipt } from 'lucide-react';
-
 export function AppSplashScreen({
   label = 'Oturum kontrol ediliyor…',
 }: {
@@ -8,7 +6,7 @@ export function AppSplashScreen({
   return (
     <div className="app-splash" role="status" aria-live="polite">
       <div className="app-splash-logo">
-        <Receipt size={30} aria-hidden="true" />
+        <img src="/logo-mark-animated.svg?v=2" alt="" aria-hidden="true" />
       </div>
       <strong>Masraf</strong>
       <span>{label}</span>

@@ -24,4 +24,10 @@ export class NotificationsController {
     await this.service.markRead(id, user.id);
     return { success: true };
   }
+
+  @Patch('read-all')
+  async markAllRead(@CurrentUser() user: AuthenticatedUser) {
+    await this.service.markAllRead(user.id);
+    return { success: true };
+  }
 }

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle,
   BanknoteIcon,
+  Bell,
   CheckCircle,
   Clock,
   RefreshCw,
@@ -10,7 +11,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { ManagerExpenseCard, type ManagerExpense } from '@/components/expenses/ExpenseCards';
 import { useToast } from '@/components/feedback/toast-context';
@@ -18,19 +19,24 @@ import { PanelBrandMark } from '@/components/PanelBrandMark';
 import { ExpenseDetailSheet } from '@/components/ui/ExpenseDetailSheet';
 import { useAuth } from '@/features/auth/auth-context';
 import { apiFetch, getApiErrorMessage } from '@/lib/api-client';
+import { formatTry } from '@/lib/money';
 
 interface ManagerCounts {
   pending: number;
   approved: number;
   rejected: number;
   cancelled: number;
-  monthlyTotal: number;
-  payableTotal: number;
+  monthlyTotal: string;
+  payableTotal: string;
 }
 
 interface PagedResult {
   items: ManagerExpense[];
   meta: { totalItems: number; page: number; totalPages: number };
+}
+
+interface NotificationSummary {
+  readAt: string | null;
 }
 
 type Decision = { kind: 'approve' | 'reject' | 'cancel'; expense: ManagerExpense };
@@ -53,9 +59,6 @@ const SORT_LABELS: Record<SortOption, string> = {
   'amount-low': 'En düşük tutar',
 };
 
-const money = (n: number) =>
-  new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(n);
-
 function todayLabel() {
   return new Date().toLocaleDateString('tr-TR', {
     weekday: 'long',
@@ -70,6 +73,7 @@ export function ManagerDashboard(): JSX.Element {
   const { showToast } = useToast();
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
 
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -77,6 +81,20 @@ export function ManagerDashboard(): JSX.Element {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [decision, setDecision] = useState<Decision | null>(null);
   const [reason, setReason] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastRefreshAt, setLastRefreshAt] = useState<number | null>(null);
+
+  const { data: notifications = [] } = useQuery<NotificationSummary[]>({
+    queryKey: ['notifications'],
+    queryFn: () => apiFetch('/notifications'),
+    refetchInterval: 30_000,
+  });
+  const unreadCount = useMemo(
+    () => notifications.filter((notification) => !notification.readAt).length,
+    [notifications],
+  );
+
+  const activeDetailId = detailId ?? params.get('expense');
 
   const apiSort = sort === 'amount-high' || sort === 'amount-low' ? ('newest' as const) : sort;
 
@@ -128,18 +146,32 @@ export function ManagerDashboard(): JSX.Element {
 
   const lastSyncTime = useMemo(
     () =>
-      dataUpdatedAt
-        ? new Date(dataUpdatedAt).toLocaleTimeString('tr-TR', {
+      lastRefreshAt || dataUpdatedAt
+        ? new Date(lastRefreshAt ?? dataUpdatedAt).toLocaleTimeString('tr-TR', {
             hour: '2-digit',
             minute: '2-digit',
           })
         : null,
-    [dataUpdatedAt],
+    [dataUpdatedAt, lastRefreshAt],
   );
 
-  const handleRefresh = () => {
-    void refetchCounts();
-    void refetchPending();
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      const [countResult, pendingResult] = await Promise.all([
+        refetchCounts(),
+        refetchPending(),
+        qc.refetchQueries({ queryKey: ['notifications'], type: 'active' }),
+      ]);
+      if (countResult.error || pendingResult.error) throw countResult.error ?? pendingResult.error;
+      setLastRefreshAt(Date.now());
+      showToast('Yönetici verileri yenilendi.', 'success');
+    } catch (error) {
+      showToast(getApiErrorMessage(error, 'Veriler yenilenemedi. Lütfen tekrar deneyin.'), 'error');
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const finish = (expenseId: string, message: string) => {
@@ -211,13 +243,25 @@ export function ManagerDashboard(): JSX.Element {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          <button
+            type="button"
+            className="header-notification-button"
+            aria-label={unreadCount ? `Bildirimler, ${unreadCount} okunmamış` : 'Bildirimler'}
+            onClick={() => navigate('/manager/notifications')}
+          >
+            <Bell size={18} />
+            {unreadCount > 0 && (
+              <span className="notification-icon-badge">{Math.min(unreadCount, 99)}</span>
+            )}
+          </button>
           {lastSyncTime && (
             <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
               Son güncelleme: {lastSyncTime}
             </span>
           )}
           <button
-            onClick={handleRefresh}
+            onClick={() => void handleRefresh()}
+            disabled={isRefreshing}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -229,11 +273,12 @@ export function ManagerDashboard(): JSX.Element {
               color: 'var(--color-text)',
               fontSize: 13,
               fontWeight: 500,
-              cursor: 'pointer',
+              cursor: isRefreshing ? 'not-allowed' : 'pointer',
+              opacity: isRefreshing ? 0.65 : 1,
             }}
           >
-            <RefreshCw size={14} />
-            Yenile
+            <RefreshCw size={14} className={isRefreshing ? 'spin' : undefined} />
+            {isRefreshing ? 'Yenileniyor…' : 'Yenile'}
           </button>
         </div>
       </div>
@@ -284,7 +329,7 @@ export function ManagerDashboard(): JSX.Element {
           sublabel="Bu ayki masraf tutarı"
           icon={TrendingUp}
           value={counts?.monthlyTotal ?? 0}
-          formatter={money}
+          formatter={formatTry}
           color="var(--color-info)"
           bg="var(--color-info-bg)"
           border="var(--color-info-border)"
@@ -294,7 +339,7 @@ export function ManagerDashboard(): JSX.Element {
           sublabel="Tüm onaylı masraf tutarı"
           icon={BanknoteIcon}
           value={counts?.payableTotal ?? 0}
-          formatter={money}
+          formatter={formatTry}
           color="var(--color-primary)"
           bg="rgba(114,87,232,0.08)"
           border="rgba(114,87,232,0.25)"
@@ -427,7 +472,19 @@ export function ManagerDashboard(): JSX.Element {
         </div>
       )}
 
-      {detailId && <ExpenseDetailSheet expenseId={detailId} onClose={() => setDetailId(null)} />}
+      {activeDetailId && (
+        <ExpenseDetailSheet
+          expenseId={activeDetailId}
+          onClose={() => {
+            setDetailId(null);
+            if (params.has('expense')) {
+              const next = new URLSearchParams(params);
+              next.delete('expense');
+              setParams(next, { replace: true });
+            }
+          }}
+        />
+      )}
 
       {decision && (
         <DecisionModal
@@ -460,8 +517,8 @@ function StatCard({
   label: string;
   sublabel: string;
   icon: React.ElementType;
-  value: number;
-  formatter?: (n: number) => string;
+  value: number | string;
+  formatter?: (n: number | string) => string;
   color: string;
   bg: string;
   border: string;

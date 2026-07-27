@@ -23,6 +23,7 @@ export interface AppConfig {
   storage: {
     provider: 's3';
     endpoint: string;
+    publicEndpoint: string;
     region: string;
     bucket: string;
     accessKeyId: string;
@@ -74,6 +75,7 @@ export default (): { app: AppConfig } => {
       storage: {
         provider: 's3',
         endpoint: env.R2_ENDPOINT,
+        publicEndpoint: env.R2_PUBLIC_ENDPOINT ?? env.R2_ENDPOINT,
         region: env.R2_REGION,
         bucket: env.R2_BUCKET,
         accessKeyId: env.R2_ACCESS_KEY_ID,

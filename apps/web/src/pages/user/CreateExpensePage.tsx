@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Camera, FileText, ImagePlus, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
@@ -14,14 +14,29 @@ import { useAuth } from '@/features/auth/auth-context';
 import { useLocalExpenseDraft } from '@/hooks/useLocalExpenseDraft';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { apiFetch, getApiErrorMessage } from '@/lib/api-client';
+import { getAttachmentValidationError } from '@/lib/attachment-validation';
+import { getExpenseDateMax, toLocalIsoDate } from '@/lib/date-limits';
+import { decimalToTurkishInput, formatTurkishMoneyInput, toDecimalString } from '@/lib/money';
 
 const schema = z.object({
   categoryId: z.string().uuid('Kategori seçiniz'),
   title: z.string().min(1, 'Başlık zorunludur'),
   description: z.string().optional(),
-  amount: z.coerce.number().positive('Tutar pozitif olmalıdır'),
-  expenseDate: z.string().min(1, 'Masraf tarihi zorunludur'),
-  dueDate: z.string().optional(),
+  amount: z.string().refine((value) => toDecimalString(value) !== null, 'Geçerli bir tutar giriniz'),
+  expenseDate: z
+    .string()
+    .min(1, 'Masraf tarihi zorunludur')
+    .refine(
+      (value) => !value || value <= getExpenseDateMax(),
+      'Masraf tarihi en fazla 2 ay sonrası olabilir.',
+    ),
+  dueDate: z
+    .string()
+    .optional()
+    .refine(
+      (value) => !value || value >= toLocalIsoDate(),
+      'Vade tarihi geçmiş bir tarih olamaz.',
+    ),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -56,14 +71,19 @@ export function CreateExpensePage(): JSX.Element {
   const location = useLocation();
   const [params] = useSearchParams();
   const editId = params.get('edit');
+  const savedId = params.get('saved');
+  const persistedExpenseId = editId ?? savedId;
   const { showToast } = useToast();
   const { user } = useAuth();
   const { isOnline } = useNetworkStatus();
   const qc = useQueryClient();
 
-  const [savedExpenseId, setSavedExpenseId] = useState<string | null>(editId);
+  const [savedExpenseId, setSavedExpenseId] = useState<string | null>(persistedExpenseId);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [showNetworkDialog, setShowNetworkDialog] = useState(false);
+  const [uploadState, setUploadState] = useState({ pending: 0, failed: 0 });
+  const [initialUploadStarted, setInitialUploadStarted] = useState(false);
+  const uploadCompletionShown = useRef(false);
   const autoRecoveredRef = useRef(false);
 
   // Pending files — local queue before draft is saved
@@ -94,9 +114,9 @@ export function CreateExpensePage(): JSX.Element {
   });
 
   const { data: editingExpense } = useQuery<Expense>({
-    queryKey: ['expense', editId],
-    queryFn: () => apiFetch(`/expenses/${editId}`),
-    enabled: Boolean(editId),
+    queryKey: ['expense', persistedExpenseId],
+    queryFn: () => apiFetch(`/expenses/${persistedExpenseId}`),
+    enabled: Boolean(persistedExpenseId),
   });
 
   const {
@@ -118,7 +138,7 @@ export function CreateExpensePage(): JSX.Element {
         categoryId: editingExpense.categoryId,
         title: editingExpense.title,
         description: editingExpense.description,
-        amount: Number(editingExpense.amount),
+        amount: decimalToTurkishInput(editingExpense.amount),
         expenseDate: editingExpense.expenseDate?.split('T')[0] ?? '',
         dueDate: editingExpense.dueDate?.split('T')[0] ?? '',
       });
@@ -134,7 +154,7 @@ export function CreateExpensePage(): JSX.Element {
       categoryId: draft.categoryId ?? '',
       title: draft.title ?? '',
       description: draft.description ?? '',
-      amount: draft.amount,
+        amount: draft.amount ?? '',
       expenseDate: draft.expenseDate ?? '',
       dueDate: draft.dueDate ?? '',
     });
@@ -162,7 +182,7 @@ export function CreateExpensePage(): JSX.Element {
         categoryId: formValues.categoryId,
         title: formValues.title,
         description: formValues.description,
-        amount: typeof formValues.amount === 'number' ? formValues.amount : undefined,
+        amount: formValues.amount,
         expenseDate: formValues.expenseDate,
         dueDate: formValues.dueDate,
       }).catch(() => showToast('Yerel taslak kaydedilemedi.', 'error'));
@@ -171,7 +191,7 @@ export function CreateExpensePage(): JSX.Element {
   }, [editId, formValues, isDirty, isSaved, saveDraft, showToast, user]);
 
   const createMut = useMutation({
-    mutationFn: (data: FormValues) =>
+    mutationFn: (data: FormValues & { amount: string }) =>
       apiFetch<{ id: string }>('/expenses', { method: 'POST', body: data }),
     onSuccess: (expense) => {
       setSavedExpenseId(expense.id);
@@ -182,7 +202,7 @@ export function CreateExpensePage(): JSX.Element {
   });
 
   const updateMut = useMutation({
-    mutationFn: (data: FormValues) =>
+    mutationFn: (data: FormValues & { amount: string }) =>
       apiFetch(`/expenses/${editId}`, { method: 'PATCH', body: data }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['expenses'] });
@@ -195,17 +215,35 @@ export function CreateExpensePage(): JSX.Element {
       setShowNetworkDialog(true);
       return;
     }
-    if (!values.dueDate || values.dueDate === '') delete (values as Partial<FormValues>).dueDate;
+    const fileError = pendingFiles.map((file) => getAttachmentValidationError(file)).find(Boolean);
+    if (fileError) {
+      showToast(fileError, 'error');
+      return;
+    }
+    if (pendingFiles.length > 5) {
+      showToast('En fazla 5 belge eklenebilir.', 'error');
+      return;
+    }
+
+    const amount = toDecimalString(values.amount);
+    if (!amount) return;
+    const payload: FormValues & { amount: string } = { ...values, amount };
+    if (!payload.dueDate) delete (payload as Partial<FormValues>).dueDate;
 
     if (editId) {
-      await updateMut.mutateAsync(values);
+      await updateMut.mutateAsync(payload);
       showToast('Masraf güncellendi.', 'success');
       navigate('/expenses?status=DRAFT');
     } else {
-      const created = await createMut.mutateAsync(values);
-      await clearDraft();
-      showToast('Masraf taslak olarak kaydedildi.', 'success');
+      const created = await createMut.mutateAsync(payload);
       setSavedExpenseId(created.id);
+      navigate(`/expenses/new?saved=${created.id}`, { replace: true });
+      if (pendingFiles.length === 0) {
+        await clearDraft();
+        showToast('Masraf taslak olarak kaydedildi.', 'success');
+      } else {
+        showToast('Taslak oluşturuldu, belgeler yükleniyor…', 'info');
+      }
     }
   });
 
@@ -216,8 +254,49 @@ export function CreateExpensePage(): JSX.Element {
   const onPendingFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     e.target.value = '';
+    const error = files.map((file) => getAttachmentValidationError(file)).find(Boolean);
+    if (error) {
+      showToast(error, 'error');
+      return;
+    }
+    if (pendingFiles.length + files.length > 5) {
+      showToast('En fazla 5 belge eklenebilir.', 'error');
+      return;
+    }
     if (files.length > 0) setPendingFiles((current) => [...current, ...files]);
   };
+
+  const handleUploadStateChange = useCallback((next: { pending: number; failed: number }) => {
+    setUploadState((current) =>
+      current.pending === next.pending && current.failed === next.failed ? current : next,
+    );
+    if (next.pending > 0) setInitialUploadStarted(true);
+  }, []);
+
+  useEffect(() => {
+    if (
+      editId ||
+      !initialUploadStarted ||
+      uploadCompletionShown.current ||
+      uploadState.pending > 0 ||
+      uploadState.failed > 0 ||
+      uploadedFiles.length < pendingFiles.length
+    ) {
+      return;
+    }
+    uploadCompletionShown.current = true;
+    void clearDraft();
+    setPendingFiles([]);
+    showToast('Masraf taslağı ve belgeler kaydedildi.', 'success');
+  }, [
+    clearDraft,
+    editId,
+    initialUploadStarted,
+    pendingFiles.length,
+    showToast,
+    uploadState,
+    uploadedFiles.length,
+  ]);
 
   const inp = (hasErr: boolean): React.CSSProperties => ({
     width: '100%',
@@ -226,7 +305,7 @@ export function CreateExpensePage(): JSX.Element {
     border: `1.5px solid ${hasErr ? 'var(--color-danger)' : 'var(--color-border)'}`,
     background: 'var(--color-bg)',
     color: 'var(--color-text)',
-    fontSize: 15,
+    fontSize: 16,
     boxSizing: 'border-box',
     WebkitAppearance: 'none',
     appearance: 'none',
@@ -328,15 +407,29 @@ export function CreateExpensePage(): JSX.Element {
               <label htmlFor="expense-amount" style={labelSt}>
                 Tutar (₺) *
               </label>
-              <input
-                id="expense-amount"
-                {...register('amount')}
-                type="number"
-                step="0.01"
-                inputMode="decimal"
-                placeholder="0,00"
-                style={inp(Boolean(errors.amount))}
-                disabled={isSaved && !editId}
+              <Controller
+                control={control}
+                name="amount"
+                render={({ field }) => (
+                  <input
+                    id="expense-amount"
+                    name={field.name}
+                    ref={field.ref}
+                    value={field.value ?? ''}
+                    onBlur={(event) => {
+                      field.onBlur();
+                      const decimal = toDecimalString(event.target.value);
+                      if (decimal) field.onChange(decimalToTurkishInput(decimal));
+                    }}
+                    onChange={(event) => field.onChange(formatTurkishMoneyInput(event.target.value))}
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    placeholder="0,00"
+                    style={inp(Boolean(errors.amount))}
+                    disabled={isSaved && !editId}
+                  />
+                )}
               />
               {errors.amount && (
                 <p role="alert" style={errSt}>
@@ -361,6 +454,7 @@ export function CreateExpensePage(): JSX.Element {
                     onBlur={field.onBlur}
                     style={inp(Boolean(errors.expenseDate))}
                     disabled={isSaved && !editId}
+                    max={getExpenseDateMax()}
                   />
                 )}
               />
@@ -412,6 +506,7 @@ export function CreateExpensePage(): JSX.Element {
                     style={inp(Boolean(errors.dueDate))}
                     disabled={isSaved && !editId}
                     clearable={!requiresDueDate}
+                    min={toLocalIsoDate()}
                   />
                 )}
               />
@@ -486,6 +581,7 @@ export function CreateExpensePage(): JSX.Element {
               onFilesChange={setUploadedFiles}
               disabled={!isOnline}
               initialFiles={pendingFiles}
+              onUploadStateChange={handleUploadStateChange}
             />
           ) : (
             /* Pre-save: local pending queue */
@@ -558,6 +654,7 @@ export function CreateExpensePage(): JSX.Element {
         {isSaved && !editId && (
           <button
             type="button"
+            disabled={uploadState.pending > 0 || uploadState.failed > 0}
             onClick={() => navigate('/expenses?status=DRAFT')}
             style={{
               marginTop: 20,
@@ -568,13 +665,19 @@ export function CreateExpensePage(): JSX.Element {
               color: 'var(--color-approved)',
               fontWeight: 700,
               fontSize: 16,
-              cursor: 'pointer',
+              cursor:
+                uploadState.pending > 0 || uploadState.failed > 0 ? 'not-allowed' : 'pointer',
+              opacity: uploadState.pending > 0 || uploadState.failed > 0 ? 0.6 : 1,
               width: '100%',
             }}
           >
-            {uploadedFiles.length > 0
+            {uploadState.pending > 0
+              ? 'Belgeler yükleniyor…'
+              : uploadState.failed > 0
+                ? 'Başarısız belgeyi yeniden yükleyin'
+                : uploadedFiles.length > 0
               ? `Taslağa Git (${uploadedFiles.length} belge)`
-              : 'Taslağa Git'}
+                : 'Taslağa Git'}
           </button>
         )}
       </div>

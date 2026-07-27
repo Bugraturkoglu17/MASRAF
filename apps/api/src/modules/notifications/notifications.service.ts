@@ -24,6 +24,13 @@ export class NotificationsService {
     });
   }
 
+  async markAllRead(userId: string) {
+    await this.prisma.notification.updateMany({
+      where: { userId, readAt: null },
+      data: { readAt: new Date() },
+    });
+  }
+
   async create(
     organizationId: string,
     userId: string,
@@ -31,9 +38,15 @@ export class NotificationsService {
     body: string,
     channel: NotificationChannel = 'IN_APP',
     client: NotificationClient = this.prisma,
+    metadata?: { expenseId?: string; eventKey?: string },
   ) {
-    return client.notification.create({
-      data: { organizationId, userId, title, body, channel },
+    const data = { organizationId, userId, title, body, channel, ...metadata };
+    if (!metadata?.eventKey) return client.notification.create({ data });
+
+    return client.notification.upsert({
+      where: { userId_eventKey: { userId, eventKey: metadata.eventKey } },
+      create: data,
+      update: {},
     });
   }
 }

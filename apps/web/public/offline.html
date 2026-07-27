@@ -7,7 +7,7 @@
     <style>
       body {
         margin: 0;
-        min-height: 100vh;
+        min-height: 100dvh;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -35,11 +35,8 @@
         width: 58px;
         height: 58px;
         margin: 0 auto 16px;
-        border-radius: 18px;
-        display: grid;
-        place-items: center;
-        background: #334155;
-        font-size: 28px;
+        display: block;
+        object-fit: contain;
       }
       h1 {
         font-size: 1.25rem;
@@ -64,7 +61,7 @@
   </head>
   <body>
     <div class="card">
-      <div class="icon" aria-hidden="true">⌁</div>
+      <img class="icon" src="/logo-mark-animated.svg?v=2" alt="" aria-hidden="true" />
       <h1>İnternet bağlantısı bulunamadı</h1>
       <p>
         Bağlantınızı kontrol edin. Güvenli işlemler ve güncel masraf verileri için internet

@@ -26,6 +26,7 @@ export default defineConfig({
       includeAssets: [
         'offline.html',
         'robots.txt',
+        'logo-mark-animated.svg',
         'icons/icon-16.png',
         'icons/icon-32.png',
         ...iconSizes.map((size) => `icons/icon-${size}.png`),
@@ -41,7 +42,7 @@ export default defineConfig({
         start_url: '/',
         scope: '/',
         display: 'standalone',
-        orientation: 'portrait-primary',
+        orientation: 'portrait',
         background_color: '#0f172a',
         theme_color: '#7567d4',
         lang: 'tr-TR',

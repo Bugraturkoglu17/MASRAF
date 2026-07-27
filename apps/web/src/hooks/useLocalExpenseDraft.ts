@@ -4,7 +4,7 @@ export interface LocalExpenseDraft {
   categoryId?: string;
   title?: string;
   description?: string;
-  amount?: number;
+  amount?: string;
   expenseDate?: string;
   dueDate?: string;
   updatedAt: string;

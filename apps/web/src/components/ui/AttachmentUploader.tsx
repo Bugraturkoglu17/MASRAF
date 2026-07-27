@@ -3,6 +3,11 @@ import { useEffect, useRef, useState } from 'react';
 
 import { useToast } from '@/components/feedback/toast-context';
 import { apiFetch, getApiErrorMessage } from '@/lib/api-client';
+import {
+  DEFAULT_MAX_ATTACHMENT_SIZE,
+  getAttachmentMimeType,
+  getAttachmentValidationError,
+} from '@/lib/attachment-validation';
 
 export interface UploadedFile {
   id: string;
@@ -17,6 +22,7 @@ interface QueuedFile {
   previewUrl?: string;
   progress: number;
   error?: string;
+  mimeType: string;
 }
 interface UploadConfig {
   uploads?: { maxFiles: number; maxFileSizeBytes: number; allowedMimeTypes: string[] };
@@ -27,11 +33,12 @@ interface Props {
   maxFiles?: number;
   disabled?: boolean;
   initialFiles?: File[];
+  onUploadStateChange?: (state: { pending: number; failed: number }) => void;
 }
 
 const FALLBACK_CONFIG = {
   maxFiles: 5,
-  maxFileSizeBytes: 15 * 1024 * 1024,
+  maxFileSizeBytes: DEFAULT_MAX_ATTACHMENT_SIZE,
   allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf'],
 };
 
@@ -41,6 +48,7 @@ export function AttachmentUploader({
   maxFiles,
   disabled = false,
   initialFiles = [],
+  onUploadStateChange,
 }: Props): JSX.Element {
   const { showToast } = useToast();
   const [config, setConfig] = useState(FALLBACK_CONFIG);
@@ -86,13 +94,21 @@ export function AttachmentUploader({
     onFilesChange(uploaded);
   }, [uploaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    onUploadStateChange?.({
+      pending: queue.filter((item) => !item.error).length,
+      failed: queue.filter((item) => Boolean(item.error)).length,
+    });
+  }, [onUploadStateChange, queue]);
+
   // ── Upload helpers ────────────────────────────────────────────────────────
 
-  const putWithProgress = (url: string, file: File, localId: string) =>
+  const putWithProgress = (url: string, file: File, mimeType: string, localId: string) =>
     new Promise<void>((resolve, reject) => {
       const req = new XMLHttpRequest();
       req.open('PUT', url);
-      req.setRequestHeader('Content-Type', file.type);
+      req.setRequestHeader('Content-Type', mimeType);
+      req.timeout = 60_000;
       req.upload.onprogress = (ev) => {
         if (!ev.lengthComputable) return;
         const pct = Math.max(1, Math.min(95, Math.round((ev.loaded / ev.total) * 95)));
@@ -103,13 +119,19 @@ export function AttachmentUploader({
       req.onload = () =>
         req.status >= 200 && req.status < 300
           ? resolve()
-          : reject(new Error('R2 yüklemesi başarısız.'));
-      req.onerror = () => reject(new Error('Dosya aktarımı sırasında bağlantı kesildi.'));
+          : reject(new Error(`Dosya depolamaya aktarılamadı (HTTP ${req.status}).`));
+      req.onerror = () =>
+        reject(
+          new Error(
+            'Dosya depolama servisine ulaşılamadı. Bağlantı veya depolama CORS ayarını kontrol edin.',
+          ),
+        );
+      req.ontimeout = () => reject(new Error('Dosya yükleme 60 saniye içinde tamamlanamadı.'));
       req.send(file);
     });
 
   const uploadOne = async (queued: QueuedFile) => {
-    const { file, localId } = queued;
+    const { file, localId, mimeType } = queued;
     setQueue((items) =>
       items.map((i) => (i.localId === localId ? { ...i, progress: 0, error: undefined } : i)),
     );
@@ -118,17 +140,17 @@ export function AttachmentUploader({
         '/attachments/upload-url',
         {
           method: 'POST',
-          body: { expenseId, fileName: file.name, mimeType: file.type, fileSize: file.size },
+          body: { expenseId, fileName: file.name, mimeType, fileSize: file.size },
         },
       );
-      await putWithProgress(signed.uploadUrl, file, localId);
+      await putWithProgress(signed.uploadUrl, file, mimeType, localId);
       const completed = await apiFetch<UploadedFile>('/attachments/complete', {
         method: 'POST',
         body: {
           expenseId,
           fileKey: signed.fileKey,
           fileName: file.name,
-          mimeType: file.type,
+          mimeType,
           fileSize: file.size,
         },
       });
@@ -151,22 +173,18 @@ export function AttachmentUploader({
     const candidates = files.slice(0, Math.max(0, capacity));
     if (files.length > capacity) showToast(`En fazla ${actualMax} belge eklenebilir.`, 'error');
     for (const file of candidates) {
-      if (!config.allowedMimeTypes.includes(file.type)) {
-        showToast(`${file.name}: desteklenmeyen dosya türü.`, 'error');
+      const validationError = getAttachmentValidationError(file, config.maxFileSizeBytes);
+      if (validationError) {
+        showToast(validationError, 'error');
         continue;
       }
-      if (file.size > config.maxFileSizeBytes) {
-        showToast(
-          `${file.name}: dosya boyutu ${(config.maxFileSizeBytes / 1024 / 1024).toFixed(0)} MB sınırını aşıyor.`,
-          'error',
-        );
-        continue;
-      }
+      const mimeType = getAttachmentMimeType(file)!;
       const queued: QueuedFile = {
         localId: crypto.randomUUID(),
         file,
         progress: 0,
-        previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
+        mimeType,
+        previewUrl: mimeType.startsWith('image/') ? URL.createObjectURL(file) : undefined,
       };
       setQueue((items) => [...items, queued]);
       void uploadOne(queued);
@@ -227,17 +245,22 @@ export function AttachmentUploader({
 
   // ── Lightbox ──────────────────────────────────────────────────────────────
 
-  const openLightbox = async (item: UploadedFile) => {
+  const openAttachment = async (item: UploadedFile) => {
     const local = previewUrlMap.current.get(item.id);
-    if (local) {
+    if (local && item.mimeType.startsWith('image/')) {
       setLightbox(local);
       return;
     }
     try {
       const { url } = await apiFetch<{ url: string }>(`/attachments/${item.id}/download-url`);
-      setLightbox(url);
-    } catch {
-      showToast('Önizleme yüklenemedi.', 'error');
+      if (item.mimeType === 'application/pdf') {
+        const opened = window.open(url, '_blank', 'noopener,noreferrer');
+        if (!opened) showToast('PDF açılamadı. Tarayıcı açılır pencere iznini kontrol edin.', 'error');
+      } else {
+        setLightbox(url);
+      }
+    } catch (error) {
+      showToast(getApiErrorMessage(error, 'Belge önizlemesi alınamadı.'), 'error');
     }
   };
 
@@ -322,9 +345,7 @@ export function AttachmentUploader({
               previewUrl={previewUrlMap.current.get(item.id)}
               complete
               onDelete={disabled ? undefined : () => void deleteUploaded(item)}
-              onView={
-                item.mimeType.startsWith('image/') ? () => void openLightbox(item) : undefined
-              }
+              onView={() => void openAttachment(item)}
               onReplace={
                 disabled
                   ? undefined
@@ -338,7 +359,7 @@ export function AttachmentUploader({
         </div>
 
         <p className="attachment-help">
-          Orijinal görüntü boyutu korunur · JPG, PNG, WEBP veya PDF · dosya başına en fazla{' '}
+          Orijinal görüntü boyutu korunur · JPG, JPEG, PNG veya PDF · dosya başına en fazla{' '}
           {(config.maxFileSizeBytes / 1024 / 1024).toFixed(0)} MB
         </p>
       </section>

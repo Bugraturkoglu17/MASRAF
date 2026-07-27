@@ -9,6 +9,8 @@ interface DatePickerTrProps {
   style?: React.CSSProperties;
   disabled?: boolean;
   clearable?: boolean;
+  min?: string;
+  max?: string;
 }
 
 const WEEKDAYS = ['Pt', 'Sa', 'Ça', 'Pe', 'Cu', 'Ct', 'Pa'];
@@ -51,6 +53,8 @@ export function DatePickerTr({
   style,
   disabled = false,
   clearable = false,
+  min,
+  max,
 }: DatePickerTrProps): JSX.Element {
   const rootRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -95,6 +99,7 @@ export function DatePickerTr({
 
   const selectDate = (date: Date) => {
     const iso = toIso(date);
+    if ((min && iso < min) || (max && iso > max)) return;
     onChange(iso);
     setDraftDisplay(null);
     setViewDate(date);
@@ -199,6 +204,7 @@ export function DatePickerTr({
             {calendarDays.map((date) => {
               const iso = toIso(date);
               const outside = date.getMonth() !== viewDate.getMonth();
+              const outOfRange = Boolean((min && iso < min) || (max && iso > max));
               return (
                 <button
                   type="button"
@@ -207,6 +213,8 @@ export function DatePickerTr({
                   data-outside={outside || undefined}
                   data-selected={iso === value || undefined}
                   data-today={iso === todayIso || undefined}
+                  disabled={outOfRange}
+                  aria-disabled={outOfRange}
                   aria-label={new Intl.DateTimeFormat('tr-TR', {
                     day: 'numeric',
                     month: 'long',
@@ -239,7 +247,12 @@ export function DatePickerTr({
             ) : (
               <span />
             )}
-            <button type="button" className="date-picker-tr__today" onClick={() => selectDate(today)}>
+            <button
+              type="button"
+              className="date-picker-tr__today"
+              disabled={Boolean((min && todayIso < min) || (max && todayIso > max))}
+              onClick={() => selectDate(today)}
+            >
               Bugün
             </button>
           </div>

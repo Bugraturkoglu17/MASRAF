@@ -21,26 +21,51 @@ const BLOCKED_EXTENSIONS = new Set([
   '.dll',
 ]);
 
+const MIME_BY_EXTENSION = new Map([
+  ['.jpg', 'image/jpeg'],
+  ['.jpeg', 'image/jpeg'],
+  ['.png', 'image/png'],
+  ['.webp', 'image/webp'],
+  ['.heic', 'image/heic'],
+  ['.pdf', 'application/pdf'],
+]);
+
 export const MAX_ATTACHMENT_SIZE_BYTES = 15 * 1024 * 1024; // 15 MB
 
 export class InvalidFileError extends Error {}
+
+export function normalizeAttachmentMimeType(fileName: string, mimeType: string): string {
+  const normalized = mimeType.trim().toLowerCase();
+  if (normalized === 'image/jpg') return 'image/jpeg';
+  if (ALLOWED_MIME_TYPES.has(normalized)) return normalized;
+  return MIME_BY_EXTENSION.get(extname(fileName).toLowerCase()) ?? normalized;
+}
 
 export function assertValidAttachment(
   fileName: string,
   mimeType: string,
   sizeBytes: number,
   maxSizeBytes = MAX_ATTACHMENT_SIZE_BYTES,
-): void {
+): string {
   const ext = extname(fileName).toLowerCase();
   if (BLOCKED_EXTENSIONS.has(ext)) {
     throw new InvalidFileError(`Dosya uzantısına izin verilmiyor: ${ext}`);
   }
-  if (!ALLOWED_MIME_TYPES.has(mimeType)) {
-    throw new InvalidFileError(`Dosya türüne izin verilmiyor: ${mimeType}`);
+  const normalizedMimeType = normalizeAttachmentMimeType(fileName, mimeType);
+  if (!ALLOWED_MIME_TYPES.has(normalizedMimeType)) {
+    throw new InvalidFileError('Yalnızca JPG, JPEG, PNG, WEBP, HEIC ve PDF dosyaları yüklenebilir.');
+  }
+  const expectedMimeType = MIME_BY_EXTENSION.get(ext);
+  if (expectedMimeType && expectedMimeType !== normalizedMimeType) {
+    throw new InvalidFileError('Dosya uzantısı ile içerik türü uyuşmuyor.');
+  }
+  if (sizeBytes <= 0) {
+    throw new InvalidFileError('Boş dosyalar yüklenemez.');
   }
   if (sizeBytes > maxSizeBytes) {
     throw new InvalidFileError(`Dosya boyutu ${maxSizeBytes / (1024 * 1024)} MB sınırını aşıyor.`);
   }
+  return normalizedMimeType;
 }
 
 /** Tahmin edilemeyen, orijinal ad ile ilişkilendirilmeyen depolama anahtarı üretir. */

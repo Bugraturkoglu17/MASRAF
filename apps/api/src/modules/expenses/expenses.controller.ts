@@ -31,11 +31,24 @@ const isoDate = z
   .refine((value) => !Number.isNaN(Date.parse(`${value}T00:00:00Z`)), 'Geçerli bir tarih giriniz.');
 const expenseDate = isoDate;
 
+const decimalAmount = z
+  .union([z.string(), z.number().finite()])
+  .transform((value) => String(value))
+  .refine(
+    (value) => /^(?:0|[1-9]\d{0,11})(?:\.\d{1,2})?$/.test(value),
+    'Tutar en fazla 12 tam ve 2 ondalık basamak içermelidir.',
+  )
+  .refine((value) => !/^0(?:\.0{1,2})?$/.test(value), 'Tutar pozitif olmalıdır.')
+  .transform((value) => {
+    const [integer, fraction = ''] = value.split('.');
+    return `${integer}.${fraction.padEnd(2, '0')}`;
+  });
+
 const createExpenseSchema = z.object({
   categoryId: z.string().uuid(),
   title: z.string().trim().min(1).max(200),
   description: z.string().trim().max(2000).optional(),
-  amount: z.number().finite().positive().max(999_999_999_999.99),
+  amount: decimalAmount,
   currency: z.string().length(3).optional(),
   expenseDate,
   dueDate: isoDate.optional(),
@@ -45,7 +58,7 @@ const updateExpenseSchema = z.object({
   categoryId: z.string().uuid().optional(),
   title: z.string().trim().min(1).max(200).optional(),
   description: z.string().trim().max(2000).optional(),
-  amount: z.number().finite().positive().max(999_999_999_999.99).optional(),
+  amount: decimalAmount.optional(),
   expenseDate: expenseDate.optional(),
   dueDate: isoDate.optional(),
 });

@@ -1,5 +1,4 @@
-import { zodResolver } from '@hookform/resolvers/zod';
-import { loginSchema, type LoginInput } from '@masraf/shared-validation';
+import type { LoginInput } from '@masraf/shared-validation';
 import { Eye, EyeOff, ReceiptText, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -21,7 +20,7 @@ export function LoginPage(): JSX.Element {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<LoginInput>({ resolver: zodResolver(loginSchema) });
+  } = useForm<LoginInput>();
 
   const onSubmit = handleSubmit(
     async (values) => {
@@ -99,7 +98,7 @@ export function LoginPage(): JSX.Element {
           <div className="auth-form-heading">
             <img
               className="auth-form-logo"
-              src="/logo-mark-animated.svg"
+              src="/logo-mark-animated.svg?v=2"
               alt=""
               aria-hidden="true"
             />
@@ -120,7 +119,22 @@ export function LoginPage(): JSX.Element {
                 placeholder="ornek@sirket.com veya 5XX XXX XX XX"
                 aria-invalid={Boolean(errors.identifier)}
                 aria-describedby={errors.identifier ? 'identifier-error' : undefined}
-                {...register('identifier')}
+                {...register('identifier', {
+                  required: 'E-posta veya telefon numarası zorunludur.',
+                  validate: (value) => {
+                    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value.trim())) return true;
+                    const digits = value.replace(/\D/g, '');
+                    const local = digits.startsWith('90')
+                      ? digits.slice(2)
+                      : digits.startsWith('0')
+                        ? digits.slice(1)
+                        : digits;
+                    return (
+                      /^5\d{9}$/.test(local) ||
+                      'Geçerli bir e-posta veya cep telefonu giriniz (5XX XXX XX XX).'
+                    );
+                  },
+                })}
               />
               {errors.identifier && (
                 <p id="identifier-error" role="alert" className="auth-field-error">
@@ -139,7 +153,10 @@ export function LoginPage(): JSX.Element {
                   placeholder="••••••••"
                   aria-invalid={Boolean(errors.password)}
                   aria-describedby={errors.password ? 'password-error' : undefined}
-                  {...register('password')}
+                {...register('password', {
+                  required: 'Şifre zorunludur.',
+                  minLength: { value: 8, message: 'Şifre en az 8 karakter olmalıdır.' },
+                })}
                 />
                 <button
                   type="button"
