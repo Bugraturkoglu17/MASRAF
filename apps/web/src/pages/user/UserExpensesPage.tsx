@@ -87,36 +87,15 @@ export function UserExpensesPage(): JSX.Element {
         </h1>
 
         {/* Tabs */}
-        <div
-          style={{
-            display: 'flex',
-            gap: 0,
-            overflowX: 'auto',
-            borderBottom: '2px solid var(--color-border)',
-            marginBottom: 16,
-            WebkitOverflowScrolling: 'touch' as React.CSSProperties['WebkitOverflowScrolling'],
-          }}
-        >
+        <div className="expense-status-tabs" role="tablist">
           {tabs.map(({ status, label }) => (
             <button
               key={status}
+              type="button"
+              role="tab"
+              aria-selected={status === activeStatus}
               onClick={() => setParams({ status })}
-              style={{
-                padding: '8px 14px',
-                border: 'none',
-                background: 'none',
-                cursor: 'pointer',
-                fontSize: 13,
-                fontWeight: status === activeStatus ? 700 : 400,
-                color: status === activeStatus ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                borderBottom:
-                  status === activeStatus
-                    ? '2px solid var(--color-primary)'
-                    : '2px solid transparent',
-                marginBottom: -2,
-                whiteSpace: 'nowrap',
-                flexShrink: 0,
-              }}
+              className={status === activeStatus ? 'active' : ''}
             >
               {label}
             </button>

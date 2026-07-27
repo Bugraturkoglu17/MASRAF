@@ -229,7 +229,7 @@ export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetPro
                       value={
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                           {expense.user.iban}
-                          <IbanCopyButton value={expense.user.iban} iconOnly />
+                          <IbanCopyButton value={expense.user.iban} />
                         </span>
                       }
                     />

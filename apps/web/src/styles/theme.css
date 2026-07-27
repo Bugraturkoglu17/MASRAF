@@ -1130,11 +1130,22 @@ textarea::placeholder {
 .receipt-thumbnail {
   width: 76px;
   height: 92px;
+  overflow: hidden;
   border-radius: 14px;
   display: grid;
   place-items: center;
   background: linear-gradient(145deg, #ede9ff, #dcd4ff);
   color: var(--color-primary);
+}
+.receipt-thumbnail.has-image {
+  background: var(--color-bg);
+}
+.receipt-thumbnail img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  object-position: center;
 }
 .receipt-thumbnail svg {
   width: 30px;
@@ -1931,6 +1942,52 @@ textarea::placeholder {
   gap: 12px;
 }
 
+.profile-iban-row {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  align-items: center;
+  gap: 8px;
+}
+
+.iban-copy-button {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.iban-copy-button:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 44%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 7%, transparent);
+  color: var(--color-primary);
+}
+
+.iban-copy-button:focus-visible {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.iban-copy-button.copied {
+  border-color: color-mix(in srgb, var(--color-success, #22c55e) 45%, var(--color-border));
+  color: var(--color-success, #22c55e);
+}
+
 .profile-account-actions {
   margin-top: 24px;
   padding: 20px 24px;
@@ -2033,32 +2090,31 @@ textarea::placeholder {
 .user-home-tabs {
   flex: 1;
   min-width: 0;
-  display: flex;
-  overflow-x: auto;
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-  padding: 0 4px;
-}
-
-.user-home-tabs::-webkit-scrollbar {
-  display: none;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding-left: 4px;
 }
 
 .user-home-tabs button {
-  flex-shrink: 0;
-  padding: 14px 10px;
+  min-width: 0;
+  padding: 10px 3px 9px;
   border: 0;
-  border-bottom: 3px solid transparent;
+  border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--color-text-muted);
-  font-size: 12px;
+  font-size: clamp(10px, 2.9vw, 11px);
   font-weight: 600;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  justify-content: center;
+  gap: 3px;
   cursor: pointer;
   white-space: nowrap;
   min-height: unset;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease;
 }
 
 .user-home-tabs button.active {
@@ -2067,10 +2123,12 @@ textarea::placeholder {
 }
 
 .user-home-tabs button small {
-  padding: 2px 6px;
+  min-width: 16px;
+  padding: 1px 4px;
   border-radius: 99px;
   background: var(--color-border);
-  font-size: 10px;
+  font-size: 9px;
+  line-height: 1.4;
   font-style: normal;
 }
 
@@ -2080,13 +2138,13 @@ textarea::placeholder {
 }
 
 .user-home-tab-toolbar {
-  padding: 0 12px 0 4px;
+  padding: 0 8px 0 4px;
 }
 
 .user-home-tab-toolbar button {
-  width: 36px;
-  height: 36px;
-  min-height: 36px;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
   border: 1px solid var(--color-border);
   border-radius: 10px;
   background: transparent;
@@ -2095,6 +2153,38 @@ textarea::placeholder {
   display: grid;
   place-items: center;
   cursor: pointer;
+}
+
+.expense-status-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.expense-status-tabs button {
+  min-width: 0;
+  min-height: 36px;
+  padding: 8px 3px 7px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: clamp(10px, 2.9vw, 12px);
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.expense-status-tabs button.active {
+  border-bottom-color: var(--color-primary);
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 5%, transparent);
 }
 
 .user-home-list {

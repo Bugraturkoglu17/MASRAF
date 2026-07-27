@@ -1,6 +1,10 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+vi.mock('@/lib/api-client', () => ({
+  apiFetch: vi.fn().mockResolvedValue({ url: 'https://cdn.example.test/receipt.jpg' }),
+}));
+
 import {
   ExpenseEmptyState,
   ManagerExpenseCard,
@@ -24,11 +28,21 @@ const expense: ManagerExpense = {
 
 describe('AŞAMA 13 masraf bileşenleri', () => {
   it('mobil fiş kartında temel alanları ve tek durum terminolojisini gösterir', () => {
-    render(<MobileReceiptExpenseCard expense={{ ...expense, status: 'APPROVED' }} />);
+    render(
+      <MobileReceiptExpenseCard expense={{ ...expense, status: 'APPROVED', attachments: [] }} />,
+    );
     expect(screen.getByText('Yurtiçi seyahat yemek')).toBeInTheDocument();
     expect(screen.getByText('₺390,00')).toBeInTheDocument();
     expect(screen.getByText('Onaylandı')).toBeInTheDocument();
     expect(screen.queryByText('Tamamlandı')).not.toBeInTheDocument();
+  });
+
+  it('ilk görsel eki kart üzerinde Ek 1 önizlemesi olarak gösterir', async () => {
+    render(<MobileReceiptExpenseCard expense={expense} />);
+    expect(await screen.findByRole('img', { name: /Ek 1: fis.jpg önizlemesi/ })).toHaveAttribute(
+      'src',
+      'https://cdn.example.test/receipt.jpg',
+    );
   });
 
   it('bekleyen boş durum metnini doğru gösterir', () => {

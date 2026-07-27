@@ -111,7 +111,7 @@ export function ProfileCompletePage(): JSX.Element {
 
           {isUser && (
             <Field label="IBAN" error={errors.iban?.message}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div className="profile-iban-row">
                 <Controller
                   name="iban"
                   control={control}

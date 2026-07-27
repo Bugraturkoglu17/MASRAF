@@ -250,7 +250,7 @@ export function AttachmentUploader({
     initialHandled.current = true;
     handleFiles(initialFiles);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expenseId]);
+  }, [expenseId, initialFiles]);
 
   // ── Delete ────────────────────────────────────────────────────────────────
 

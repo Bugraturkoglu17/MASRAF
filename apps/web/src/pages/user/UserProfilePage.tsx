@@ -106,10 +106,7 @@ export function UserProfilePage(): JSX.Element {
 
         <form onSubmit={onSubmit} noValidate>
           <div className="profile-settings-fields">
-            <Field
-              label="Ad Soyad"
-              error={errors.firstName?.message ?? errors.lastName?.message}
-            >
+            <Field label="Ad Soyad" error={errors.firstName?.message ?? errors.lastName?.message}>
               <div className="profile-name-fields">
                 <input
                   {...register('firstName')}
@@ -133,7 +130,7 @@ export function UserProfilePage(): JSX.Element {
             </Field>
             {isUser && (
               <Field label="IBAN" error={errors.iban?.message}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div className="profile-iban-row">
                   <Controller
                     name="iban"
                     control={control}
@@ -153,12 +150,13 @@ export function UserProfilePage(): JSX.Element {
             )}
             {!isUser && (
               <Field label="IBAN">
-                <input value="Yalnızca kullanıcı hesaplarında tanımlanır" readOnly style={readOnlyInputStyle} />
+                <input
+                  value="Yalnızca kullanıcı hesaplarında tanımlanır"
+                  readOnly
+                  style={readOnlyInputStyle}
+                />
               </Field>
             )}
-            <Field label="Firma">
-              <input value={user?.organization?.name ?? '—'} readOnly style={readOnlyInputStyle} />
-            </Field>
             <Field label="Para Birimi">
               <input value="TL" readOnly style={readOnlyInputStyle} />
             </Field>

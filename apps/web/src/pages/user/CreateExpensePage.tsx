@@ -22,7 +22,9 @@ const schema = z.object({
   categoryId: z.string().uuid('Kategori seçiniz'),
   title: z.string().min(1, 'Başlık zorunludur'),
   description: z.string().optional(),
-  amount: z.string().refine((value) => toDecimalString(value) !== null, 'Geçerli bir tutar giriniz'),
+  amount: z
+    .string()
+    .refine((value) => toDecimalString(value) !== null, 'Geçerli bir tutar giriniz'),
   expenseDate: z
     .string()
     .min(1, 'Masraf tarihi zorunludur')
@@ -33,10 +35,7 @@ const schema = z.object({
   dueDate: z
     .string()
     .optional()
-    .refine(
-      (value) => !value || value >= toLocalIsoDate(),
-      'Vade tarihi geçmiş bir tarih olamaz.',
-    ),
+    .refine((value) => !value || value >= toLocalIsoDate(), 'Vade tarihi geçmiş bir tarih olamaz.'),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -82,6 +81,7 @@ export function CreateExpensePage(): JSX.Element {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [showNetworkDialog, setShowNetworkDialog] = useState(false);
   const [uploadState, setUploadState] = useState({ pending: 0, failed: 0 });
+  const [isPreparingAttachment, setIsPreparingAttachment] = useState(false);
   const [initialUploadStarted, setInitialUploadStarted] = useState(false);
   const uploadCompletionShown = useRef(false);
   const autoRecoveredRef = useRef(false);
@@ -122,6 +122,8 @@ export function CreateExpensePage(): JSX.Element {
   const {
     register,
     handleSubmit,
+    getValues,
+    trigger,
     control,
     reset,
     formState: { errors, isSubmitting, isDirty },
@@ -154,7 +156,7 @@ export function CreateExpensePage(): JSX.Element {
       categoryId: draft.categoryId ?? '',
       title: draft.title ?? '',
       description: draft.description ?? '',
-        amount: draft.amount ?? '',
+      amount: draft.amount ?? '',
       expenseDate: draft.expenseDate ?? '',
       dueDate: draft.dueDate ?? '',
     });
@@ -202,8 +204,8 @@ export function CreateExpensePage(): JSX.Element {
   });
 
   const updateMut = useMutation({
-    mutationFn: (data: FormValues & { amount: string }) =>
-      apiFetch(`/expenses/${editId}`, { method: 'PATCH', body: data }),
+    mutationFn: ({ id, data }: { id: string; data: FormValues & { amount: string } }) =>
+      apiFetch(`/expenses/${id}`, { method: 'PATCH', body: data }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['expenses'] });
     },
@@ -231,27 +233,44 @@ export function CreateExpensePage(): JSX.Element {
     if (!payload.dueDate) delete (payload as Partial<FormValues>).dueDate;
 
     if (editId) {
-      await updateMut.mutateAsync(payload);
+      await updateMut.mutateAsync({ id: editId, data: payload });
       showToast('Masraf güncellendi.', 'success');
+      navigate('/expenses?status=DRAFT');
+    } else if (savedExpenseId) {
+      if (uploadState.pending > 0 || uploadState.failed > 0 || isPreparingAttachment) {
+        showToast('Taslağı kaydetmeden önce belge yüklemesinin tamamlanmasını bekleyin.', 'info');
+        return;
+      }
+      await updateMut.mutateAsync({ id: savedExpenseId, data: payload });
+      await clearDraft();
+      showToast('Masraf ve faturası taslak olarak kaydedildi.', 'success');
       navigate('/expenses?status=DRAFT');
     } else {
       const created = await createMut.mutateAsync(payload);
-      setSavedExpenseId(created.id);
-      navigate(`/expenses/new?saved=${created.id}`, { replace: true });
-      if (pendingFiles.length === 0) {
-        await clearDraft();
-        showToast('Masraf taslak olarak kaydedildi.', 'success');
-      } else {
-        showToast('Taslak oluşturuldu, belgeler yükleniyor…', 'info');
+      if (pendingFiles.length > 0) {
+        setInitialUploadStarted(false);
+        setSavedExpenseId(created.id);
+        navigate(`/expenses/new?saved=${created.id}`, { replace: true });
+        showToast('Taslak hazırlandı. Fatura şimdi yükleniyor…', 'info');
+        return;
       }
+      await clearDraft();
+      showToast('Masraf taslak olarak kaydedildi.', 'success');
+      navigate('/expenses?status=DRAFT');
     }
   });
 
+  const uploadIsBusy =
+    isPreparingAttachment ||
+    uploadState.pending > 0 ||
+    (Boolean(savedExpenseId) &&
+      pendingFiles.length > uploadedFiles.length &&
+      uploadState.failed === 0);
   const loading = isSubmitting || createMut.isPending || updateMut.isPending;
 
   // ── Pre-save file selection ───────────────────────────────────────────────
 
-  const onPendingFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onPendingFileInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     e.target.value = '';
     const error = files.map((file) => getAttachmentValidationError(file)).find(Boolean);
@@ -263,7 +282,38 @@ export function CreateExpensePage(): JSX.Element {
       showToast('En fazla 5 belge eklenebilir.', 'error');
       return;
     }
-    if (files.length > 0) setPendingFiles((current) => [...current, ...files]);
+    if (files.length === 0) return;
+    if (!isOnline) {
+      setShowNetworkDialog(true);
+      return;
+    }
+
+    setIsPreparingAttachment(true);
+    try {
+      const formIsValid = await trigger();
+      if (!formIsValid) {
+        showToast('Faturayı yüklemek için önce zorunlu masraf alanlarını doldurun.', 'info');
+        return;
+      }
+
+      const values = getValues();
+      const amount = toDecimalString(values.amount);
+      if (!amount) return;
+      const payload: FormValues & { amount: string } = { ...values, amount };
+      if (!payload.dueDate) delete (payload as Partial<FormValues>).dueDate;
+
+      const created = await createMut.mutateAsync(payload);
+      uploadCompletionShown.current = false;
+      setInitialUploadStarted(false);
+      setPendingFiles(files);
+      setSavedExpenseId(created.id);
+      navigate(`/expenses/new?saved=${created.id}`, { replace: true });
+      showToast('Taslak hazırlandı. Fatura şimdi yükleniyor…', 'info');
+    } catch {
+      // createMut hata mesajını kullanıcıya gösterir.
+    } finally {
+      setIsPreparingAttachment(false);
+    }
   };
 
   const handleUploadStateChange = useCallback((next: { pending: number; failed: number }) => {
@@ -285,11 +335,9 @@ export function CreateExpensePage(): JSX.Element {
       return;
     }
     uploadCompletionShown.current = true;
-    void clearDraft();
     setPendingFiles([]);
-    showToast('Masraf taslağı ve belgeler kaydedildi.', 'success');
+    showToast('Fatura yüklendi. Taslağı kaydedebilirsiniz.', 'success');
   }, [
-    clearDraft,
     editId,
     initialUploadStarted,
     pendingFiles.length,
@@ -367,7 +415,6 @@ export function CreateExpensePage(): JSX.Element {
                 id="expense-category"
                 {...register('categoryId')}
                 style={inp(Boolean(errors.categoryId))}
-                disabled={isSaved && !editId}
               >
                 <option value="">Kategori seçiniz</option>
                 {categories.map((c) => (
@@ -393,7 +440,6 @@ export function CreateExpensePage(): JSX.Element {
                 {...register('title')}
                 placeholder="Masraf başlığı"
                 style={inp(Boolean(errors.title))}
-                disabled={isSaved && !editId}
               />
               {errors.title && (
                 <p role="alert" style={errSt}>
@@ -421,13 +467,14 @@ export function CreateExpensePage(): JSX.Element {
                       const decimal = toDecimalString(event.target.value);
                       if (decimal) field.onChange(decimalToTurkishInput(decimal));
                     }}
-                    onChange={(event) => field.onChange(formatTurkishMoneyInput(event.target.value))}
+                    onChange={(event) =>
+                      field.onChange(formatTurkishMoneyInput(event.target.value))
+                    }
                     type="text"
                     inputMode="decimal"
                     autoComplete="off"
                     placeholder="0,00"
                     style={inp(Boolean(errors.amount))}
-                    disabled={isSaved && !editId}
                   />
                 )}
               />
@@ -453,7 +500,6 @@ export function CreateExpensePage(): JSX.Element {
                     onChange={field.onChange}
                     onBlur={field.onBlur}
                     style={inp(Boolean(errors.expenseDate))}
-                    disabled={isSaved && !editId}
                     max={getExpenseDateMax()}
                   />
                 )}
@@ -504,7 +550,6 @@ export function CreateExpensePage(): JSX.Element {
                     onChange={field.onChange}
                     onBlur={field.onBlur}
                     style={inp(Boolean(errors.dueDate))}
-                    disabled={isSaved && !editId}
                     clearable={!requiresDueDate}
                     min={toLocalIsoDate()}
                   />
@@ -533,28 +578,39 @@ export function CreateExpensePage(): JSX.Element {
                   fontFamily: 'inherit',
                   lineHeight: 1.5,
                 }}
-                disabled={isSaved && !editId}
               />
             </div>
 
             {/* Submit */}
-            {(!isSaved || editId) && (
+            {(!isSaved || editId || Boolean(savedId)) && (
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || uploadIsBusy || uploadState.failed > 0}
                 style={{
                   padding: '14px',
                   borderRadius: 12,
                   border: 'none',
-                  background: loading ? 'var(--color-border)' : 'var(--color-primary)',
+                  background:
+                    loading || uploadIsBusy || uploadState.failed > 0
+                      ? 'var(--color-border)'
+                      : 'var(--color-primary)',
                   color: '#fff',
                   fontWeight: 700,
                   fontSize: 16,
-                  cursor: loading ? 'not-allowed' : 'pointer',
+                  cursor:
+                    loading || uploadIsBusy || uploadState.failed > 0 ? 'not-allowed' : 'pointer',
                   width: '100%',
                 }}
               >
-                {loading ? 'Kaydediliyor...' : editId ? 'Güncelle' : 'Taslak Kaydet'}
+                {loading
+                  ? 'Kaydediliyor...'
+                  : uploadIsBusy
+                    ? 'Fatura yükleniyor…'
+                    : uploadState.failed > 0
+                      ? 'Yüklemeyi tamamlayın'
+                      : editId
+                        ? 'Güncelle'
+                        : 'Taslak olarak kaydet'}
               </button>
             )}
           </div>
@@ -593,7 +649,7 @@ export function CreateExpensePage(): JSX.Element {
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
                 capture="environment"
-                onChange={onPendingFileInput}
+                onChange={(event) => void onPendingFileInput(event)}
               />
               <input
                 ref={pendingGalleryRef}
@@ -601,7 +657,7 @@ export function CreateExpensePage(): JSX.Element {
                 type="file"
                 accept="image/jpeg,image/png,image/webp,application/pdf"
                 multiple
-                onChange={onPendingFileInput}
+                onChange={(event) => void onPendingFileInput(event)}
               />
 
               {/* Buttons — always visible */}
@@ -643,43 +699,12 @@ export function CreateExpensePage(): JSX.Element {
               {pendingFiles.length === 0 && (
                 <p className="attachment-help">
                   Fatura orijinal ölçüleriyle eklenecek; kırpma veya yeniden boyutlandırma
-                  uygulanmayacak. Taslak kaydedildikten sonra yüklenecek.
+                  uygulanmayacak. Zorunlu alanlar doluysa seçtiğiniz fatura hemen yüklenecek.
                 </p>
               )}
             </div>
           )}
         </div>
-
-        {/* Done button */}
-        {isSaved && !editId && (
-          <button
-            type="button"
-            disabled={uploadState.pending > 0 || uploadState.failed > 0}
-            onClick={() => navigate('/expenses?status=DRAFT')}
-            style={{
-              marginTop: 20,
-              padding: '14px',
-              borderRadius: 12,
-              border: '2px solid var(--color-approved)',
-              background: 'var(--color-approved-bg)',
-              color: 'var(--color-approved)',
-              fontWeight: 700,
-              fontSize: 16,
-              cursor:
-                uploadState.pending > 0 || uploadState.failed > 0 ? 'not-allowed' : 'pointer',
-              opacity: uploadState.pending > 0 || uploadState.failed > 0 ? 0.6 : 1,
-              width: '100%',
-            }}
-          >
-            {uploadState.pending > 0
-              ? 'Belgeler yükleniyor…'
-              : uploadState.failed > 0
-                ? 'Başarısız belgeyi yeniden yükleyin'
-                : uploadedFiles.length > 0
-              ? `Taslağa Git (${uploadedFiles.length} belge)`
-                : 'Taslağa Git'}
-          </button>
-        )}
       </div>
 
       <NetworkRequiredDialog open={showNetworkDialog} onClose={() => setShowNetworkDialog(false)} />
@@ -702,13 +727,7 @@ const errSt: React.CSSProperties = {
 
 // ── PendingFileCard ───────────────────────────────────────────────────────────
 
-function PendingFileCard({
-  file,
-  onRemove,
-}: {
-  file: File;
-  onRemove: () => void;
-}) {
+function PendingFileCard({ file, onRemove }: { file: File; onRemove: () => void }) {
   const url = useMemo(
     () => (file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined),
     [file],
@@ -724,7 +743,7 @@ function PendingFileCard({
       <span className="attachment-thumbnail">{url ? <img src={url} alt="" /> : <FileText />}</span>
       <div className="attachment-meta">
         <strong title={file.name}>{file.name}</strong>
-        <small>{Math.ceil(file.size / 1024)} KB · Yüklenmeyi bekliyor</small>
+        <small>{Math.ceil(file.size / 1024)} KB · Yükleme hazırlanıyor…</small>
       </div>
       <div className="attachment-card-actions">
         <button

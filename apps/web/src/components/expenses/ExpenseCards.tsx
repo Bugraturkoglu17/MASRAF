@@ -12,9 +12,11 @@ import {
   UserRound,
   XCircle,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 import { DueDateBadge } from '@/components/ui/DueDateBadge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { apiFetch } from '@/lib/api-client';
 import { formatTry } from '@/lib/money';
 
 export type ExpenseStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
@@ -45,6 +47,47 @@ export interface ExpenseListItem {
 const money = formatTry;
 const date = (value: string) => new Date(value).toLocaleDateString('tr-TR');
 
+function ReceiptThumbnail({ attachment }: { attachment?: ExpenseAttachmentSummary }) {
+  const [preview, setPreview] = useState<{ attachmentId: string; url: string }>();
+  const isImage = attachment?.mimeType.startsWith('image/') ?? false;
+  const previewUrl = preview && preview.attachmentId === attachment?.id ? preview.url : undefined;
+
+  useEffect(() => {
+    let active = true;
+    if (!attachment || !isImage) {
+      return () => {
+        active = false;
+      };
+    }
+
+    void apiFetch<{ url: string }>(`/attachments/${attachment.id}/download-url`)
+      .then(({ url }) => {
+        if (active) setPreview({ attachmentId: attachment.id, url });
+      })
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
+  }, [attachment, isImage]);
+
+  return (
+    <div className={`receipt-thumbnail${previewUrl ? ' has-image' : ''}`}>
+      {previewUrl ? (
+        <img
+          src={previewUrl}
+          alt={`Ek 1: ${attachment?.fileName ?? 'fatura'} önizlemesi`}
+          loading="lazy"
+        />
+      ) : isImage ? (
+        <FileImage />
+      ) : (
+        <ReceiptText />
+      )}
+    </div>
+  );
+}
+
 export function MobileReceiptExpenseCard({
   expense,
   onDetail,
@@ -63,9 +106,7 @@ export function MobileReceiptExpenseCard({
   const first = expense.attachments?.[0];
   return (
     <article className="receipt-expense-card" onClick={onDetail}>
-      <div className="receipt-thumbnail" aria-hidden="true">
-        {first?.mimeType.startsWith('image/') ? <FileImage /> : <ReceiptText />}
-      </div>
+      <ReceiptThumbnail attachment={first} />
       <div className="receipt-body">
         <time>{date(expense.expenseDate)}</time>
         <strong>{expense.category.name}</strong>
