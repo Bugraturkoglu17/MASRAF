@@ -623,8 +623,3 @@ const labelSt: React.CSSProperties = {
   color: 'var(--color-text)',
   marginBottom: 6,
 };
-const errSt: React.CSSProperties = {
-  color: 'var(--color-danger)',
-  fontSize: 12,
-  margin: '4px 0 0',
-};
