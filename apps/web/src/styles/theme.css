@@ -3190,6 +3190,21 @@ textarea::placeholder {
   .attachment-action-row {
     grid-template-columns: repeat(2, 1fr);
   }
+
+  /* Klavye açık: alt nav gizle, scroll alanını klavye yüksekliğine göre ayarla */
+  .keyboard-open .mobile-bottom-nav {
+    display: none;
+  }
+  .keyboard-open .app-main {
+    padding-bottom: calc(var(--keyboard-height, 0px) + env(safe-area-inset-bottom, 0px) + 24px);
+  }
+
+  /* iOS auto-zoom engeli: fiziksel font-size < 16px olduğunda Safari sayfayı zoom'lar */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
+  textarea,
+  select {
+    font-size: max(16px, 1em);
+  }
 }
 
 @media (max-height: 500px) and (max-width: 767px) {

@@ -11,10 +11,16 @@ import { IosInstallGuide } from '@/components/pwa/IosInstallGuide';
 import { OnlineRestoredToast } from '@/components/pwa/OnlineRestoredToast';
 import { PwaInstallBanner } from '@/components/pwa/PwaInstallBanner';
 import { AuthProvider } from '@/features/auth/auth-context';
+import { useKeyboardAware } from '@/hooks/useKeyboardAware';
 import { NetworkStatusProvider } from '@/hooks/useNetworkStatus';
 import { PwaInstallProvider } from '@/hooks/usePwaInstall';
 import { queryClient } from '@/lib/query-client';
 import { router } from '@/routes/router';
+
+function KeyboardAwareRoot(): null {
+  useKeyboardAware();
+  return null;
+}
 
 export function App(): JSX.Element {
   return (
@@ -24,6 +30,7 @@ export function App(): JSX.Element {
           <NetworkStatusProvider>
             <PwaInstallProvider>
               <AuthProvider>
+                <KeyboardAwareRoot />
                 <OfflineBanner />
                 <MaintenanceBanner />
                 <OnlineRestoredToast />
