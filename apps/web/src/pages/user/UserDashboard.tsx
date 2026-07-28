@@ -113,7 +113,7 @@ export function UserDashboard(): JSX.Element {
           <strong>
             Merhaba, <span>{user?.firstName}</span>
           </strong>
-          <em>Masraff girmeye hazır mısın?</em>
+          <em>Masraf girmeye hazır mısın?</em>
         </div>
         <div className="user-home-hero-icons">
           <button type="button" aria-label="Mesajlar">
