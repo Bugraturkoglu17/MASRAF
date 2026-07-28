@@ -157,7 +157,7 @@ export class UsersService {
   async changeOwnPassword(
     id: string,
     organizationId: string,
-    currentPassword: string,
+    currentPassword: string | undefined,
     newPassword: string,
     newPasswordConfirm: string,
   ) {
@@ -170,16 +170,27 @@ export class UsersService {
 
     const user = await this.prisma.user.findFirst({
       where: { id, deletedAt: null },
-      select: { passwordHash: true },
+      select: { passwordHash: true, mustChangePassword: true },
     });
     if (!user) throw new NotFoundAppException('Kullanıcı');
 
-    const currentValid = await argon2.verify(user.passwordHash, currentPassword);
-    if (!currentValid) {
+    // İlk girişte zorunlu şifre belirlemede mevcut (geçici) şifre zaten
+    // /auth/login sırasında doğrulanmıştır — tekrar istenmez. Gönüllü
+    // (self-service, ayarlardan) değişiklikte ise her zaman zorunludur.
+    if (!user.mustChangePassword && !currentPassword) {
       throw new ValidationAppException(
-        [{ field: 'currentPassword', message: 'Mevcut şifre yanlış.' }],
-        'Mevcut şifre yanlış.',
+        [{ field: 'currentPassword', message: 'Mevcut şifre zorunludur.' }],
+        'Mevcut şifre zorunludur.',
       );
+    }
+    if (currentPassword) {
+      const currentValid = await argon2.verify(user.passwordHash, currentPassword);
+      if (!currentValid) {
+        throw new ValidationAppException(
+          [{ field: 'currentPassword', message: 'Mevcut şifre yanlış.' }],
+          'Mevcut şifre yanlış.',
+        );
+      }
     }
 
     const isSame = await argon2.verify(user.passwordHash, newPassword);

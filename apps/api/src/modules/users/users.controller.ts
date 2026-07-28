@@ -51,7 +51,8 @@ const setStatusSchema = z.object({
 });
 
 const changeOwnPasswordSchema = z.object({
-  currentPassword: z.string().min(1, 'Mevcut şifre zorunludur.'),
+  // İlk girişte zorunlu şifre belirleme akışında gönderilmez (bkz. UsersService.changeOwnPassword).
+  currentPassword: z.string().min(1, 'Mevcut şifre zorunludur.').optional(),
   newPassword: z.string().min(8, 'Şifre en az 8 karakter olmalıdır.').max(72),
   newPasswordConfirm: z.string(),
 });
