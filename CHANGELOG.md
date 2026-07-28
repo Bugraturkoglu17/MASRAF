@@ -21,6 +21,12 @@
 **Yeni masraf formu eski verilerle dolu gelme sorunu**
 - `CreateExpensePage`, cihazda kayıtlı bir taslak varsa formu sessizce dolduruyordu. Artık form her zaman boş açılıyor; kayıtlı taslak varsa daha önce yazılmış ama hiç kullanılmayan `LocalDraftRecoverySheet` bileşeni devreye giriyor ("Devam Et" / "Sil").
 
+**Yeni kullanıcının ilk şifre belirlemesi başarısız oluyordu**
+- Admin yeni kullanıcı oluşturup geçici şifre atadıktan sonra, kullanıcı geçici şifreyle giriş yapıp "Yeni Şifre Belirleyin" ekranına yönlendiriliyor ama şifreyi kaydedemiyordu: `400 VALIDATION_ERROR — currentPassword: Required`.
+- Kök neden: `PATCH /users/me/password` hem zorunlu ilk-giriş şifre belirleme hem gönüllü (ayarlardan) şifre değişikliği için ortak kullanılıyor; gönüllü değişiklik için eklenen `currentPassword` zorunluluğu ilk-giriş akışını da etkilemişti (bu akış zaten `/auth/login` sırasında geçici şifreyi doğrulamış olduğundan alanı hiç göndermiyordu).
+- `currentPassword` artık `mustChangePassword=true` iken opsiyonel, gönüllü değişiklikte (`mustChangePassword=false`) hâlâ zorunlu ve doğrulanıyor.
+- Admin→yeni kullanıcı→ilk giriş→şifre belirle→profil tamamla→çıkış→yeni şifreyle giriş zinciri uçtan uca doğrulandı; 4 regresyon testi eklendi.
+
 ### feat: telefonla giriş, IBAN ödeme akışı ve arayüz iyileştirmeleri (2026-07-26)
 
 **Kimlik Doğrulama ve Kullanıcı Akışı**
