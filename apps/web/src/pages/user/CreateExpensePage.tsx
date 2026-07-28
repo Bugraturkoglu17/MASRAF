@@ -124,8 +124,12 @@ export function CreateExpensePage(): JSX.Element {
     trigger,
     control,
     reset,
-    formState: { errors, isSubmitting, isDirty },
-  } = useForm<FormValues>({ resolver: zodResolver(schema) });
+    formState: { errors, isSubmitting, isDirty, isSubmitted },
+  } = useForm<FormValues>({
+    resolver: zodResolver(schema),
+    mode: 'onSubmit',
+    reValidateMode: 'onSubmit',
+  });
 
   const selectedCategoryId = useWatch({ control, name: 'categoryId' });
   const formValues = useWatch({ control });
@@ -430,11 +434,6 @@ export function CreateExpensePage(): JSX.Element {
                   </option>
                 ))}
               </select>
-              {errors.categoryId && (
-                <p role="alert" style={errSt}>
-                  {errors.categoryId.message}
-                </p>
-              )}
             </div>
 
             {/* Title */}
@@ -448,11 +447,6 @@ export function CreateExpensePage(): JSX.Element {
                 placeholder="Masraf başlığı"
                 style={inp(Boolean(errors.title))}
               />
-              {errors.title && (
-                <p role="alert" style={errSt}>
-                  {errors.title.message}
-                </p>
-              )}
             </div>
 
             {/* Amount */}
@@ -485,11 +479,6 @@ export function CreateExpensePage(): JSX.Element {
                   />
                 )}
               />
-              {errors.amount && (
-                <p role="alert" style={errSt}>
-                  {errors.amount.message}
-                </p>
-              )}
             </div>
 
             {/* Expense date */}
@@ -511,11 +500,6 @@ export function CreateExpensePage(): JSX.Element {
                   />
                 )}
               />
-              {errors.expenseDate && (
-                <p role="alert" style={errSt}>
-                  {errors.expenseDate.message}
-                </p>
-              )}
             </div>
 
             {/* Due date */}
@@ -548,11 +532,6 @@ export function CreateExpensePage(): JSX.Element {
                   />
                 )}
               />
-              {errors.dueDate && (
-                <p role="alert" style={errSt}>
-                  {errors.dueDate.message}
-                </p>
-              )}
             </div>
 
             {/* Description */}
@@ -575,6 +554,19 @@ export function CreateExpensePage(): JSX.Element {
             </div>
 
             {/* Submit */}
+            {isSubmitted && Object.keys(errors).length > 0 && (
+              <p
+                role="alert"
+                style={{
+                  color: 'var(--color-danger)',
+                  fontSize: 13,
+                  margin: '0 0 8px',
+                  textAlign: 'center',
+                }}
+              >
+                Lütfen zorunlu alanları eksiksiz doldurun.
+              </p>
+            )}
             <button
               type="submit"
               disabled={loading}

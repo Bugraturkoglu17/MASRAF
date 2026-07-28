@@ -136,11 +136,6 @@ export function LoginPage(): JSX.Element {
                   },
                 })}
               />
-              {errors.identifier && (
-                <p id="identifier-error" role="alert" className="auth-field-error">
-                  {errors.identifier.message}
-                </p>
-              )}
             </div>
 
             <div className="auth-field">
@@ -153,10 +148,10 @@ export function LoginPage(): JSX.Element {
                   placeholder="••••••••"
                   aria-invalid={Boolean(errors.password)}
                   aria-describedby={errors.password ? 'password-error' : undefined}
-                {...register('password', {
-                  required: 'Şifre zorunludur.',
-                  minLength: { value: 8, message: 'Şifre en az 8 karakter olmalıdır.' },
-                })}
+                  {...register('password', {
+                    required: 'Şifre zorunludur.',
+                    minLength: { value: 8, message: 'Şifre en az 8 karakter olmalıdır.' },
+                  })}
                 />
                 <button
                   type="button"
@@ -168,11 +163,6 @@ export function LoginPage(): JSX.Element {
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
-              {errors.password && (
-                <p id="password-error" role="alert" className="auth-field-error">
-                  {errors.password.message}
-                </p>
-              )}
             </div>
 
             {formError && (

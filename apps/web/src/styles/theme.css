@@ -2099,7 +2099,6 @@ textarea::placeholder {
   font-size: 10px;
   font-weight: 800;
   line-height: 1;
-  border: 2px solid var(--color-surface);
 }
 
 .spin {

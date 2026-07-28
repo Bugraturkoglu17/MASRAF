@@ -160,7 +160,7 @@ export function ProfileCompletePage(): JSX.Element {
 
 function Field({
   label,
-  error,
+  error: _error,
   children,
 }: {
   label: string;
@@ -171,7 +171,6 @@ function Field({
     <div style={{ marginBottom: 16 }}>
       <label style={labelStyle}>{label}</label>
       {children}
-      {error && <p style={errorStyle}>{error}</p>}
     </div>
   );
 }
@@ -247,12 +246,6 @@ const inputStyle = (hasError: boolean): React.CSSProperties => ({
   fontSize: 14,
   boxSizing: 'border-box',
 });
-
-const errorStyle: React.CSSProperties = {
-  color: 'var(--color-danger)',
-  fontSize: 12,
-  margin: '4px 0 0',
-};
 
 const ibanHelpStyle: React.CSSProperties = {
   margin: '5px 0 0',

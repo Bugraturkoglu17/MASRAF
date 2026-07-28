@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { KeyRound, LogOut } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
@@ -178,14 +178,6 @@ export function UserProfilePage(): JSX.Element {
       </div>
 
       <div className="profile-account-actions">
-        <button
-          type="button"
-          onClick={() => navigate('/change-password')}
-          className="profile-password-button"
-        >
-          <KeyRound size={16} />
-          Şifre Değiştir
-        </button>
         <div style={{ marginBottom: 14 }}>
           <div
             style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-text)', marginBottom: 3 }}
@@ -226,7 +218,7 @@ export function UserProfilePage(): JSX.Element {
 
 function Field({
   label,
-  error,
+  error: _error,
   children,
 }: {
   label: string;
@@ -237,7 +229,6 @@ function Field({
     <div>
       <label style={labelStyle}>{label}</label>
       {children}
-      {error && <p style={errStyle}>{error}</p>}
     </div>
   );
 }
@@ -308,11 +299,6 @@ const inputStyle = (hasErr: boolean): React.CSSProperties => ({
   fontSize: 16,
   boxSizing: 'border-box',
 });
-const errStyle: React.CSSProperties = {
-  color: 'var(--color-danger)',
-  fontSize: 12,
-  margin: '4px 0 0',
-};
 
 const ibanHelpStyle: React.CSSProperties = {
   margin: '5px 0 0',
