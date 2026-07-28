@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Download, FileText, X } from 'lucide-react';
+import { Download, Eye, FileText, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { DueDateBadge } from './DueDateBadge';
@@ -61,6 +61,8 @@ function formatDate(d?: string | null) {
 export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetProps): JSX.Element {
   const { showToast } = useToast();
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [viewingId, setViewingId] = useState<string | null>(null);
   const { data: expense, isLoading } = useQuery<ExpenseDetail>({
     queryKey: ['expense-detail', expenseId],
     queryFn: () => apiFetch(`/expenses/${expenseId}`),
@@ -68,11 +70,14 @@ export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetPro
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        if (lightboxUrl) setLightboxUrl(null);
+        else onClose();
+      }
     };
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
-  }, [onClose]);
+  }, [onClose, lightboxUrl]);
 
   const downloadAttachment = async (attachment: Attachment) => {
     if (downloadingId) return;
@@ -94,6 +99,23 @@ export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetPro
       showToast('Dosya indirilemedi. İnternet bağlantınızı kontrol edin.', 'error');
     } finally {
       setDownloadingId(null);
+    }
+  };
+
+  const viewAttachment = async (attachment: Attachment) => {
+    if (viewingId) return;
+    setViewingId(attachment.id);
+    try {
+      const { url } = await apiFetch<{ url: string }>(`/attachments/${attachment.id}/download-url`);
+      if (attachment.mimeType === 'application/pdf') {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      } else {
+        setLightboxUrl(url);
+      }
+    } catch {
+      showToast('Önizleme açılamadı. Lütfen tekrar deneyin.', 'error');
+    } finally {
+      setViewingId(null);
     }
   };
 
@@ -326,6 +348,15 @@ export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetPro
                         <button
                           type="button"
                           className="attachment-icon-button"
+                          aria-label={`Masraf ${expenseReference}, belge ${index + 1} önizle`}
+                          disabled={viewingId !== null || downloadingId !== null}
+                          onClick={() => void viewAttachment(att)}
+                        >
+                          <Eye size={14} color="var(--color-primary)" />
+                        </button>
+                        <button
+                          type="button"
+                          className="attachment-icon-button"
                           aria-label={`Masraf ${expenseReference}, belge ${index + 1} indir`}
                           disabled={downloadingId !== null}
                           onClick={() => void downloadAttachment(att)}
@@ -341,6 +372,30 @@ export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetPro
           )}
         </div>
       </div>
+      {lightboxUrl && (
+        <div
+          className="img-lightbox-backdrop"
+          onClick={() => setLightboxUrl(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Belge önizleme"
+        >
+          <button
+            type="button"
+            className="img-lightbox-close"
+            onClick={() => setLightboxUrl(null)}
+            aria-label="Önizlemeyi kapat"
+          >
+            <X size={18} />
+          </button>
+          <img
+            src={lightboxUrl}
+            alt="Belge önizleme"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '92vw', maxHeight: '88vh', objectFit: 'contain', borderRadius: 8 }}
+          />
+        </div>
+      )}
       <style>{`
         @keyframes slideUp {
           from { transform: translateY(100%); opacity: 0; }
