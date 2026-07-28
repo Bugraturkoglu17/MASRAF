@@ -7,6 +7,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 
 import { useToast } from '@/components/feedback/toast-context';
+import { LocalDraftRecoverySheet } from '@/components/pwa/LocalDraftRecoverySheet';
 import { NetworkRequiredDialog } from '@/components/pwa/NetworkRequiredDialog';
 import { AttachmentUploader } from '@/components/ui/AttachmentUploader';
 import { DatePickerTr } from '@/components/ui/DatePickerTr';
@@ -81,10 +82,10 @@ export function CreateExpensePage(): JSX.Element {
   const [savedExpenseId, setSavedExpenseId] = useState<string | null>(editId ?? savedId);
   const expenseIdRef = useRef<string | null>(editId ?? savedId);
   const submitLockRef = useRef(false);
-  const autoRecoveredRef = useRef(false);
   const initialFilesHandledRef = useRef(false);
 
   const [showNetworkDialog, setShowNetworkDialog] = useState(false);
+  const [draftDismissed, setDraftDismissed] = useState(false);
   const [submitPhase, setSubmitPhase] = useState<SubmitPhase>('idle');
   const [uploadLimits, setUploadLimits] = useState({
     maxFiles: 5,
@@ -178,20 +179,33 @@ export function CreateExpensePage(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    if (editId || isDraftLoading || autoRecoveredRef.current) return;
-    autoRecoveredRef.current = true;
-    if (!draft || (!draft.categoryId && !draft.title && !draft.amount && !draft.expenseDate))
-      return;
-    reset({
-      categoryId: draft.categoryId ?? '',
-      title: draft.title ?? '',
-      description: draft.description ?? '',
-      amount: draft.amount ?? '',
-      expenseDate: draft.expenseDate ?? '',
-      dueDate: draft.dueDate ?? '',
-    });
-  }, [draft, editId, isDraftLoading, reset]);
+  // Form her zaman boş açılır. Bu cihazda kaydedilmiş bir taslak varsa kullanıcıya
+  // sorulur (LocalDraftRecoverySheet) — sessizce forma yazılmaz. Render sırasında
+  // türetilir (effect + setState yerine): kullanıcı "Sil"/"Devam Et" dedikten sonra
+  // draftDismissed true olur ve kart bir daha görünmez.
+  const hasRecoverableDraft = Boolean(
+    draft && (draft.categoryId || draft.title || draft.amount || draft.expenseDate),
+  );
+  const showDraftRecovery = !editId && !isDraftLoading && !draftDismissed && hasRecoverableDraft;
+
+  const handleRecoverDraft = () => {
+    if (draft) {
+      reset({
+        categoryId: draft.categoryId ?? '',
+        title: draft.title ?? '',
+        description: draft.description ?? '',
+        amount: draft.amount ?? '',
+        expenseDate: draft.expenseDate ?? '',
+        dueDate: draft.dueDate ?? '',
+      });
+    }
+    setDraftDismissed(true);
+  };
+
+  const handleDiscardDraft = () => {
+    void clearDraft();
+    setDraftDismissed(true);
+  };
 
   useEffect(() => {
     document.documentElement.dataset.unsavedForm = String(isDirty && !savedExpenseId);
@@ -612,6 +626,13 @@ export function CreateExpensePage(): JSX.Element {
       </div>
 
       <NetworkRequiredDialog open={showNetworkDialog} onClose={() => setShowNetworkDialog(false)} />
+      {showDraftRecovery && (
+        <LocalDraftRecoverySheet
+          draft={draft}
+          onRecover={handleRecoverDraft}
+          onDelete={handleDiscardDraft}
+        />
+      )}
     </div>
   );
 }

@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+### fix: fatura yükleme çift tıklama ve R2 CORS mimarisi (2026-07-28)
+
+**Çift tıklama sorunu**
+- Fatura yükleme kuyruğu `AttachmentUploader` bileşeninin iç state'inden `useAttachmentUploads` hook'una taşındı; state hem render hem senkron okuma (ref) için birlikte tutuluyor.
+- Dosya seçimi anında yükleme otomatik başlıyor; "Taslak olarak kaydet" artık devam eden yüklemeleri aynı tıklamada bekleyip tek seferde kaydediyor — ikinci tıklamaya gerek kalmadı.
+- `expenseIdRef` ile aynı taslağın iki kez oluşturulması, `submitLockRef` ile çift submit engellendi.
+- Dosya kartlarında gerçek ilerleme yüzdesi, tamamlananda yeşil tik ve "Yüklendi" ibaresi eklendi.
+
+**R2 CORS sorunu — kalıcı mimari çözüm**
+- Kök neden: Cloudflare R2 bucket CORS politikası doğru yapılandırılmasına rağmen (curl ile doğrulandı), gerçek tarayıcılardan (HTTP/3 üzerinden) R2'ye doğrudan PUT tutarlı biçimde başarısız oluyordu.
+- Presigned-URL akışı (tarayıcı → R2 doğrudan PUT) tamamen kaldırıldı; yerine backend proxy mimarisi getirildi: tarayıcı yalnızca aynı-origin API'ye multipart POST atıyor, R2 bağlantısı sunucu-sunucu (AWS SDK) kalıyor. Bu, ilgili CORS sınıfı sorunlarını yapısal olarak ortadan kaldırdı.
+- `POST /attachments/upload-url` ve `POST /attachments/complete` kaldırıldı; yerine tek `POST /attachments/upload` (multipart/form-data, `FileInterceptor`) geldi.
+- `multer` doğrudan bağımlılık olarak eklendi (önceden yalnızca transitif bağımlıydı, pnpm'in katı linking'i altında import edilemiyordu).
+- nginx `client_max_body_size` 1m → 20m yükseltildi (backend-proxy akışında dosya artık nginx'ten geçiyor).
+- Gerçek Cloudflare R2 karşı hem yerelde hem Northflank canlı ortamında uçtan uca doğrulandı: tek JPG, çoklu JPG+PNG+PDF, tek tıklama kaydet, sayfa yenileme sonrası kalıcılık.
+
+**Yeni masraf formu eski verilerle dolu gelme sorunu**
+- `CreateExpensePage`, cihazda kayıtlı bir taslak varsa formu sessizce dolduruyordu. Artık form her zaman boş açılıyor; kayıtlı taslak varsa daha önce yazılmış ama hiç kullanılmayan `LocalDraftRecoverySheet` bileşeni devreye giriyor ("Devam Et" / "Sil").
+
 ### feat: telefonla giriş, IBAN ödeme akışı ve arayüz iyileştirmeleri (2026-07-26)
 
 **Kimlik Doğrulama ve Kullanıcı Akışı**
