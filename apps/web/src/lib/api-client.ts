@@ -70,7 +70,7 @@ async function fetchWithTimeout(url: string, init: RequestInit, externalSignal?:
   }
 }
 
-async function refreshAccessToken(): Promise<boolean> {
+export async function refreshAccessToken(): Promise<boolean> {
   if (!refreshPromise) {
     refreshPromise = fetchWithTimeout(`${API_BASE_URL}/auth/refresh`, {
       method: 'POST',

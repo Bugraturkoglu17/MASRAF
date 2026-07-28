@@ -1,30 +1,31 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import { memoryStorage } from 'multer';
 import { z } from 'zod';
 
 import {
   CurrentUser,
   type AuthenticatedUser,
 } from '../../common/decorators/current-user.decorator';
-import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 
 import { AttachmentsService } from './attachments.service';
 
-const uploadUrlSchema = z.object({
-  expenseId: z.string().uuid(),
-  fileName: z.string().min(1).max(255),
-  mimeType: z.string().min(1),
-  fileSize: z.number().int().positive(),
-});
-
-const completeSchema = z.object({
-  expenseId: z.string().uuid(),
-  fileKey: z.string().min(1),
-  fileName: z.string().min(1).max(255),
-  mimeType: z.string().min(1),
-  fileSize: z.number().int().positive(),
-  fileHash: z.string().optional(),
-});
+// Sunucu tarafı ön-kabul sınırı; kesin boyut/tip doğrulaması servis katmanında
+// yapılandırılan gerçek limitlerle (assertValidAttachment) yapılır.
+const MULTER_HARD_CAP_BYTES = 20 * 1024 * 1024;
 
 @ApiTags('attachments')
 @ApiBearerAuth()
@@ -32,36 +33,34 @@ const completeSchema = z.object({
 export class AttachmentsController {
   constructor(private readonly attachmentsService: AttachmentsService) {}
 
-  @Post('upload-url')
-  async requestUploadUrl(
-    @Body(new ZodValidationPipe(uploadUrlSchema)) body: z.infer<typeof uploadUrlSchema>,
+  /**
+   * Dosya backend üzerinden R2'ye yüklenir (server-to-server). Tarayıcının
+   * R2'ye doğrudan PUT attığı presigned-URL akışı, bazı istemcilerde Cloudflare
+   * R2 ile tutarsız CORS davranışı gösterdiği için kaldırıldı.
+   */
+  @Post('upload')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: MULTER_HARD_CAP_BYTES },
+    }),
+  )
+  async uploadDirect(
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Body('expenseId') expenseId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.attachmentsService.requestUploadUrl(
-      user.organizationId,
-      user.id,
-      body.expenseId,
-      body.fileName,
-      body.mimeType,
-      body.fileSize,
-    );
-  }
-
-  @Post('complete')
-  async completeUpload(
-    @Body(new ZodValidationPipe(completeSchema)) body: z.infer<typeof completeSchema>,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
-    return this.attachmentsService.completeUpload(
-      user.organizationId,
-      user.id,
-      body.expenseId,
-      body.fileKey,
-      body.fileName,
-      body.mimeType,
-      body.fileSize,
-      body.fileHash,
-    );
+    if (!file) throw new BadRequestException('Dosya bulunamadı.');
+    if (!z.string().uuid().safeParse(expenseId).success) {
+      throw new BadRequestException('Geçersiz masraf kimliği.');
+    }
+    return this.attachmentsService.uploadDirect(user.organizationId, user.id, expenseId, {
+      originalname: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size,
+      buffer: file.buffer,
+    });
   }
 
   @Get(':id/download-url')

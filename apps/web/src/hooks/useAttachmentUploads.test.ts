@@ -6,25 +6,50 @@ import { useAttachmentUploads } from './useAttachmentUploads';
 import type * as ApiClient from '@/lib/api-client';
 
 const apiFetch = vi.hoisted(() => vi.fn());
+const refreshAccessToken = vi.hoisted(() => vi.fn().mockResolvedValue(false));
 vi.mock('@/lib/api-client', async () => {
   const actual = await vi.importActual<typeof ApiClient>('@/lib/api-client');
-  return { ...actual, apiFetch };
+  return { ...actual, apiFetch, refreshAccessToken, getAccessToken: () => 'test-token' };
 });
 
-/** R2'ye yapılan PUT'u taklit eder; her örnek anında başarıyla tamamlanır. */
+let uploadCallCount = 0;
+let shouldFail = false;
+
+/** Backend'e giden tek multipart `/attachments/upload` POST'unu taklit eder. */
 class MockXhr {
   upload = { onprogress: null as ((ev: ProgressEvent) => void) | null };
   onload: (() => void) | null = null;
   onerror: (() => void) | null = null;
   ontimeout: (() => void) | null = null;
-  status = 200;
+  status = 0;
+  responseText = '';
   timeout = 0;
+  withCredentials = false;
   open = vi.fn();
   setRequestHeader = vi.fn();
   send = vi.fn(() => {
     queueMicrotask(() => {
       this.upload.onprogress?.({ lengthComputable: true, loaded: 50, total: 100 } as ProgressEvent);
-      this.onload?.();
+      queueMicrotask(() => {
+        if (shouldFail) {
+          this.status = 502;
+          this.responseText = JSON.stringify({
+            code: 'STORAGE_UPLOAD_FAILED',
+            message: 'R2 down',
+          });
+        } else {
+          uploadCallCount += 1;
+          this.status = 201;
+          this.responseText = JSON.stringify({
+            id: `att-${uploadCallCount}`,
+            fileKey: 'attachments/org/abc.jpg',
+            fileName: 'fatura.jpg',
+            mimeType: 'image/jpeg',
+            sizeBytes: 3,
+          });
+        }
+        this.onload?.();
+      });
     });
   });
 }
@@ -33,33 +58,14 @@ function makeFile(name = 'fatura.jpg', type = 'image/jpeg') {
   return new File([new Uint8Array([1, 2, 3])], name, { type });
 }
 
-function setupApi() {
-  apiFetch.mockImplementation((path: string) => {
-    if (path === '/attachments/upload-url') {
-      return Promise.resolve({
-        uploadUrl: 'https://r2.example.com/signed',
-        fileKey: 'attachments/org/abc.jpg',
-        expiresIn: 900,
-      });
-    }
-    if (path === '/attachments/complete') {
-      return Promise.resolve({
-        id: `att-${apiFetch.mock.calls.filter((c) => c[0] === '/attachments/complete').length}`,
-        fileKey: 'attachments/org/abc.jpg',
-        fileName: 'fatura.jpg',
-        mimeType: 'image/jpeg',
-        sizeBytes: 3,
-      });
-    }
-    return Promise.resolve({});
-  });
-}
-
 const options = { maxFiles: 5, maxFileSizeBytes: 15 * 1024 * 1024 };
 
 beforeEach(() => {
   apiFetch.mockReset();
-  setupApi();
+  apiFetch.mockResolvedValue(undefined);
+  refreshAccessToken.mockClear();
+  uploadCallCount = 0;
+  shouldFail = false;
   vi.stubGlobal('XMLHttpRequest', MockXhr);
   // jsdom bu ikisini tanımlamaz; statik metot oldukları için spread ile kopyalanmaz.
   URL.createObjectURL = vi.fn(() => 'blob:preview');
@@ -80,7 +86,7 @@ describe('useAttachmentUploads', () => {
 
     expect(result.current.items).toHaveLength(1);
     expect(result.current.items[0]!.status).toBe('waiting');
-    expect(apiFetch).not.toHaveBeenCalled();
+    expect(uploadCallCount).toBe(0);
   });
 
   it('taslak varken dosya seçimi anında yüklemeyi başlatır', async () => {
@@ -128,26 +134,15 @@ describe('useAttachmentUploads', () => {
     });
     await waitFor(() => expect(result.current.items[0]!.status).toBe('done'));
 
-    const completeCallsBefore = apiFetch.mock.calls.filter(
-      (c) => c[0] === '/attachments/complete',
-    ).length;
-
+    const callsBefore = uploadCallCount;
     await act(async () => {
       await result.current.flush('exp-1');
     });
-
-    const completeCallsAfter = apiFetch.mock.calls.filter(
-      (c) => c[0] === '/attachments/complete',
-    ).length;
-    expect(completeCallsAfter).toBe(completeCallsBefore);
+    expect(uploadCallCount).toBe(callsBefore);
   });
 
   it('başarısız yükleme flush() sonucunda failed olarak raporlanır', async () => {
-    apiFetch.mockImplementation((path: string) => {
-      if (path === '/attachments/upload-url') return Promise.reject(new Error('R2 down'));
-      return Promise.resolve({});
-    });
-
+    shouldFail = true;
     const { result } = renderHook(() => useAttachmentUploads(options));
     act(() => {
       result.current.addFiles([makeFile()]);
@@ -161,5 +156,6 @@ describe('useAttachmentUploads', () => {
     expect(flushed!.uploaded).toHaveLength(0);
     expect(flushed!.failed).toHaveLength(1);
     expect(result.current.items[0]!.status).toBe('error');
+    expect(result.current.items[0]!.error).toContain('STORAGE_UPLOAD_FAILED');
   });
 });

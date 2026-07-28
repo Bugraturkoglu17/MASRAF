@@ -34,13 +34,17 @@ export class AttachmentsService {
     };
   }
 
-  async requestUploadUrl(
+  /**
+   * Dosyayı backend üzerinden R2'ye yükler (sunucu-sunucu, tarayıcı-R2 CORS'una
+   * tabi değildir). Tarayıcının R2'ye doğrudan PUT attığı eski presigned-URL akışı,
+   * bazı istemcilerde (özellikle HTTP/3 üzerinden) Cloudflare R2 ile tutarsız CORS
+   * davranışı gösterdiği için kaldırıldı — bkz. proje geçmişi.
+   */
+  async uploadDirect(
     organizationId: string,
     userId: string,
     expenseId: string,
-    fileName: string,
-    mimeType: string,
-    fileSize: number,
+    file: { originalname: string; mimetype: string; size: number; buffer: Buffer },
   ) {
     const expense = await this.prisma.expense.findFirst({
       where: { id: expenseId, organizationId, deletedAt: null },
@@ -58,74 +62,66 @@ export class AttachmentsService {
       throw new ConflictAppException(`En fazla ${this.uploadLimits.maxFiles} dosya eklenebilir.`);
 
     const normalizedMimeType = assertValidAttachment(
-      fileName,
-      mimeType,
-      fileSize,
+      file.originalname,
+      file.mimetype,
+      file.size,
       this.uploadLimits.maxSizeBytes,
     );
 
-    const { fileKey, uploadUrl, expiresIn } = await this.storageService.getSignedUploadUrl(
-      organizationId,
-      fileName,
-      normalizedMimeType,
-    );
-
-    return { fileKey, uploadUrl, expiresIn };
-  }
-
-  async completeUpload(
-    organizationId: string,
-    userId: string,
-    expenseId: string,
-    fileKey: string,
-    fileName: string,
-    mimeType: string,
-    fileSize: number,
-    fileHash?: string,
-  ) {
-    const expense = await this.prisma.expense.findFirst({
-      where: { id: expenseId, organizationId, deletedAt: null },
-    });
-    if (!expense) throw new NotFoundAppException('Masraf');
-    if (expense.userId !== userId)
-      throw new ForbiddenAppException('Yalnızca kendi masrafınıza dosya ekleyebilirsiniz.');
-    if (expense.status !== 'DRAFT')
-      throw new ConflictAppException('Yalnızca taslak masraflara dosya eklenebilir.');
-
-    const normalizedMimeType = assertValidAttachment(
-      fileName,
-      mimeType,
-      fileSize,
-      this.uploadLimits.maxSizeBytes,
-    );
-    if (!fileKey.startsWith(`attachments/${organizationId}/`)) {
-      throw new ForbiddenAppException('Dosya anahtarı organizasyon kapsamı dışında.');
-    }
-    let uploadedFileExists = false;
+    let stored;
     try {
-      uploadedFileExists = await this.storageService.fileExists(fileKey);
+      stored = await this.storageService.storeAttachment(
+        organizationId,
+        file.originalname,
+        normalizedMimeType,
+        file.buffer,
+      );
     } catch (error) {
       this.logger.error(
-        `Yüklenen R2 objesi doğrulanamadı. expenseId=${expenseId}`,
+        `R2 yüklemesi başarısız. expenseId=${expenseId}`,
         error instanceof Error ? error.stack : String(error),
       );
       throw new ExternalServiceAppException(
-        'Yüklenen dosya depolama servisinde doğrulanamadı. Lütfen tekrar deneyin.',
-        'STORAGE_VERIFY_FAILED',
+        'Dosya depolama servisine yüklenemedi. Lütfen tekrar deneyin.',
+        'STORAGE_UPLOAD_FAILED',
       );
     }
-    if (!uploadedFileExists) {
-      throw new NotFoundAppException('Yüklenen dosya');
-    }
 
+    return this.finalizeAttachment(
+      organizationId,
+      userId,
+      expenseId,
+      expense.expenseCode,
+      stored.fileKey,
+      file.originalname,
+      normalizedMimeType,
+      stored.sizeBytes,
+      stored.sha256,
+    );
+  }
+
+  /**
+   * R2'ye yükleme tamamlandıktan sonra attachment kaydını ve audit log'unu
+   * tek bir transaction içinde yazar. Transaction başarısız olursa sahipsiz
+   * private obje bırakmamak için R2'den telafi silmesi uygulanır.
+   */
+  private async finalizeAttachment(
+    organizationId: string,
+    userId: string,
+    expenseId: string,
+    expenseCode: string,
+    fileKey: string,
+    fileName: string,
+    mimeType: string,
+    sizeBytes: number,
+    sha256: string,
+  ) {
     const existingCount = await this.prisma.attachment.count({
       where: { expenseId, deletedAt: null },
     });
     const ext = extname(fileName).toLowerCase();
     const displayFileName =
-      existingCount === 0
-        ? `${expense.expenseCode}${ext}`
-        : `${expense.expenseCode}-${existingCount + 1}${ext}`;
+      existingCount === 0 ? `${expenseCode}${ext}` : `${expenseCode}-${existingCount + 1}${ext}`;
 
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -135,9 +131,9 @@ export class AttachmentsService {
             expenseId,
             fileKey,
             fileName: displayFileName,
-            mimeType: normalizedMimeType,
-            sizeBytes: fileSize,
-            sha256: fileHash ?? '',
+            mimeType,
+            sizeBytes,
+            sha256,
             uploadedById: userId,
           },
         });
@@ -154,8 +150,6 @@ export class AttachmentsService {
         return attachment;
       });
     } catch (error) {
-      // R2 yüklemesi tamamlandıktan sonra metadata/audit transaction'ı başarısızsa
-      // sahipsiz private obje bırakmamak için telafi silmesi uygulanır.
       try {
         await this.storageService.deleteFile(fileKey);
       } catch (cleanupError) {

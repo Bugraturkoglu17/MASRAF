@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { ApiError, apiFetch, getApiErrorMessage } from '@/lib/api-client';
-import {
-  getAttachmentMimeType,
-  getAttachmentValidationError,
-  getUploadTimeoutMs,
-} from '@/lib/attachment-validation';
+import { apiFetch, getAccessToken, getApiErrorMessage, refreshAccessToken } from '@/lib/api-client';
+import { getAttachmentMimeType, getAttachmentValidationError } from '@/lib/attachment-validation';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL as string;
+const UPLOAD_TIMEOUT_MS = 180_000;
 
 export interface UploadedFile {
   id: string;
@@ -17,8 +16,8 @@ export interface UploadedFile {
 
 /**
  * waiting   → kuyrukta; masraf taslağı henüz oluşmadığı için yükleme başlayamadı
- * uploading → imzalı URL alındı / R2'ye aktarım sürüyor
- * done      → /attachments/complete döndü, attachment kaydı ve storage key hazır
+ * uploading → dosya backend'e aktarılıyor (backend R2'ye server-to-server yazar)
+ * done      → attachment kaydı ve storage key hazır
  * error     → yükleme başarısız, yeniden denenebilir
  */
 export type UploadStatus = 'waiting' | 'uploading' | 'done' | 'error';
@@ -40,7 +39,7 @@ interface Options {
   onError?: (message: string) => void;
 }
 
-class StorageUploadError extends Error {
+class UploadError extends Error {
   constructor(
     public readonly code: string,
     message: string,
@@ -49,36 +48,25 @@ class StorageUploadError extends Error {
   }
 }
 
-function getStorageHttpError(status: number): StorageUploadError {
-  if (status === 400)
-    return new StorageUploadError(
-      'R2_BAD_REQUEST',
-      'Depolama isteği reddedildi. Dosya türü veya imzalı URL geçersiz.',
+function parseUploadError(status: number, responseText: string): UploadError {
+  try {
+    const body = JSON.parse(responseText) as {
+      code?: string;
+      message?: string;
+      requestId?: string;
+    };
+    const suffix = body.requestId ? ` (Talep: ${body.requestId})` : '';
+    return new UploadError(
+      body.code ?? 'UPLOAD_FAILED',
+      `${body.message ?? 'Yükleme başarısız.'}${suffix}`,
     );
-  if (status === 401 || status === 403)
-    return new StorageUploadError(
-      'R2_ACCESS_DENIED',
-      'Depolama servisi yükleme yetkisini reddetti.',
-    );
-  if (status === 404)
-    return new StorageUploadError(
-      'R2_BUCKET_NOT_FOUND',
-      'Depolama alanı bulunamadı veya endpoint hatalı.',
-    );
-  if (status >= 500)
-    return new StorageUploadError(
-      'R2_UNAVAILABLE',
-      'Depolama servisi geçici olarak yanıt veremiyor.',
-    );
-  return new StorageUploadError(
-    'R2_UPLOAD_REJECTED',
-    `Depolama servisi yüklemeyi reddetti (HTTP ${status}).`,
-  );
+  } catch {
+    return new UploadError('UPLOAD_FAILED', `Yükleme başarısız. (HTTP ${status})`);
+  }
 }
 
 function getUploadErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) return `${error.message} (${error.code})`;
-  if (error instanceof StorageUploadError) return `${error.message} (${error.code})`;
+  if (error instanceof UploadError) return `${error.message} (${error.code})`;
   return getApiErrorMessage(error, 'Yükleme başarısız. (UPLOAD_UNKNOWN)');
 }
 
@@ -129,40 +117,69 @@ export function useAttachmentUploads({ maxFiles, maxFileSizeBytes, onError }: Op
     [commit],
   );
 
-  // ── R2'ye doğrudan aktarım (gerçek ilerleme ile) ───────────────────────────
+  // ── Backend üzerinden yükleme (gerçek ilerleme ile) ─────────────────────────
+  //
+  // Dosya, tarayıcıdan doğrudan R2'ye değil, aynı-origin backend'e (server-to-server
+  // R2'ye yazan) tek bir multipart POST ile gönderilir. Önceki presigned-URL akışı
+  // (tarayıcı → R2 doğrudan PUT) bazı istemcilerde (HTTP/3 üzerinden) Cloudflare R2
+  // ile tutarsız CORS davranışı gösterdiği için terk edildi: R2 bucket CORS politikası
+  // curl ile doğru şekilde doğrulanmasına rağmen gerçek tarayıcılarda (masaüstü test
+  // aracı ve kullanıcının telefonu) yükleme tutarlı biçimde başarısız oluyordu. Backend
+  // proxy'si bu sınıf sorunları yapısal olarak ortadan kaldırır: tarayıcı yalnızca zaten
+  // çalışan aynı-origin API'ye konuşur, R2 bağlantısı tamamen sunucu tarafında kalır.
 
-  const putWithProgress = useCallback(
-    (url: string, file: File, mimeType: string, localId: string, timeoutMs: number) =>
-      new Promise<void>((resolve, reject) => {
-        const req = new XMLHttpRequest();
-        req.open('PUT', url);
-        req.setRequestHeader('Content-Type', mimeType);
-        req.timeout = timeoutMs;
-        req.upload.onprogress = (ev) => {
-          if (!ev.lengthComputable) return;
-          // 95'te tutulur; %100 yalnızca /complete başarılı olduğunda gösterilir.
-          const pct = Math.max(1, Math.min(95, Math.round((ev.loaded / ev.total) * 95)));
-          patch(localId, { progress: pct });
+  const postFileWithProgress = useCallback(
+    (expenseId: string, file: File, mimeType: string, localId: string) =>
+      new Promise<UploadedFile>((resolve, reject) => {
+        const attempt = (isRetry: boolean) => {
+          // Doğrulanmış/normalize edilmiş mimeType, çıplak dosyanın (bazı tarayıcılarda
+          // boş veya 'image/jpg' gibi normalize edilmemiş) .type değeri yerine gönderilir.
+          const normalized =
+            file.type === mimeType ? file : new File([file], file.name, { type: mimeType });
+          const form = new FormData();
+          form.append('expenseId', expenseId);
+          form.append('file', normalized, file.name);
+
+          const req = new XMLHttpRequest();
+          req.open('POST', `${API_BASE_URL}/attachments/upload`);
+          req.withCredentials = true;
+          const token = getAccessToken();
+          if (token) req.setRequestHeader('Authorization', `Bearer ${token}`);
+          req.timeout = UPLOAD_TIMEOUT_MS;
+          req.upload.onprogress = (ev) => {
+            if (!ev.lengthComputable) return;
+            // 95'te tutulur; %100 yalnızca sunucu yanıtı başarıyla dönünce gösterilir.
+            const pct = Math.max(1, Math.min(95, Math.round((ev.loaded / ev.total) * 95)));
+            patch(localId, { progress: pct });
+          };
+          req.onload = () => {
+            if (req.status >= 200 && req.status < 300) {
+              try {
+                resolve(JSON.parse(req.responseText) as UploadedFile);
+              } catch {
+                reject(new UploadError('UPLOAD_BAD_RESPONSE', 'Sunucu yanıtı okunamadı.'));
+              }
+              return;
+            }
+            // Erişim jetonu süresi dolmuşsa bir kez yenileyip yeniden dener.
+            if (req.status === 401 && !isRetry) {
+              void refreshAccessToken().then((refreshed) => {
+                if (refreshed) attempt(true);
+                else reject(parseUploadError(req.status, req.responseText));
+              });
+              return;
+            }
+            reject(parseUploadError(req.status, req.responseText));
+          };
+          req.onerror = () =>
+            reject(new UploadError('NETWORK_ERROR', 'Sunucuyla bağlantı kurulamadı.'));
+          req.ontimeout = () =>
+            reject(
+              new UploadError('UPLOAD_TIMEOUT', 'Dosya yükleme bağlantısı zaman aşımına uğradı.'),
+            );
+          req.send(form);
         };
-        req.onload = () =>
-          req.status >= 200 && req.status < 300
-            ? resolve()
-            : reject(getStorageHttpError(req.status));
-        req.onerror = () =>
-          reject(
-            new StorageUploadError(
-              'R2_CORS_OR_NETWORK',
-              'Depolama servisine ulaşılamadı. Ağ bağlantısı veya R2 CORS ayarı geçersiz.',
-            ),
-          );
-        req.ontimeout = () =>
-          reject(
-            new StorageUploadError(
-              'R2_UPLOAD_TIMEOUT',
-              'Dosya yükleme bağlantısı zaman aşımına uğradı.',
-            ),
-          );
-        req.send(file);
+        attempt(false);
       }),
     [patch],
   );
@@ -175,46 +192,8 @@ export function useAttachmentUploads({ maxFiles, maxFileSizeBytes, onError }: Op
 
       patch(localId, { status: 'uploading', progress: 0, error: undefined });
       try {
-        const signed = await apiFetch<{
-          uploadUrl: string;
-          fileKey: string;
-          expiresIn: number;
-        }>('/attachments/upload-url', {
-          method: 'POST',
-          body: {
-            expenseId,
-            fileName: item.file.name,
-            mimeType: item.mimeType,
-            fileSize: item.file.size,
-          },
-        });
-
-        await putWithProgress(
-          signed.uploadUrl,
-          item.file,
-          item.mimeType,
-          localId,
-          getUploadTimeoutMs(signed.expiresIn),
-        );
-
-        // Attachment kaydı ve storage key hazır olmadan dosya "Yüklendi" sayılmaz.
-        const completed = await apiFetch<UploadedFile>('/attachments/complete', {
-          method: 'POST',
-          body: {
-            expenseId,
-            fileKey: signed.fileKey,
-            fileName: item.file.name,
-            mimeType: item.mimeType,
-            fileSize: item.file.size,
-          },
-        });
-
-        patch(localId, {
-          status: 'done',
-          progress: 100,
-          uploaded: completed,
-          error: undefined,
-        });
+        const uploaded = await postFileWithProgress(expenseId, item.file, item.mimeType, localId);
+        patch(localId, { status: 'done', progress: 100, uploaded, error: undefined });
       } catch (error) {
         patch(localId, {
           status: 'error',
@@ -223,7 +202,7 @@ export function useAttachmentUploads({ maxFiles, maxFileSizeBytes, onError }: Op
         });
       }
     },
-    [patch, putWithProgress],
+    [patch, postFileWithProgress],
   );
 
   /** Aynı dosya için ikinci bir yükleme başlatılmasını engeller. */
