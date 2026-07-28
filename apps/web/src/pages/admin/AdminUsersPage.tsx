@@ -179,6 +179,11 @@ export function AdminUsersPage(): JSX.Element {
                   </td>
                   <td>
                     <BoolBadge value={u.mustChangePassword} yes="Geçici" no="Değiştirildi" invert />
+                    {!u.mustChangePassword && u.passwordChangedAt && (
+                      <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>
+                        {formatDate(u.passwordChangedAt)}
+                      </div>
+                    )}
                   </td>
                   <td>{formatDate(u.lastLoginAt)}</td>
                   <td>{formatDate(u.createdAt)}</td>
@@ -226,13 +231,18 @@ export function AdminUsersPage(): JSX.Element {
             </div>
             <div className="adm-user-card-row">
               <span className="k">Şifre</span>
-              <span className="v">
+              <span className="v" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <BoolBadge
                   value={u.mustChangePassword}
                   yes="Geçici şifre"
                   no="Değiştirildi"
                   invert
                 />
+                {!u.mustChangePassword && u.passwordChangedAt && (
+                  <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                    {formatDate(u.passwordChangedAt)}
+                  </span>
+                )}
               </span>
             </div>
             <div className="adm-user-card-row">

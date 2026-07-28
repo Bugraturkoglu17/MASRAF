@@ -51,6 +51,7 @@ const setStatusSchema = z.object({
 });
 
 const changeOwnPasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Mevcut şifre zorunludur.'),
   newPassword: z.string().min(8, 'Şifre en az 8 karakter olmalıdır.').max(72),
   newPasswordConfirm: z.string(),
 });
@@ -138,6 +139,7 @@ export class UsersController {
     return this.usersService.changeOwnPassword(
       user.id,
       user.organizationId,
+      body.currentPassword,
       body.newPassword,
       body.newPasswordConfirm,
     );

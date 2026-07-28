@@ -154,30 +154,51 @@ export class UsersService {
     });
   }
 
-  /** İlk girişte zorunlu şifre değiştirme (kullanıcının kendi işlemi). */
   async changeOwnPassword(
     id: string,
     organizationId: string,
+    currentPassword: string,
     newPassword: string,
     newPasswordConfirm: string,
   ) {
-    if (newPassword.length < 8) {
-      throw new ValidationAppException(
-        [{ field: 'newPassword', message: 'Şifre en az 8 karakter olmalıdır.' }],
-        'Şifre en az 8 karakter olmalıdır.',
-      );
-    }
     if (newPassword !== newPasswordConfirm) {
       throw new ValidationAppException(
         [{ field: 'newPasswordConfirm', message: 'Şifreler eşleşmiyor.' }],
         'Şifreler eşleşmiyor.',
       );
     }
+
+    const user = await this.prisma.user.findFirst({
+      where: { id, deletedAt: null },
+      select: { passwordHash: true },
+    });
+    if (!user) throw new NotFoundAppException('Kullanıcı');
+
+    const currentValid = await argon2.verify(user.passwordHash, currentPassword);
+    if (!currentValid) {
+      throw new ValidationAppException(
+        [{ field: 'currentPassword', message: 'Mevcut şifre yanlış.' }],
+        'Mevcut şifre yanlış.',
+      );
+    }
+
+    const isSame = await argon2.verify(user.passwordHash, newPassword);
+    if (isSame) {
+      throw new ValidationAppException(
+        [{ field: 'newPassword', message: 'Yeni şifre mevcut şifreden farklı olmalıdır.' }],
+        'Yeni şifre mevcut şifreden farklı olmalıdır.',
+      );
+    }
+
     const passwordHash = await argon2.hash(newPassword);
     await this.prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id },
         data: { passwordHash, mustChangePassword: false, passwordChangedAt: new Date() },
+      });
+      await tx.refreshToken.updateMany({
+        where: { userId: id, revokedAt: null },
+        data: { revokedAt: new Date() },
       });
       await this.auditLogs.record(
         {
@@ -190,7 +211,7 @@ export class UsersService {
         tx,
       );
     });
-    return { message: 'Şifreniz güncellendi.' };
+    return { message: 'Şifreniz güncellendi. Diğer cihazlardaki oturumlarınız kapatıldı.' };
   }
 
   async findByIdInOrganization(id: string, organizationId: string) {
