@@ -77,8 +77,14 @@ export class AttachmentsService {
         file.buffer,
       );
     } catch (error) {
+      const errName = error instanceof Error ? error.name : 'UnknownError';
+      const errMsg = error instanceof Error ? error.message : String(error);
+      // Kısa log: req context'inden bağımsız, Northflank truncation'dan etkilenmez
+      process.stderr.write(
+        `[R2_UPLOAD_FAILED] expenseId=${expenseId} errorName=${errName} message=${errMsg}\n`,
+      );
       this.logger.error(
-        `R2 yüklemesi başarısız. expenseId=${expenseId}`,
+        `R2 yüklemesi başarısız. expenseId=${expenseId} errorName=${errName} message=${errMsg}`,
         error instanceof Error ? error.stack : String(error),
       );
       throw new ExternalServiceAppException(
