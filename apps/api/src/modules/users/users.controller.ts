@@ -1,5 +1,17 @@
 import { emailSchema } from '@masraf/shared-validation';
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AppRole } from '@prisma/client';
 import { z } from 'zod';
@@ -227,6 +239,14 @@ export class UsersController {
       body.newPasswordConfirm,
       user.id,
     );
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN')
+  async deleteUser(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.usersService.deleteUser(id, user.organizationId, user.id);
   }
 
   @Post(':id/revoke-sessions')

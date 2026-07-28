@@ -251,7 +251,7 @@ export function AdminUsersPage(): JSX.Element {
 // ---------------------------------------------------------------------------
 export function UserActionsMenu({ user }: { user: AdminUser }): JSX.Element {
   const [open, setOpen] = useState(false);
-  const [modal, setModal] = useState<'role' | 'password' | null>(null);
+  const [modal, setModal] = useState<'role' | 'password' | 'delete' | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -340,6 +340,12 @@ export function UserActionsMenu({ user }: { user: AdminUser }): JSX.Element {
       { label: 'Geçici Şifre Oluştur', onClick: () => setModal('password') },
       { label: 'Tüm Oturumları Kapat', onClick: () => revokeMutation.mutate(), danger: true },
       { label: 'İşlem Geçmişi', onClick: () => navigate(`/admin/users/${user.id}?tab=history`) },
+      {
+        label: 'Kullanıcıyı Sil',
+        onClick: () => setModal('delete'),
+        danger: true,
+        disabled: isSelf,
+      },
     ];
 
   return (
@@ -414,6 +420,8 @@ export function UserActionsMenu({ user }: { user: AdminUser }): JSX.Element {
           <TempPasswordModal user={user} onClose={() => setModal(null)} />,
           document.body,
         )}
+      {modal === 'delete' &&
+        createPortal(<DeleteUserModal user={user} onClose={() => setModal(null)} />, document.body)}
     </div>
   );
 }
@@ -467,6 +475,54 @@ function ChangeRoleModal({ user, onClose }: { user: AdminUser; onClose: () => vo
             onClick={() => mutation.mutate()}
           >
             {mutation.isPending ? 'Kaydediliyor…' : 'Kaydet'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeleteUserModal({ user, onClose }: { user: AdminUser; onClose: () => void }): JSX.Element {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { showToast } = useToast();
+
+  const mutation = useMutation({
+    mutationFn: () => apiFetch(`/users/${user.id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin'] });
+      showToast(`${user.firstName} ${user.lastName} silindi.`, 'success');
+      onClose();
+      navigate('/admin/users');
+    },
+    onError: (e) => showToast(getApiErrorMessage(e, 'Kullanıcı silinemedi.'), 'error'),
+  });
+
+  return (
+    <div className="adm-modal-backdrop" onClick={onClose}>
+      <div className="adm-modal" onClick={(e) => e.stopPropagation()}>
+        <h3 className="adm-modal-title">
+          Kullanıcıyı Sil — {user.firstName} {user.lastName}
+        </h3>
+        <p style={{ fontSize: 14, color: 'var(--color-text)', margin: '0 0 8px' }}>
+          Bu işlem geri alınamaz. Kullanıcının tüm oturumları kapatılır ve sisteme girişi
+          engellenir.
+        </p>
+        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '0 0 16px' }}>
+          Masraf kayıtları ve denetim geçmişi korunur.
+        </p>
+        <div className="adm-modal-actions">
+          <button type="button" className="adm-btn adm-btn-outline" onClick={onClose}>
+            Vazgeç
+          </button>
+          <button
+            type="button"
+            className="adm-btn"
+            disabled={mutation.isPending}
+            onClick={() => mutation.mutate()}
+            style={{ background: '#dc2626', color: '#fff', borderColor: '#dc2626' }}
+          >
+            {mutation.isPending ? 'Siliniyor…' : 'Evet, Sil'}
           </button>
         </div>
       </div>

@@ -1,3 +1,5 @@
+import { randomBytes } from 'node:crypto';
+
 import { Injectable } from '@nestjs/common';
 import type { AppRole, Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
@@ -504,6 +506,52 @@ export class UsersService {
     });
 
     return { message: 'Kullanıcının tüm oturumları kapatıldı.' };
+  }
+
+  async deleteUser(id: string, organizationId: string, actorId: string) {
+    if (id === actorId) {
+      throw new ForbiddenAppException('Kendi hesabınızı silemezsiniz.');
+    }
+
+    const user = await this.prisma.user.findFirst({
+      where: { id, organizationId, deletedAt: null },
+      select: { id: true, role: true },
+    });
+    if (!user) throw new NotFoundAppException('Kullanıcı');
+
+    if (user.role === 'ADMIN') {
+      const adminCount = await this.prisma.user.count({
+        where: { organizationId, role: 'ADMIN', deletedAt: null },
+      });
+      if (adminCount <= 1) {
+        throw new ForbiddenAppException('Son admin kullanıcısı silinemez.');
+      }
+    }
+
+    const unusableHash = await argon2.hash(randomBytes(32).toString('hex'));
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.refreshToken.updateMany({
+        where: { userId: id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      await tx.user.update({
+        where: { id },
+        data: {
+          deletedAt: new Date(),
+          status: 'INACTIVE',
+          passwordHash: unusableHash,
+          email: `deleted.${id}@removed.local`,
+          phone: `+90d${id.replace(/-/g, '').substring(0, 10)}`,
+        },
+      });
+      await this.auditLogs.record(
+        { organizationId, actorId, action: 'DELETE', resource: 'USER', resourceId: id },
+        tx,
+      );
+    });
+
+    return { message: 'Kullanıcı silindi.' };
   }
 
   async getUserAuditLogs(
