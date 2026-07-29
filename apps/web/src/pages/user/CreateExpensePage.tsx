@@ -88,6 +88,7 @@ export function CreateExpensePage(): JSX.Element {
   const expenseIdRef = useRef<string | null>(editId ?? savedId);
   const submitLockRef = useRef(false);
   const initialFilesHandledRef = useRef(false);
+  const allowNavRef = useRef(false); // kayıt sonrası blocker'ı geçer
 
   const [showNetworkDialog, setShowNetworkDialog] = useState(false);
   const [submitPhase, setSubmitPhase] = useState<SubmitPhase>('idle');
@@ -186,7 +187,7 @@ export function CreateExpensePage(): JSX.Element {
   const blocker = useBlocker(
     useCallback(
       ({ currentLocation, nextLocation }: { currentLocation: Location; nextLocation: Location }) =>
-        isFormDirty && currentLocation.pathname !== nextLocation.pathname,
+        !allowNavRef.current && isFormDirty && currentLocation.pathname !== nextLocation.pathname,
       [isFormDirty],
     ),
   );
@@ -368,6 +369,7 @@ export function CreateExpensePage(): JSX.Element {
       qc.invalidateQueries({ queryKey: ['expenses'] });
       qc.invalidateQueries({ queryKey: ['expense-counts'] });
       await clearDraft();
+      allowNavRef.current = true;
       showToast(editId ? 'Masraf güncellendi.' : 'Taslak kaydedildi.', 'success');
       navigate('/expenses?status=DRAFT');
     } finally {
