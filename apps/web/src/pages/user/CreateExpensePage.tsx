@@ -13,7 +13,6 @@ import {
 import { z } from 'zod';
 
 import { useToast } from '@/components/feedback/toast-context';
-import { LocalDraftRecoverySheet } from '@/components/pwa/LocalDraftRecoverySheet';
 import { NetworkRequiredDialog } from '@/components/pwa/NetworkRequiredDialog';
 import { AttachmentUploader } from '@/components/ui/AttachmentUploader';
 import { DatePickerTr } from '@/components/ui/DatePickerTr';
@@ -91,7 +90,6 @@ export function CreateExpensePage(): JSX.Element {
   const initialFilesHandledRef = useRef(false);
 
   const [showNetworkDialog, setShowNetworkDialog] = useState(false);
-  const [draftDismissed, setDraftDismissed] = useState(false);
   const [submitPhase, setSubmitPhase] = useState<SubmitPhase>('idle');
   const [showExitModal, setShowExitModal] = useState(false);
   const [savingOnExit, setSavingOnExit] = useState(false);
@@ -107,12 +105,7 @@ export function CreateExpensePage(): JSX.Element {
     onError: (message) => showToast(message, 'error'),
   });
 
-  const {
-    draft,
-    isLoading: isDraftLoading,
-    saveDraft,
-    clearDraft,
-  } = useLocalExpenseDraft(user?.id, user?.organizationId);
+  const { clearDraft } = useLocalExpenseDraft(user?.id, user?.organizationId);
 
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ['categories'],
@@ -142,7 +135,6 @@ export function CreateExpensePage(): JSX.Element {
   });
 
   const selectedCategoryId = useWatch({ control, name: 'categoryId' });
-  const formValues = useWatch({ control });
   const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
   const requiresDueDate = selectedCategory?.requiresDueDate ?? false;
 
@@ -187,37 +179,6 @@ export function CreateExpensePage(): JSX.Element {
     if (files.length > 0) uploads.addFiles(files);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Form her zaman boş açılır. Bu cihazda kaydedilmiş bir taslak varsa kullanıcıya
-  // sorulur (LocalDraftRecoverySheet) — sessizce forma yazılmaz. Render sırasında
-  // türetilir (effect + setState yerine): kullanıcı "Sil"/"Devam Et" dedikten sonra
-  // draftDismissed true olur ve kart bir daha görünmez.
-  const hasRecoverableDraft = Boolean(
-    draft && (draft.categoryId || draft.title || draft.amount || draft.expenseDate),
-  );
-  const showDraftRecovery = !editId && !isDraftLoading && !draftDismissed && hasRecoverableDraft;
-
-  const handleRecoverDraft = () => {
-    if (draft) {
-      reset({
-        categoryId: draft.categoryId ?? '',
-        title: draft.title ?? '',
-        description: draft.description ?? '',
-        amount: draft.amount ?? '',
-        expenseDate: draft.expenseDate ?? '',
-        dueDate: draft.dueDate ?? '',
-      });
-      // IndexedDB'den sil: form değerleri yüklendi, aynı taslak bir daha gösterilmez.
-      // Kullanıcı değişiklik yapıp sayfadan ayrılırsa yeni taslak otomatik kaydedilir.
-      void clearDraft();
-    }
-    setDraftDismissed(true);
-  };
-
-  const handleDiscardDraft = () => {
-    void clearDraft();
-    setDraftDismissed(true);
-  };
 
   // ── Geri çıkış blocker ───────────────────────────────────────────────────
   const isFormDirty = isDirty || uploads.items.length > 0;
@@ -295,29 +256,6 @@ export function CreateExpensePage(): JSX.Element {
       delete document.documentElement.dataset.unsavedForm;
     };
   }, [isDirty, savedExpenseId]);
-
-  useEffect(() => {
-    const hasContent = Boolean(
-      formValues.categoryId ||
-      formValues.title ||
-      formValues.description ||
-      formValues.amount ||
-      formValues.expenseDate ||
-      formValues.dueDate,
-    );
-    if (editId || !isDirty || !user || !hasContent) return;
-    const timer = window.setTimeout(() => {
-      void saveDraft({
-        categoryId: formValues.categoryId,
-        title: formValues.title,
-        description: formValues.description,
-        amount: formValues.amount,
-        expenseDate: formValues.expenseDate,
-        dueDate: formValues.dueDate,
-      }).catch(() => showToast('Yerel taslak kaydedilemedi.', 'error'));
-    }, 500);
-    return () => window.clearTimeout(timer);
-  }, [editId, formValues, isDirty, saveDraft, showToast, user]);
 
   // Hata mesajını burada göstermiyoruz: taslak oluşturma hem dosya seçiminde
   // (arka planda, sessiz) hem de kaydederken denenir. Arka plan denemesi
@@ -708,13 +646,6 @@ export function CreateExpensePage(): JSX.Element {
       </div>
 
       <NetworkRequiredDialog open={showNetworkDialog} onClose={() => setShowNetworkDialog(false)} />
-      {showDraftRecovery && (
-        <LocalDraftRecoverySheet
-          draft={draft}
-          onRecover={handleRecoverDraft}
-          onDelete={handleDiscardDraft}
-        />
-      )}
       <ExitConfirmModal
         open={showExitModal}
         saving={savingOnExit}
@@ -746,8 +677,8 @@ function ExitConfirmModal({
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(0,0,0,0.5)',
-        zIndex: 200,
+        background: 'rgba(0,0,0,0.6)',
+        zIndex: 1500,
         display: 'flex',
         alignItems: 'flex-end',
       }}
@@ -757,6 +688,7 @@ function ExitConfirmModal({
           background: 'var(--color-surface)',
           borderRadius: '16px 16px 0 0',
           padding: '24px 20px',
+          paddingBottom: 'calc(24px + env(safe-area-inset-bottom))',
           width: '100%',
         }}
       >
