@@ -308,7 +308,7 @@ export class UsersService {
       totalUsers,
       activeUsers,
       inactiveUsers,
-      managers: { active: activeManagers, limit: 1 },
+      managers: { active: activeManagers },
       profileIncomplete,
       firstLoginPending,
       recentUsers: recent.map((u) => ({
@@ -379,10 +379,6 @@ export class UsersService {
     const email = dto.email?.trim() || `u${phone.replace('+', '')}@masraf.local`;
     const emailTaken = await this.prisma.user.findUnique({ where: { email } });
     if (emailTaken) throw new ConflictAppException('Bu e-posta adresi zaten kullanımda.');
-
-    if (dto.roleName === 'MANAGER') {
-      await this.assertNoOtherActiveManager(organizationId);
-    }
 
     const roleRecord = await this.prisma.role.findFirst({
       where: { organizationId, name: `${dto.roleName}_ROLE`, isSystem: true },
@@ -611,10 +607,6 @@ export class UsersService {
         throw new ConflictAppException('Son aktif ADMIN pasif yapılamaz.');
       }
     }
-    if (target.role === 'MANAGER' && status === 'ACTIVE' && target.status !== 'ACTIVE') {
-      await this.assertNoOtherActiveManager(organizationId, id);
-    }
-
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.user.update({
         where: { id },
@@ -653,10 +645,6 @@ export class UsersService {
         throw new ConflictAppException('Son aktif ADMIN rolü değiştirilemez.');
       }
     }
-    if (role === 'MANAGER' && target.role !== 'MANAGER' && target.status === 'ACTIVE') {
-      await this.assertNoOtherActiveManager(organizationId, id);
-    }
-
     const roleName = `${role}_ROLE`;
     const roleRecord = await this.prisma.role.findFirst({
       where: { organizationId, name: roleName, isSystem: true },
@@ -693,24 +681,5 @@ export class UsersService {
       );
       return updated;
     });
-  }
-
-  /** Sistemde ikinci bir aktif MANAGER hesabına izin verme. */
-  private async assertNoOtherActiveManager(
-    organizationId: string,
-    excludeUserId?: string,
-  ): Promise<void> {
-    const count = await this.prisma.user.count({
-      where: {
-        organizationId,
-        deletedAt: null,
-        status: 'ACTIVE',
-        role: 'MANAGER',
-        ...(excludeUserId ? { id: { not: excludeUserId } } : {}),
-      },
-    });
-    if (count >= 1) {
-      throw new ConflictAppException('Sistemde yalnızca bir aktif yönetici (MANAGER) bulunabilir.');
-    }
   }
 }
