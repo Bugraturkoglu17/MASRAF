@@ -219,21 +219,29 @@ export function CreateExpensePage(): JSX.Element {
         setSavingOnExit(false);
         return;
       }
+      const isValid = await trigger();
+      if (!isValid) {
+        showToast('Kaydetmek için zorunlu alanları doldurun.', 'error');
+        return;
+      }
       const values = getValues();
       const payload = buildPayload(values);
-      if (payload) {
-        const ensured = editId ? { id: editId, created: false } : await ensureExpense(payload);
-        if (!ensured.created) {
-          await updateMut.mutateAsync({ id: ensured.id, data: payload });
-        }
-        if (uploads.items.some((item) => item.status !== 'done')) {
-          await uploads.flush(ensured.id);
-        }
+      if (!payload) {
+        showToast('Geçerli bir tutar girin.', 'error');
+        return;
+      }
+      const ensured = editId ? { id: editId, created: false } : await ensureExpense(payload);
+      if (!ensured.created) {
+        await updateMut.mutateAsync({ id: ensured.id, data: payload });
+      }
+      if (uploads.items.some((item) => item.status !== 'done')) {
+        await uploads.flush(ensured.id);
       }
       await clearDraft();
       qc.invalidateQueries({ queryKey: ['expenses'] });
       qc.invalidateQueries({ queryKey: ['expense-counts'] });
       showToast('Taslak kaydedildi.', 'success');
+      allowNavRef.current = true;
       setShowExitModal(false);
       if (blocker.state === 'blocked') blocker.proceed();
       else navigate(-1);
@@ -244,11 +252,10 @@ export function CreateExpensePage(): JSX.Element {
     }
   };
 
-  const handleExitDiscard = async () => {
-    await clearDraft();
+  // "İptal Et" = çıkışı iptal et, formda kal
+  const handleCancelExit = () => {
     setShowExitModal(false);
-    if (blocker.state === 'blocked') blocker.proceed();
-    else navigate(-1);
+    if (blocker.state === 'blocked') blocker.reset();
   };
 
   useEffect(() => {
@@ -654,9 +661,7 @@ export function CreateExpensePage(): JSX.Element {
         onSave={() => {
           void handleExitSave();
         }}
-        onDiscard={() => {
-          void handleExitDiscard();
-        }}
+        onCancel={handleCancelExit}
       />
     </div>
   );
@@ -666,12 +671,12 @@ function ExitConfirmModal({
   open,
   saving,
   onSave,
-  onDiscard,
+  onCancel,
 }: {
   open: boolean;
   saving: boolean;
   onSave: () => void;
-  onDiscard: () => void;
+  onCancel: () => void;
 }): JSX.Element | null {
   if (!open) return null;
   return (
@@ -705,7 +710,7 @@ function ExitConfirmModal({
         <div style={{ display: 'flex', gap: 10 }}>
           <button
             type="button"
-            onClick={onDiscard}
+            onClick={onCancel}
             style={{
               flex: 1,
               padding: '13px',
