@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Clock3, Search } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import { ManagerExpenseCard, type ManagerExpense } from '@/components/expenses/ExpenseCards';
 import { useToast } from '@/components/feedback/toast-context';
 import { ExpenseDetailSheet } from '@/components/ui/ExpenseDetailSheet';
-import { ApiError, apiFetch } from '@/lib/api-client';
+import { ApiError, apiFetch, getAccessToken } from '@/lib/api-client';
 
 interface PagedResult {
   items: ManagerExpense[];
@@ -40,6 +40,8 @@ export function ManagerPendingPage(): JSX.Element {
   const [reason, setReason] = useState('');
   const [sort, setSort] = useState<SortOption>('due-nearest');
   const [search, setSearch] = useState('');
+  const [receiptExpenseId, setReceiptExpenseId] = useState<string | null>(null);
+  const [showReceiptUpload, setShowReceiptUpload] = useState(false);
 
   const apiSort = sort === 'amount-high' || sort === 'amount-low' ? ('newest' as const) : sort;
 
@@ -94,7 +96,7 @@ export function ManagerPendingPage(): JSX.Element {
         body: { reason },
       });
     },
-    onSuccess: (_, value) =>
+    onSuccess: (_, value) => {
       finish(
         value.expense.id,
         value.kind === 'approve'
@@ -102,12 +104,53 @@ export function ManagerPendingPage(): JSX.Element {
           : value.kind === 'reject'
             ? 'Masraf reddedildi.'
             : 'Masraf iptal edildi.',
-      ),
+      );
+      if (value.kind === 'approve') {
+        setReceiptExpenseId(value.expense.id);
+      }
+    },
     onError: (error) =>
       showToast(
         'İşlem tamamlanamadı. Lütfen tekrar deneyin.',
         'error',
         error instanceof ApiError && error.requestId ? `Talep: ${error.requestId}` : undefined,
+      ),
+  });
+
+  const uploadReceipt = useMutation({
+    mutationFn: async ({ expenseId, file }: { expenseId: string; file: File }) => {
+      const form = new FormData();
+      form.append('file', file, file.name);
+      const token = getAccessToken();
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL as string}/expenses/${expenseId}/payment-receipts`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: form,
+        },
+      );
+      if (!res.ok) {
+        let msg = 'Dekont yüklenemedi.';
+        try {
+          const err = (await res.json()) as { message?: string };
+          if (err.message) msg = err.message;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(msg);
+      }
+    },
+    onSuccess: () => {
+      showToast('Ödeme dekontu yüklendi.', 'success');
+      setReceiptExpenseId(null);
+      setShowReceiptUpload(false);
+    },
+    onError: (error) =>
+      showToast(
+        error instanceof Error ? error.message : 'Dekont yüklenemedi. Lütfen tekrar deneyin.',
+        'error',
       ),
   });
 
@@ -213,6 +256,23 @@ export function ManagerPendingPage(): JSX.Element {
           onConfirm={() => decide.mutate(decision)}
         />
       )}
+      {receiptExpenseId && !showReceiptUpload && (
+        <ReceiptPromptModal
+          onUpload={() => setShowReceiptUpload(true)}
+          onSkip={() => setReceiptExpenseId(null)}
+        />
+      )}
+      {receiptExpenseId && showReceiptUpload && (
+        <ReceiptUploadModal
+          expenseId={receiptExpenseId}
+          busy={uploadReceipt.isPending}
+          onUpload={(file) => uploadReceipt.mutate({ expenseId: receiptExpenseId, file })}
+          onClose={() => {
+            setReceiptExpenseId(null);
+            setShowReceiptUpload(false);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -277,6 +337,103 @@ function DecisionModal({
             onClick={onConfirm}
           >
             {busy ? 'İşleniyor…' : verb}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ReceiptPromptModal({ onUpload, onSkip }: { onUpload: () => void; onSkip: () => void }) {
+  return (
+    <div className="decision-backdrop" onMouseDown={onSkip}>
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="receipt-prompt-title"
+        className="decision-modal"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <span className="decision-symbol approve" />
+        <h2 id="receipt-prompt-title">Ödeme Dekontu</h2>
+        <p>Onaylanan masrafa ödeme dekontu yüklemek ister misiniz?</p>
+        <div>
+          <button type="button" onClick={onSkip}>
+            Şimdi Değil
+          </button>
+          <button type="button" className="approve" onClick={onUpload}>
+            Dekont Yükle
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ReceiptUploadModal({
+  expenseId: _expenseId,
+  busy,
+  onUpload,
+  onClose,
+}: {
+  expenseId: string;
+  busy: boolean;
+  onUpload: (file: File) => void;
+  onClose: () => void;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  return (
+    <div className="decision-backdrop" onMouseDown={onClose}>
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="receipt-upload-title"
+        className="decision-modal"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <span className="decision-symbol approve" />
+        <h2 id="receipt-upload-title">Dekont Yükle</h2>
+        <p>JPG, PNG, WEBP, HEIC veya PDF — maks. 15 MB</p>
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".jpg,.jpeg,.png,.webp,.heic,.pdf"
+          style={{ display: 'none' }}
+          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+        />
+        <button
+          type="button"
+          style={{
+            width: '100%',
+            padding: '10px 14px',
+            border: '1px dashed var(--color-border)',
+            borderRadius: 8,
+            background: 'var(--color-bg)',
+            color: file ? 'var(--color-text)' : 'var(--color-text-muted)',
+            fontSize: 13,
+            cursor: 'pointer',
+            textAlign: 'left',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            margin: '4px 0 8px',
+          }}
+          onClick={() => inputRef.current?.click()}
+        >
+          {file ? file.name : 'Dosya seç…'}
+        </button>
+        <div>
+          <button type="button" onClick={onClose} disabled={busy}>
+            Vazgeç
+          </button>
+          <button
+            type="button"
+            className="approve"
+            disabled={!file || busy}
+            onClick={() => file && onUpload(file)}
+          >
+            {busy ? 'Yükleniyor…' : 'Yükle'}
           </button>
         </div>
       </section>
