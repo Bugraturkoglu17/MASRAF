@@ -226,6 +226,12 @@ enum ExpenseStatus {
   CANCELLED
 }
 
+enum PaymentStatus {
+  NOT_PAID
+  PAID_WITHOUT_RECEIPT
+  PAID_WITH_RECEIPT
+}
+
 model ExpenseCategory {
   id              String   @id @default(uuid()) @db.Uuid
   organizationId  String   @db.Uuid
@@ -270,6 +276,9 @@ model Expense {
   rejectionReason      String?
   submittedAt          DateTime?
   decidedAt            DateTime?
+  paymentStatus        PaymentStatus @default(NOT_PAID)
+  paymentReceiptUploadedAt DateTime?
+  paymentReceiptUploadedBy String?   @db.Uuid
   createdAt            DateTime      @default(now())
   updatedAt            DateTime      @updatedAt
   createdBy            String?       @db.Uuid
@@ -340,6 +349,11 @@ enum AttachmentStatus {
   DELETED
 }
 
+enum AttachmentKind {
+  INVOICE
+  PAYMENT_RECEIPT
+}
+
 model Attachment {
   id             String           @id @default(uuid()) @db.Uuid
   organizationId String           @db.Uuid
@@ -350,6 +364,7 @@ model Attachment {
   sizeBytes      Int
   sha256         String
   status         AttachmentStatus @default(ACTIVE)
+  kind           AttachmentKind   @default(INVOICE)
   uploadedById   String?          @db.Uuid
   createdAt      DateTime         @default(now())
   deletedAt      DateTime?
