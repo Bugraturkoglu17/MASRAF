@@ -1,9 +1,15 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  type Location,
+  useBlocker,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from 'react-router-dom';
 import { z } from 'zod';
 
 import { useToast } from '@/components/feedback/toast-context';
@@ -87,6 +93,9 @@ export function CreateExpensePage(): JSX.Element {
   const [showNetworkDialog, setShowNetworkDialog] = useState(false);
   const [draftDismissed, setDraftDismissed] = useState(false);
   const [submitPhase, setSubmitPhase] = useState<SubmitPhase>('idle');
+  const [showExitModal, setShowExitModal] = useState(false);
+  const [savingOnExit, setSavingOnExit] = useState(false);
+  const exitModalOpenRef = useRef(false); // çift modal koruması
   const [uploadLimits, setUploadLimits] = useState({
     maxFiles: 5,
     maxFileSizeBytes: DEFAULT_MAX_ATTACHMENT_SIZE,
@@ -198,6 +207,9 @@ export function CreateExpensePage(): JSX.Element {
         expenseDate: draft.expenseDate ?? '',
         dueDate: draft.dueDate ?? '',
       });
+      // IndexedDB'den sil: form değerleri yüklendi, aynı taslak bir daha gösterilmez.
+      // Kullanıcı değişiklik yapıp sayfadan ayrılırsa yeni taslak otomatik kaydedilir.
+      void clearDraft();
     }
     setDraftDismissed(true);
   };
@@ -205,6 +217,76 @@ export function CreateExpensePage(): JSX.Element {
   const handleDiscardDraft = () => {
     void clearDraft();
     setDraftDismissed(true);
+  };
+
+  // ── Geri çıkış blocker ───────────────────────────────────────────────────
+  const isFormDirty = isDirty || uploads.items.length > 0;
+
+  const blocker = useBlocker(
+    useCallback(
+      ({ currentLocation, nextLocation }: { currentLocation: Location; nextLocation: Location }) =>
+        isFormDirty && currentLocation.pathname !== nextLocation.pathname,
+      [isFormDirty],
+    ),
+  );
+
+  useEffect(() => {
+    if (blocker.state === 'blocked' && !exitModalOpenRef.current) {
+      exitModalOpenRef.current = true;
+      setShowExitModal(true);
+    }
+  }, [blocker.state]);
+
+  useEffect(() => {
+    if (!showExitModal) exitModalOpenRef.current = false;
+  }, [showExitModal]);
+
+  const handleBack = () => {
+    if (isFormDirty) {
+      setShowExitModal(true);
+    } else {
+      navigate(-1);
+    }
+  };
+
+  const handleExitSave = async () => {
+    setSavingOnExit(true);
+    try {
+      if (!isOnline) {
+        setShowNetworkDialog(true);
+        setSavingOnExit(false);
+        return;
+      }
+      const values = getValues();
+      const payload = buildPayload(values);
+      if (payload) {
+        const ensured = editId ? { id: editId, created: false } : await ensureExpense(payload);
+        if (!ensured.created) {
+          await updateMut.mutateAsync({ id: ensured.id, data: payload });
+        }
+        if (uploads.items.some((item) => item.status !== 'done')) {
+          await uploads.flush(ensured.id);
+        }
+      }
+      await clearDraft();
+      qc.invalidateQueries({ queryKey: ['expenses'] });
+      qc.invalidateQueries({ queryKey: ['expense-counts'] });
+      showToast('Taslak kaydedildi.', 'success');
+      setShowExitModal(false);
+      if (blocker.state === 'blocked') blocker.proceed();
+      else navigate(-1);
+    } catch (error) {
+      showToast(getApiErrorMessage(error, 'Kaydedilemedi.'), 'error');
+    } finally {
+      setSavingOnExit(false);
+    }
+  };
+
+  const handleExitDiscard = async () => {
+    await clearDraft();
+    setShowExitModal(false);
+    if (blocker.state === 'blocked') blocker.proceed();
+    else navigate(-1);
   };
 
   useEffect(() => {
@@ -403,7 +485,7 @@ export function CreateExpensePage(): JSX.Element {
       >
         <button
           type="button"
-          onClick={() => navigate(-1)}
+          onClick={handleBack}
           aria-label="Geri dön"
           style={{
             width: 36,
@@ -633,6 +715,97 @@ export function CreateExpensePage(): JSX.Element {
           onDelete={handleDiscardDraft}
         />
       )}
+      <ExitConfirmModal
+        open={showExitModal}
+        saving={savingOnExit}
+        onSave={() => {
+          void handleExitSave();
+        }}
+        onDiscard={() => {
+          void handleExitDiscard();
+        }}
+      />
+    </div>
+  );
+}
+
+function ExitConfirmModal({
+  open,
+  saving,
+  onSave,
+  onDiscard,
+}: {
+  open: boolean;
+  saving: boolean;
+  onSave: () => void;
+  onDiscard: () => void;
+}): JSX.Element | null {
+  if (!open) return null;
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.5)',
+        zIndex: 200,
+        display: 'flex',
+        alignItems: 'flex-end',
+      }}
+    >
+      <div
+        style={{
+          background: 'var(--color-surface)',
+          borderRadius: '16px 16px 0 0',
+          padding: '24px 20px',
+          width: '100%',
+        }}
+      >
+        <h3
+          style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 700, color: 'var(--color-text)' }}
+        >
+          Çıkmak istiyor musunuz?
+        </h3>
+        <p style={{ margin: '0 0 20px', fontSize: 14, color: 'var(--color-text-muted)' }}>
+          Kaydedilmemiş değişiklikleriniz var.
+        </p>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            type="button"
+            onClick={onDiscard}
+            style={{
+              flex: 1,
+              padding: '13px',
+              borderRadius: 10,
+              border: '1.5px solid var(--color-border)',
+              background: 'var(--color-bg)',
+              color: 'var(--color-text)',
+              fontWeight: 600,
+              fontSize: 15,
+              cursor: 'pointer',
+            }}
+          >
+            İptal Et
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={saving}
+            style={{
+              flex: 1,
+              padding: '13px',
+              borderRadius: 10,
+              border: 'none',
+              background: saving ? 'var(--color-border)' : 'var(--color-primary)',
+              color: '#fff',
+              fontWeight: 700,
+              fontSize: 15,
+              cursor: saving ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {saving ? 'Kaydediliyor…' : 'Kaydet'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
