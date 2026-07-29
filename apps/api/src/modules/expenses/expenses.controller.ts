@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -9,9 +10,13 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import { memoryStorage } from 'multer';
 import { z } from 'zod';
 
 import {
@@ -22,6 +27,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { ForbiddenAppException } from '../../common/exceptions/app.exception';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
+import { AttachmentsService } from '../attachments/attachments.service';
 
 import { ExpensesService } from './expenses.service';
 
@@ -83,7 +89,10 @@ const managerQuerySchema = z.object({
 @ApiBearerAuth()
 @Controller('expenses')
 export class ExpensesController {
-  constructor(private readonly expensesService: ExpensesService) {}
+  constructor(
+    private readonly expensesService: ExpensesService,
+    private readonly attachmentsService: AttachmentsService,
+  ) {}
 
   // ── USER endpoints ─────────────────────────────────────────────────────────
 
@@ -243,5 +252,34 @@ export class ExpensesController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.expensesService.cancel(id, user.organizationId, user.id, user.role, body.reason);
+  }
+
+  @Post(':id/payment-receipts')
+  @UseGuards(RolesGuard)
+  @Roles('MANAGER', 'ADMIN')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 20 * 1024 * 1024 },
+    }),
+  )
+  async uploadPaymentReceipt(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (!file) throw new BadRequestException('Dosya bulunamadı.');
+    return this.attachmentsService.uploadPaymentReceipt(user.organizationId, user.id, id, {
+      originalname: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size,
+      buffer: file.buffer,
+    });
+  }
+
+  @Get(':id/payment-receipts')
+  async listPaymentReceipts(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.attachmentsService.listPaymentReceipts(id, user.organizationId, user.id);
   }
 }
