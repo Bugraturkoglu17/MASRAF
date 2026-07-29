@@ -179,7 +179,7 @@ export class UsersController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles('ADMIN')
+  @Roles('MANAGER', 'ADMIN')
   async create(
     @Body(new ZodValidationPipe(createUserSchema)) body: AdminCreateUserDto,
     @CurrentUser() user: AuthenticatedUser,

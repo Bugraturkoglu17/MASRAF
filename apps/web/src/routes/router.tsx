@@ -50,6 +50,12 @@ const ManagerApprovedPage = lazy(() =>
 const ManagerRejectedPage = lazy(() =>
   import('@/pages/manager/ManagerRejectedPage').then((m) => ({ default: m.ManagerRejectedPage })),
 );
+const ManagerUsersPage = lazy(() =>
+  import('@/pages/manager/ManagerUsersPage').then((m) => ({ default: m.ManagerUsersPage })),
+);
+const ManagerNewUserPage = lazy(() =>
+  import('@/pages/manager/ManagerNewUserPage').then((m) => ({ default: m.ManagerNewUserPage })),
+);
 
 // ADMIN pages
 const AdminLayout = lazy(() =>
@@ -236,6 +242,22 @@ export const router = createBrowserRouter(
                           element: (
                             <S>
                               <ManagerRejectedPage />
+                            </S>
+                          ),
+                        },
+                        {
+                          path: '/manager/users',
+                          element: (
+                            <S>
+                              <ManagerUsersPage />
+                            </S>
+                          ),
+                        },
+                        {
+                          path: '/manager/users/new',
+                          element: (
+                            <S>
+                              <ManagerNewUserPage />
                             </S>
                           ),
                         },

@@ -2,10 +2,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { AdminPage } from './admin-ui';
-
 import { useToast } from '@/components/feedback/toast-context';
 import { apiFetch, getApiErrorMessage } from '@/lib/api-client';
+import { AdminPage } from '@/pages/admin/admin-ui';
 
 interface FormState {
   firstName: string;
@@ -13,7 +12,6 @@ interface FormState {
   phone: string;
   email: string;
   roleName: 'USER' | 'MANAGER';
-  jobTitle: string;
   tempPassword: string;
   tempPasswordConfirm: string;
   status: 'ACTIVE' | 'INACTIVE';
@@ -25,13 +23,12 @@ const initialForm: FormState = {
   phone: '',
   email: '',
   roleName: 'USER',
-  jobTitle: 'Kullanıcı',
   tempPassword: '',
   tempPasswordConfirm: '',
   status: 'ACTIVE',
 };
 
-export function AdminNewUserPage(): JSX.Element {
+export function ManagerNewUserPage(): JSX.Element {
   const [form, setForm] = useState<FormState>(initialForm);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const navigate = useNavigate();
@@ -55,10 +52,10 @@ export function AdminNewUserPage(): JSX.Element {
           status: form.status,
         },
       }),
-    onSuccess: (res) => {
-      void queryClient.invalidateQueries({ queryKey: ['admin'] });
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['manager', 'users'] });
       showToast('Kullanıcı oluşturuldu. İlk girişte şifre değiştirmesi zorunludur.', 'success');
-      navigate(`/admin/users/${res.id}`);
+      navigate('/manager/users');
     },
     onError: (e) => showToast(getApiErrorMessage(e, 'Kullanıcı oluşturulamadı.'), 'error'),
   });
@@ -93,11 +90,11 @@ export function AdminNewUserPage(): JSX.Element {
     >
       <form onSubmit={submit} noValidate className="adm-card" style={{ maxWidth: 560 }}>
         <div className="adm-field">
-          <label className="adm-label" htmlFor="nu-firstname">
+          <label className="adm-label" htmlFor="mnu-firstname">
             Ad *
           </label>
           <input
-            id="nu-firstname"
+            id="mnu-firstname"
             className="adm-input"
             value={form.firstName}
             onChange={(e) => set('firstName', e.target.value)}
@@ -106,11 +103,11 @@ export function AdminNewUserPage(): JSX.Element {
         </div>
 
         <div className="adm-field">
-          <label className="adm-label" htmlFor="nu-lastname">
+          <label className="adm-label" htmlFor="mnu-lastname">
             Soyad *
           </label>
           <input
-            id="nu-lastname"
+            id="mnu-lastname"
             className="adm-input"
             value={form.lastName}
             onChange={(e) => set('lastName', e.target.value)}
@@ -119,11 +116,11 @@ export function AdminNewUserPage(): JSX.Element {
         </div>
 
         <div className="adm-field">
-          <label className="adm-label" htmlFor="nu-phone">
+          <label className="adm-label" htmlFor="mnu-phone">
             Telefon Numarası *
           </label>
           <input
-            id="nu-phone"
+            id="mnu-phone"
             className="adm-input"
             type="tel"
             placeholder="05XX XXX XX XX"
@@ -134,11 +131,11 @@ export function AdminNewUserPage(): JSX.Element {
         </div>
 
         <div className="adm-field">
-          <label className="adm-label" htmlFor="nu-email">
+          <label className="adm-label" htmlFor="mnu-email">
             E-posta (isteğe bağlı)
           </label>
           <input
-            id="nu-email"
+            id="mnu-email"
             className="adm-input"
             type="email"
             placeholder="ornek@sirket.com"
@@ -149,21 +146,14 @@ export function AdminNewUserPage(): JSX.Element {
         </div>
 
         <div className="adm-field">
-          <label className="adm-label" htmlFor="nu-role">
+          <label className="adm-label" htmlFor="mnu-role">
             Rol *
           </label>
           <select
-            id="nu-role"
+            id="mnu-role"
             className="adm-select"
             value={form.roleName}
-            onChange={(e) => {
-              const role = e.target.value as FormState['roleName'];
-              setForm((current) => ({
-                ...current,
-                roleName: role,
-                jobTitle: role === 'MANAGER' ? 'Yönetici' : 'Kullanıcı',
-              }));
-            }}
+            onChange={(e) => set('roleName', e.target.value as FormState['roleName'])}
           >
             <option value="USER">Kullanıcı</option>
             <option value="MANAGER">Yönetici</option>
@@ -171,26 +161,11 @@ export function AdminNewUserPage(): JSX.Element {
         </div>
 
         <div className="adm-field">
-          <label className="adm-label" htmlFor="nu-job-title">
-            Görev / Unvan *
-          </label>
-          <input
-            id="nu-job-title"
-            className="adm-input"
-            value={form.jobTitle}
-            readOnly
-            aria-readonly="true"
-            style={{ cursor: 'not-allowed', opacity: 0.68 }}
-          />
-          <p className="adm-help">Seçilen role göre otomatik belirlenir ve değiştirilemez.</p>
-        </div>
-
-        <div className="adm-field">
-          <label className="adm-label" htmlFor="nu-password">
+          <label className="adm-label" htmlFor="mnu-password">
             Geçici Şifre *
           </label>
           <input
-            id="nu-password"
+            id="mnu-password"
             className="adm-input"
             type="password"
             autoComplete="new-password"
@@ -201,11 +176,11 @@ export function AdminNewUserPage(): JSX.Element {
         </div>
 
         <div className="adm-field">
-          <label className="adm-label" htmlFor="nu-password2">
+          <label className="adm-label" htmlFor="mnu-password2">
             Geçici Şifre (Tekrar) *
           </label>
           <input
-            id="nu-password2"
+            id="mnu-password2"
             className="adm-input"
             type="password"
             autoComplete="new-password"
@@ -216,11 +191,11 @@ export function AdminNewUserPage(): JSX.Element {
         </div>
 
         <div className="adm-field">
-          <label className="adm-label" htmlFor="nu-status">
+          <label className="adm-label" htmlFor="mnu-status">
             Hesap Durumu
           </label>
           <select
-            id="nu-status"
+            id="mnu-status"
             className="adm-select"
             value={form.status}
             onChange={(e) => set('status', e.target.value as FormState['status'])}
@@ -234,7 +209,7 @@ export function AdminNewUserPage(): JSX.Element {
           <button
             type="button"
             className="adm-btn adm-btn-outline"
-            onClick={() => navigate('/admin/users')}
+            onClick={() => navigate('/manager/users')}
           >
             Vazgeç
           </button>
