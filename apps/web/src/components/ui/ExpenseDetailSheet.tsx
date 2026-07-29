@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Download, Eye, FileText, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { DueDateBadge } from './DueDateBadge';
 import { IbanCopyButton } from './IbanCopyButton';
@@ -388,12 +388,24 @@ export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetPro
           >
             <X size={18} />
           </button>
-          <img
-            src={lightboxUrl}
-            alt="Belge önizleme"
-            onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: '92vw', maxHeight: '88vh', objectFit: 'contain', borderRadius: 8 }}
-          />
+          <ZoomableImage src={lightboxUrl} alt="Belge önizleme" />
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 20,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              background: 'rgba(0,0,0,0.5)',
+              color: '#fff',
+              fontSize: 11,
+              padding: '4px 12px',
+              borderRadius: 99,
+              pointerEvents: 'none',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            İki parmakla yakınlaştır · Çift dokun sıfırla
+          </div>
         </div>
       )}
       <style>{`
@@ -418,6 +430,130 @@ function AttachmentThumb({ id, mimeType }: { id: string; mimeType: string }) {
     <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
   ) : (
     <FileText size={20} />
+  );
+}
+
+function ZoomableImage({ src, alt }: { src: string; alt: string }) {
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  useEffect(() => {
+    const el = imgRef.current;
+    if (!el) return;
+
+    const s = {
+      scale: 1,
+      ox: 0,
+      oy: 0,
+      lastDist: 0,
+      lastScale: 1,
+      lastOx: 0,
+      lastOy: 0,
+      startX: 0,
+      startY: 0,
+      startMidX: 0,
+      startMidY: 0,
+      pinching: false,
+      panning: false,
+      lastTap: 0,
+    };
+
+    const apply = () => {
+      el.style.transform = `scale(${s.scale}) translate(${s.ox / s.scale}px, ${s.oy / s.scale}px)`;
+      el.style.cursor = s.scale > 1 ? 'grab' : 'default';
+    };
+
+    const t0 = (t: TouchList) => t.item(0)!;
+    const t1 = (t: TouchList) => t.item(1)!;
+    const dist = (t: TouchList) =>
+      Math.hypot(t0(t).clientX - t1(t).clientX, t0(t).clientY - t1(t).clientY);
+
+    const onStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        s.pinching = true;
+        s.panning = false;
+        s.lastDist = dist(e.touches);
+        s.lastScale = s.scale;
+        s.lastOx = s.ox;
+        s.lastOy = s.oy;
+        s.startMidX = (t0(e.touches).clientX + t1(e.touches).clientX) / 2;
+        s.startMidY = (t0(e.touches).clientY + t1(e.touches).clientY) / 2;
+      } else if (e.touches.length === 1) {
+        s.pinching = false;
+        if (s.scale > 1) {
+          s.panning = true;
+          s.startX = t0(e.touches).clientX;
+          s.startY = t0(e.touches).clientY;
+          s.lastOx = s.ox;
+          s.lastOy = s.oy;
+        } else {
+          const now = Date.now();
+          if (now - s.lastTap < 300) {
+            s.scale = 1;
+            s.ox = 0;
+            s.oy = 0;
+            apply();
+          }
+          s.lastTap = now;
+          s.panning = false;
+        }
+      }
+    };
+
+    const onMove = (e: TouchEvent) => {
+      e.preventDefault();
+      if (e.touches.length === 2 && s.pinching) {
+        const d = dist(e.touches);
+        const midX = (t0(e.touches).clientX + t1(e.touches).clientX) / 2;
+        const midY = (t0(e.touches).clientY + t1(e.touches).clientY) / 2;
+        s.scale = Math.min(6, Math.max(1, s.lastScale * (d / s.lastDist)));
+        s.ox = s.lastOx + (midX - s.startMidX);
+        s.oy = s.lastOy + (midY - s.startMidY);
+        apply();
+      } else if (e.touches.length === 1 && s.panning) {
+        s.ox = s.lastOx + (t0(e.touches).clientX - s.startX);
+        s.oy = s.lastOy + (t0(e.touches).clientY - s.startY);
+        apply();
+      }
+    };
+
+    const onEnd = () => {
+      s.pinching = false;
+      s.panning = false;
+      if (s.scale < 1.05) {
+        s.scale = 1;
+        s.ox = 0;
+        s.oy = 0;
+        apply();
+      }
+    };
+
+    el.addEventListener('touchstart', onStart, { passive: true });
+    el.addEventListener('touchmove', onMove, { passive: false });
+    el.addEventListener('touchend', onEnd, { passive: true });
+    return () => {
+      el.removeEventListener('touchstart', onStart);
+      el.removeEventListener('touchmove', onMove);
+      el.removeEventListener('touchend', onEnd);
+    };
+  }, []);
+
+  return (
+    <img
+      ref={imgRef}
+      src={src}
+      alt={alt}
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        maxWidth: '92vw',
+        maxHeight: '88vh',
+        objectFit: 'contain',
+        borderRadius: 8,
+        touchAction: 'none',
+        userSelect: 'none',
+        transformOrigin: 'center center',
+        willChange: 'transform',
+      }}
+    />
   );
 }
 
