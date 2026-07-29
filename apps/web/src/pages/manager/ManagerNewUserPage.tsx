@@ -55,7 +55,7 @@ export function ManagerNewUserPage(): JSX.Element {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['manager', 'users'] });
       showToast('Kullanıcı oluşturuldu. İlk girişte şifre değiştirmesi zorunludur.', 'success');
-      navigate('/manager/users');
+      navigate('/manager/settings/users');
     },
     onError: (e) => showToast(getApiErrorMessage(e, 'Kullanıcı oluşturulamadı.'), 'error'),
   });
@@ -209,7 +209,7 @@ export function ManagerNewUserPage(): JSX.Element {
           <button
             type="button"
             className="adm-btn adm-btn-outline"
-            onClick={() => navigate('/manager/users')}
+            onClick={() => navigate('/manager/settings/users')}
           >
             Vazgeç
           </button>

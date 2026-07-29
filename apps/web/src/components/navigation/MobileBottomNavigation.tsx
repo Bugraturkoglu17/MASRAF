@@ -24,7 +24,7 @@ const managerLeftItems: NavItem[] = [
 ];
 const managerRightItems: NavItem[] = [
   { to: '/manager/notifications', label: 'Bildirimler', icon: Bell },
-  { to: '/manager/profile', label: 'Ayarlar', icon: Settings },
+  { to: '/manager/settings', label: 'Ayarlar', icon: Settings },
 ];
 
 const itemsByRole: Record<Exclude<AppRole, 'USER'>, NavItem[]> = {

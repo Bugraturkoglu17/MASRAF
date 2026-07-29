@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { createBrowserRouter } from 'react-router-dom';
+import { createBrowserRouter, Navigate } from 'react-router-dom';
 
 import { ChangePasswordGuard } from './ChangePasswordGuard';
 import { ProfileGuard } from './ProfileGuard';
@@ -49,6 +49,11 @@ const ManagerApprovedPage = lazy(() =>
 );
 const ManagerRejectedPage = lazy(() =>
   import('@/pages/manager/ManagerRejectedPage').then((m) => ({ default: m.ManagerRejectedPage })),
+);
+const ManagerSettingsLayout = lazy(() =>
+  import('@/pages/manager/ManagerSettingsLayout').then((m) => ({
+    default: m.ManagerSettingsLayout,
+  })),
 );
 const ManagerUsersPage = lazy(() =>
   import('@/pages/manager/ManagerUsersPage').then((m) => ({ default: m.ManagerUsersPage })),
@@ -246,28 +251,38 @@ export const router = createBrowserRouter(
                           ),
                         },
                         {
-                          path: '/manager/users',
+                          path: '/manager/settings',
                           element: (
                             <S>
-                              <ManagerUsersPage />
+                              <ManagerSettingsLayout />
                             </S>
                           ),
-                        },
-                        {
-                          path: '/manager/users/new',
-                          element: (
-                            <S>
-                              <ManagerNewUserPage />
-                            </S>
-                          ),
-                        },
-                        {
-                          path: '/manager/profile',
-                          element: (
-                            <S>
-                              <UserProfilePage />
-                            </S>
-                          ),
+                          children: [
+                            {
+                              index: true,
+                              element: <Navigate to="/manager/settings/profile" replace />,
+                            },
+                            {
+                              path: 'profile',
+                              element: <UserProfilePage />,
+                            },
+                            {
+                              path: 'users',
+                              element: (
+                                <S>
+                                  <ManagerUsersPage />
+                                </S>
+                              ),
+                            },
+                            {
+                              path: 'users/new',
+                              element: (
+                                <S>
+                                  <ManagerNewUserPage />
+                                </S>
+                              ),
+                            },
+                          ],
                         },
                         {
                           path: '/manager/notifications',

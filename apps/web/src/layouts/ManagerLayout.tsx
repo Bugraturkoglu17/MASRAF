@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Bell, CheckCircle, Clock, Home, User, Users, XCircle } from 'lucide-react';
+import { Bell, CheckCircle, Clock, Home, Settings, XCircle } from 'lucide-react';
 import { useEffect, useMemo, useRef } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate, useNavigation } from 'react-router-dom';
 
@@ -16,9 +16,8 @@ const navItems = [
   { to: '/manager/pending', label: 'Onayda Bekleyen', icon: Clock },
   { to: '/manager/approved', label: 'Onaylananlar', icon: CheckCircle },
   { to: '/manager/rejected', label: 'Reddedilenler', icon: XCircle },
-  { to: '/manager/users', label: 'Kullanıcılar', icon: Users },
   { to: '/manager/notifications', label: 'Bildirimler', icon: Bell },
-  { to: '/manager/profile', label: 'Profilim', icon: User },
+  { to: '/manager/settings', label: 'Ayarlar', icon: Settings },
 ];
 
 export function ManagerLayout(): JSX.Element {
@@ -49,6 +48,7 @@ export function ManagerLayout(): JSX.Element {
     void import('@/pages/manager/ManagerPendingPage');
     void import('@/pages/manager/ManagerApprovedPage');
     void import('@/pages/manager/ManagerRejectedPage');
+    void import('@/pages/manager/ManagerUsersPage');
     void import('@/pages/user/UserProfilePage');
     void import('@/pages/NotificationsPage');
   }, []);

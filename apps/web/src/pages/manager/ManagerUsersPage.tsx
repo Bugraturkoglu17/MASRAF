@@ -44,7 +44,7 @@ export function ManagerUsersPage(): JSX.Element {
       title="Kullanıcılar"
       subtitle="Tüm hesapları görüntüle ve yeni kullanıcı ekle."
       actions={
-        <Link to="/manager/users/new" className="adm-btn adm-btn-primary">
+        <Link to="/manager/settings/users/new" className="adm-btn adm-btn-primary">
           + Yeni Kullanıcı
         </Link>
       }
