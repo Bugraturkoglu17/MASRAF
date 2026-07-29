@@ -14,6 +14,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { assertValidAttachment } from '../../storage/file-validation';
 import { StorageService } from '../../storage/storage.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class AttachmentsService {
@@ -24,6 +25,7 @@ export class AttachmentsService {
     private readonly storageService: StorageService,
     private readonly auditLogs: AuditLogsService,
     private readonly configService: ConfigService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   private get uploadLimits() {
@@ -235,6 +237,143 @@ export class AttachmentsService {
     }
     return this.prisma.attachment.findMany({
       where: { expenseId, organizationId, deletedAt: null },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async uploadPaymentReceipt(
+    organizationId: string,
+    managerId: string,
+    expenseId: string,
+    file: { originalname: string; mimetype: string; size: number; buffer: Buffer },
+  ) {
+    const expense = await this.prisma.expense.findFirst({
+      where: { id: expenseId, organizationId, deletedAt: null },
+      select: { id: true, status: true, userId: true, expenseCode: true },
+    });
+    if (!expense) throw new NotFoundAppException('Masraf');
+    if (expense.status !== 'APPROVED')
+      throw new ConflictAppException('Yalnızca onaylanmış masraflara dekont eklenebilir.');
+
+    const normalizedMimeType = assertValidAttachment(
+      file.originalname,
+      file.mimetype,
+      file.size,
+      this.uploadLimits.maxSizeBytes,
+    );
+
+    let stored: Awaited<ReturnType<StorageService['storeAttachment']>>;
+    try {
+      stored = await this.storageService.storeAttachment(
+        organizationId,
+        file.originalname,
+        normalizedMimeType,
+        file.buffer,
+      );
+    } catch (error) {
+      const errName = error instanceof Error ? error.name : 'UnknownError';
+      const errMsg = error instanceof Error ? error.message : String(error);
+      process.stderr.write(
+        `[R2_UPLOAD_FAILED] expenseId=${expenseId} errorName=${errName} message=${errMsg}\n`,
+      );
+      this.logger.error(
+        `R2 dekont yüklemesi başarısız. expenseId=${expenseId}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+      throw new ExternalServiceAppException(
+        'Dosya depolama servisine yüklenemedi. Lütfen tekrar deneyin.',
+        'STORAGE_UPLOAD_FAILED',
+      );
+    }
+
+    const now = new Date();
+    const ext = extname(file.originalname).toLowerCase();
+    const displayFileName = `DEKONT-${expense.expenseCode}${ext}`;
+
+    try {
+      const attachment = await this.prisma.$transaction(async (tx) => {
+        const att = await tx.attachment.create({
+          data: {
+            organizationId,
+            expenseId,
+            fileKey: stored.fileKey,
+            fileName: displayFileName,
+            mimeType: normalizedMimeType,
+            sizeBytes: stored.sizeBytes,
+            sha256: stored.sha256,
+            uploadedById: managerId,
+            kind: 'PAYMENT_RECEIPT',
+          },
+        });
+        await tx.expense.update({
+          where: { id: expenseId },
+          data: {
+            paymentStatus: 'PAID_WITH_RECEIPT',
+            paymentReceiptUploadedAt: now,
+            paymentReceiptUploadedBy: managerId,
+          },
+        });
+        await this.auditLogs.record(
+          {
+            organizationId,
+            actorId: managerId,
+            action: 'UPLOAD',
+            resource: 'ATTACHMENT',
+            resourceId: att.id,
+            metadata: { kind: 'PAYMENT_RECEIPT', expenseId },
+          },
+          tx,
+        );
+        return att;
+      });
+
+      try {
+        await this.notifications.create(
+          organizationId,
+          expense.userId,
+          'Ödeme Dekontu',
+          'Masrafınıza ödeme dekontu eklendi.',
+          'IN_APP',
+          this.prisma,
+          { expenseId },
+        );
+      } catch (notifError) {
+        this.logger.warn('Dekont yükleme bildirimi gönderilemedi.', {
+          expenseId,
+          error: notifError instanceof Error ? notifError.message : 'UnknownError',
+        });
+      }
+
+      return attachment;
+    } catch (error) {
+      try {
+        await this.storageService.deleteFile(stored.fileKey);
+      } catch (cleanupError) {
+        this.logger.error('Dekont upload sonrası R2 telafi silmesi başarısız.', {
+          fileKey: stored.fileKey,
+          error: cleanupError instanceof Error ? cleanupError.name : 'UnknownError',
+        });
+      }
+      throw error;
+    }
+  }
+
+  async listPaymentReceipts(expenseId: string, organizationId: string, userId: string) {
+    const expense = await this.prisma.expense.findFirst({
+      where: { id: expenseId, organizationId, deletedAt: null },
+      select: { userId: true },
+    });
+    if (!expense) throw new NotFoundAppException('Masraf');
+    if (expense.userId !== userId) {
+      const me = await this.prisma.user.findFirst({
+        where: { id: userId, organizationId },
+        select: { role: true },
+      });
+      if (!me || (me.role !== 'MANAGER' && me.role !== 'ADMIN'))
+        throw new ForbiddenAppException('Bu masrafa erişim yetkiniz yok.');
+    }
+    return this.prisma.attachment.findMany({
+      where: { expenseId, organizationId, kind: 'PAYMENT_RECEIPT', deletedAt: null },
       orderBy: { createdAt: 'asc' },
     });
   }

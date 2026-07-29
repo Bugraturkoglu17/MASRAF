@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Download, Eye, FileText, X } from 'lucide-react';
+import { Download, Eye, FileText, Receipt, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { DueDateBadge } from './DueDateBadge';
@@ -16,6 +16,7 @@ interface Attachment {
   mimeType: string;
   sizeBytes: number;
   createdAt: string;
+  kind?: string;
 }
 
 interface ExpenseDetail {
@@ -32,6 +33,7 @@ interface ExpenseDetail {
   rejectionReason?: string | null;
   submittedAt?: string | null;
   decidedAt?: string | null;
+  paymentStatus?: string | null;
   createdAt: string;
   category: { name: string };
   attachments: Attachment[];
@@ -66,6 +68,11 @@ export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetPro
   const { data: expense, isLoading } = useQuery<ExpenseDetail>({
     queryKey: ['expense-detail', expenseId],
     queryFn: () => apiFetch(`/expenses/${expenseId}`),
+  });
+  const { data: paymentReceipts } = useQuery<Attachment[]>({
+    queryKey: ['payment-receipts', expenseId],
+    queryFn: () => apiFetch(`/expenses/${expenseId}/payment-receipts`),
+    enabled: expense?.status === 'APPROVED',
   });
 
   useEffect(() => {
@@ -316,58 +323,125 @@ export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetPro
               )}
 
               {/* Attachments */}
-              <div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 700,
-                    color: 'var(--color-text-muted)',
-                    marginBottom: 8,
-                    letterSpacing: '0.05em',
-                  }}
-                >
-                  BELGELER ({expense.attachments.length})
+              {(() => {
+                const invoices = expense.attachments.filter((a) => !a.kind || a.kind === 'INVOICE');
+                return (
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: 'var(--color-text-muted)',
+                        marginBottom: 8,
+                        letterSpacing: '0.05em',
+                      }}
+                    >
+                      BELGELER ({invoices.length})
+                    </div>
+                    {invoices.length === 0 ? (
+                      <div
+                        style={{ fontSize: 13, color: 'var(--color-text-muted)', padding: '8px 0' }}
+                      >
+                        Belge eklenmemiş
+                      </div>
+                    ) : (
+                      <div className="attachment-list">
+                        {invoices.map((att, index) => (
+                          <article key={att.id} className="attachment-preview">
+                            <span className="attachment-thumbnail">
+                              <AttachmentThumb id={att.id} mimeType={att.mimeType} />
+                            </span>
+                            <div className="attachment-meta">
+                              <strong>Masraf #{expenseReference}</strong>
+                              <small>
+                                Belge {index + 1} · {(att.sizeBytes / 1024).toFixed(0)} KB
+                              </small>
+                            </div>
+                            <button
+                              type="button"
+                              className="attachment-icon-button"
+                              aria-label={`Masraf ${expenseReference}, belge ${index + 1} önizle`}
+                              disabled={viewingId !== null || downloadingId !== null}
+                              onClick={() => void viewAttachment(att)}
+                            >
+                              <Eye size={14} color="var(--color-primary)" />
+                            </button>
+                            <button
+                              type="button"
+                              className="attachment-icon-button"
+                              aria-label={`Masraf ${expenseReference}, belge ${index + 1} indir`}
+                              disabled={downloadingId !== null}
+                              onClick={() => void downloadAttachment(att)}
+                            >
+                              <Download size={14} color="var(--color-primary)" />
+                            </button>
+                          </article>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Payment Receipts */}
+              {expense.status === 'APPROVED' && (
+                <div style={{ marginTop: 16 }}>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: 'var(--color-text-muted)',
+                      marginBottom: 8,
+                      letterSpacing: '0.05em',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    <Receipt size={12} />
+                    ÖDEME DEKONTU {paymentReceipts && `(${paymentReceipts.length})`}
+                  </div>
+                  {!paymentReceipts || paymentReceipts.length === 0 ? (
+                    <div
+                      style={{ fontSize: 13, color: 'var(--color-text-muted)', padding: '8px 0' }}
+                    >
+                      Henüz ödeme dekontu eklenmedi.
+                    </div>
+                  ) : (
+                    <div className="attachment-list">
+                      {paymentReceipts.map((att, index) => (
+                        <article key={att.id} className="attachment-preview">
+                          <span className="attachment-thumbnail">
+                            <AttachmentThumb id={att.id} mimeType={att.mimeType} />
+                          </span>
+                          <div className="attachment-meta">
+                            <strong>Dekont {index + 1}</strong>
+                            <small>{(att.sizeBytes / 1024).toFixed(0)} KB</small>
+                          </div>
+                          <button
+                            type="button"
+                            className="attachment-icon-button"
+                            aria-label={`Ödeme dekontu ${index + 1} önizle`}
+                            disabled={viewingId !== null || downloadingId !== null}
+                            onClick={() => void viewAttachment(att)}
+                          >
+                            <Eye size={14} color="var(--color-primary)" />
+                          </button>
+                          <button
+                            type="button"
+                            className="attachment-icon-button"
+                            aria-label={`Ödeme dekontu ${index + 1} indir`}
+                            disabled={downloadingId !== null}
+                            onClick={() => void downloadAttachment(att)}
+                          >
+                            <Download size={14} color="var(--color-primary)" />
+                          </button>
+                        </article>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                {expense.attachments.length === 0 ? (
-                  <div style={{ fontSize: 13, color: 'var(--color-text-muted)', padding: '8px 0' }}>
-                    Belge eklenmemiş
-                  </div>
-                ) : (
-                  <div className="attachment-list">
-                    {expense.attachments.map((att, index) => (
-                      <article key={att.id} className="attachment-preview">
-                        <span className="attachment-thumbnail">
-                          <AttachmentThumb id={att.id} mimeType={att.mimeType} />
-                        </span>
-                        <div className="attachment-meta">
-                          <strong>Masraf #{expenseReference}</strong>
-                          <small>
-                            Belge {index + 1} · {(att.sizeBytes / 1024).toFixed(0)} KB
-                          </small>
-                        </div>
-                        <button
-                          type="button"
-                          className="attachment-icon-button"
-                          aria-label={`Masraf ${expenseReference}, belge ${index + 1} önizle`}
-                          disabled={viewingId !== null || downloadingId !== null}
-                          onClick={() => void viewAttachment(att)}
-                        >
-                          <Eye size={14} color="var(--color-primary)" />
-                        </button>
-                        <button
-                          type="button"
-                          className="attachment-icon-button"
-                          aria-label={`Masraf ${expenseReference}, belge ${index + 1} indir`}
-                          disabled={downloadingId !== null}
-                          onClick={() => void downloadAttachment(att)}
-                        >
-                          <Download size={14} color="var(--color-primary)" />
-                        </button>
-                      </article>
-                    ))}
-                  </div>
-                )}
-              </div>
+              )}
             </>
           )}
         </div>
