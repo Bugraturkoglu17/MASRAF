@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Clock3, Search } from 'lucide-react';
+import { Camera, Clock3, FolderOpen, ReceiptText, Search, X } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 
 import { ManagerExpenseCard, type ManagerExpense } from '@/components/expenses/ExpenseCards';
@@ -369,8 +369,7 @@ function ReceiptUploadModal({
 }) {
   const [phase, setPhase] = useState<ReceiptPhase>({ tag: 'idle' });
   const cameraRef = useRef<HTMLInputElement>(null);
-  const photoRef = useRef<HTMLInputElement>(null);
-  const pdfRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const { data: expenseDetail } = useQuery<ExpenseRecipientDetail>({
     queryKey: ['expense-detail', expenseId],
@@ -434,13 +433,12 @@ function ReceiptUploadModal({
   const isUploading = phase.tag === 'uploading';
 
   return (
-    <div className="decision-backdrop" onMouseDown={!isUploading ? onClose : undefined}>
+    <div className="receipt-sheet-backdrop" onMouseDown={!isUploading ? onClose : undefined}>
       <section
         role="dialog"
         aria-modal="true"
         aria-labelledby="receipt-upload-title"
-        className="decision-modal"
-        style={{ gap: 10 }}
+        className="receipt-sheet"
         onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Hidden file inputs */}
@@ -457,20 +455,9 @@ function ReceiptUploadModal({
           }}
         />
         <input
-          ref={photoRef}
+          ref={fileRef}
           type="file"
-          accept=".jpg,.jpeg,.png,.webp,.heic"
-          style={{ display: 'none' }}
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) pickFile(f);
-            e.target.value = '';
-          }}
-        />
-        <input
-          ref={pdfRef}
-          type="file"
-          accept=".pdf"
+          accept=".jpg,.jpeg,.png,.webp,.heic,.pdf"
           style={{ display: 'none' }}
           onChange={(e) => {
             const f = e.target.files?.[0];
@@ -479,68 +466,44 @@ function ReceiptUploadModal({
           }}
         />
 
-        <span className="decision-symbol approve" />
-        <h2 id="receipt-upload-title">Dekont Yükle</h2>
+        <div className="receipt-sheet-handle" />
 
-        {/* Ödeme alıcısı — kompakt referans */}
+        {/* Header */}
+        <div className="receipt-sheet-header">
+          <div className="receipt-sheet-icon">
+            <ReceiptText size={22} />
+          </div>
+          <h2 id="receipt-upload-title">Dekont Yükle</h2>
+          {!isUploading && (
+            <button
+              type="button"
+              className="receipt-sheet-close"
+              onClick={onClose}
+              aria-label="Kapat"
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+
+        {/* Ödeme alıcısı */}
         {expenseDetail?.paymentRecipientType &&
           (expenseDetail.recipientFirstName || expenseDetail.recipientIban) && (
-            <div
-              style={{
-                width: '100%',
-                borderTop: '1px solid var(--color-border)',
-                paddingTop: 8,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 8,
-              }}
-            >
-              <div style={{ minWidth: 0 }}>
-                <div
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 700,
-                    color: 'var(--color-text-muted)',
-                    letterSpacing: '0.06em',
-                    marginBottom: 2,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 5,
-                  }}
-                >
+            <div className="receipt-sheet-recipient">
+              <div className="receipt-sheet-recipient-info">
+                <div className="receipt-sheet-recipient-label">
                   ÖDEME ALICISI
                   {expenseDetail.paymentRecipientType === 'THIRD_PARTY' && (
-                    <span
-                      style={{
-                        fontSize: 9,
-                        fontWeight: 700,
-                        padding: '1px 5px',
-                        borderRadius: 99,
-                        background: 'var(--color-pending-bg)',
-                        color: 'var(--color-pending)',
-                      }}
-                    >
-                      TAŞERON
-                    </span>
+                    <span className="receipt-sheet-badge">TAŞERON</span>
                   )}
                 </div>
                 {expenseDetail.recipientFirstName && expenseDetail.recipientLastName && (
-                  <div
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: 'var(--color-text)',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
+                  <div className="receipt-sheet-recipient-name">
                     {expenseDetail.recipientFirstName} {expenseDetail.recipientLastName}
                   </div>
                 )}
                 {expenseDetail.recipientCompanyName && (
-                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                  <div className="receipt-sheet-recipient-company">
                     {expenseDetail.recipientCompanyName}
                   </div>
                 )}
@@ -551,203 +514,97 @@ function ReceiptUploadModal({
             </div>
           )}
 
-        {/* IDLE — dosya seçim butonları */}
+        {/* IDLE — dosya seçim */}
         {phase.tag === 'idle' && (
-          <div style={{ width: '100%' }}>
-            <div style={{ display: 'flex', gap: 6, width: '100%' }}>
+          <>
+            <div className="receipt-pick-grid">
               <button
                 type="button"
-                style={receiptPickBtnStyle}
+                className="receipt-pick-card"
                 onClick={() => cameraRef.current?.click()}
               >
-                Kamera
+                <Camera size={26} />
+                <span>Kamera</span>
               </button>
               <button
                 type="button"
-                style={receiptPickBtnStyle}
-                onClick={() => photoRef.current?.click()}
+                className="receipt-pick-card"
+                onClick={() => fileRef.current?.click()}
               >
-                Galeri
-              </button>
-              <button
-                type="button"
-                style={receiptPickBtnStyle}
-                onClick={() => pdfRef.current?.click()}
-              >
-                PDF
+                <FolderOpen size={26} />
+                <span>Dosya Yükle</span>
               </button>
             </div>
-            <p
-              style={{
-                fontSize: 11,
-                color: 'var(--color-text-muted)',
-                margin: '6px 0 0',
-                textAlign: 'center',
-              }}
-            >
-              JPG · PNG · WEBP · HEIC · PDF — maks. 15 MB
-            </p>
-          </div>
+            <p className="receipt-pick-hint">JPG · PNG · WEBP · HEIC · PDF — maks. 15 MB</p>
+          </>
         )}
 
-        {/* SELECTED — önizleme + onayla */}
+        {/* SELECTED — önizleme */}
         {phase.tag === 'selected' && (
-          <div style={{ width: '100%' }}>
+          <div className="receipt-sheet-preview">
             {phase.previewUrl ? (
-              <div style={{ textAlign: 'center', margin: '4px 0 8px' }}>
-                <img
-                  src={phase.previewUrl}
-                  alt="Dekont önizleme"
-                  style={{
-                    maxWidth: '100%',
-                    maxHeight: 180,
-                    borderRadius: 8,
-                    objectFit: 'contain',
-                  }}
-                />
-              </div>
+              <img src={phase.previewUrl} alt="Dekont önizleme" />
             ) : (
-              <div
-                style={{
-                  padding: '10px 12px',
-                  background: 'var(--color-bg)',
-                  borderRadius: 8,
-                  marginBottom: 8,
-                  border: '1px solid var(--color-border)',
-                  fontSize: 13,
-                  color: 'var(--color-text)',
-                  wordBreak: 'break-all',
-                }}
-              >
-                {phase.file.name}
-              </div>
+              <div className="receipt-sheet-filename">{phase.file.name}</div>
             )}
-            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '0 0 8px' }}>
-              {(phase.file.size / 1024).toFixed(0)} KB
-            </p>
+            <p className="receipt-sheet-filesize">{(phase.file.size / 1024).toFixed(0)} KB</p>
           </div>
         )}
 
-        {/* UPLOADING — ilerleme çubuğu */}
+        {/* UPLOADING */}
         {phase.tag === 'uploading' && (
-          <div style={{ width: '100%', margin: '4px 0' }}>
-            <div
-              style={{
-                height: 6,
-                background: 'var(--color-border)',
-                borderRadius: 3,
-                overflow: 'hidden',
-                marginBottom: 6,
-              }}
-            >
-              <div
-                style={{
-                  height: '100%',
-                  background: 'var(--color-primary)',
-                  borderRadius: 3,
-                  width: `${phase.progress}%`,
-                  transition: 'width 0.2s',
-                }}
-              />
+          <div>
+            <div className="receipt-sheet-progress">
+              <div className="receipt-sheet-progress-bar" style={{ width: `${phase.progress}%` }} />
             </div>
-            <p
-              style={{
-                fontSize: 13,
-                color: 'var(--color-text-muted)',
-                textAlign: 'center',
-                margin: 0,
-              }}
-            >
-              Yükleniyor… %{phase.progress}
-            </p>
+            <p className="receipt-sheet-progress-label">Yükleniyor… %{phase.progress}</p>
           </div>
         )}
 
         {/* SUCCESS */}
         {phase.tag === 'success' && (
-          <p
-            style={{
-              fontSize: 14,
-              color: 'var(--color-success)',
-              textAlign: 'center',
-              margin: '4px 0',
-              fontWeight: 600,
-            }}
-          >
-            Dekont başarıyla yüklendi.
-          </p>
+          <p className="receipt-sheet-success">Dekont başarıyla yüklendi.</p>
         )}
 
         {/* ERROR */}
-        {phase.tag === 'error' && (
-          <p
-            style={{
-              fontSize: 13,
-              color: 'var(--color-rejected)',
-              textAlign: 'center',
-              margin: '4px 0',
-            }}
-          >
-            {phase.message}
-          </p>
-        )}
+        {phase.tag === 'error' && <p className="receipt-sheet-error">{phase.message}</p>}
 
         {/* Aksiyon butonları */}
-        <div style={{ display: 'flex', gap: 8, width: '100%', marginTop: 2 }}>
-          {phase.tag === 'idle' && (
-            <button type="button" style={{ flex: 1 }} onClick={onClose}>
-              Vazgeç
+        {phase.tag === 'selected' && (
+          <div className="receipt-sheet-actions">
+            <button type="button" onClick={removeFile}>
+              Sil
             </button>
-          )}
-          {phase.tag === 'selected' && (
-            <>
-              <button type="button" onClick={removeFile}>
-                Sil
-              </button>
-              <button type="button" className="approve" style={{ flex: 1 }} onClick={startUpload}>
-                Dekontu Onayla
-              </button>
-            </>
-          )}
-          {phase.tag === 'uploading' && (
-            <button type="button" style={{ flex: 1 }} disabled>
+            <button type="button" className="primary" onClick={startUpload}>
+              Gönder
+            </button>
+          </div>
+        )}
+        {phase.tag === 'uploading' && (
+          <div className="receipt-sheet-actions single">
+            <button type="button" disabled>
               Yükleniyor…
             </button>
-          )}
-          {phase.tag === 'success' && (
-            <button type="button" className="approve" style={{ flex: 1 }} onClick={onClose}>
+          </div>
+        )}
+        {phase.tag === 'success' && (
+          <div className="receipt-sheet-actions single">
+            <button type="button" className="primary" onClick={onClose}>
               Tamam
             </button>
-          )}
-          {phase.tag === 'error' && (
-            <>
-              <button type="button" onClick={onClose}>
-                Kapat
-              </button>
-              <button
-                type="button"
-                className="approve"
-                style={{ flex: 1 }}
-                onClick={() => setPhase({ tag: 'idle' })}
-              >
-                Yeniden Dene
-              </button>
-            </>
-          )}
-        </div>
+          </div>
+        )}
+        {phase.tag === 'error' && (
+          <div className="receipt-sheet-actions">
+            <button type="button" onClick={onClose}>
+              Kapat
+            </button>
+            <button type="button" className="primary" onClick={() => setPhase({ tag: 'idle' })}>
+              Yeniden Dene
+            </button>
+          </div>
+        )}
       </section>
     </div>
   );
 }
-
-const receiptPickBtnStyle: React.CSSProperties = {
-  flex: 1,
-  padding: '8px 10px',
-  border: '1px solid var(--color-border)',
-  borderRadius: 8,
-  background: 'var(--color-bg)',
-  color: 'var(--color-text)',
-  fontSize: 13,
-  cursor: 'pointer',
-  textAlign: 'center',
-};
