@@ -29,7 +29,9 @@ const tabs: { status: Status; label: string }[] = [
   { status: 'REJECTED', label: 'Reddedilen' },
 ];
 
-export function UserExpensesPage(): JSX.Element {
+export function UserExpensesPage({
+  basePath = '/expenses',
+}: { basePath?: string } = {}): JSX.Element {
   const [params, setParams] = useSearchParams();
   const activeStatus = (params.get('status') as Status) ?? 'DRAFT';
   const navigate = useNavigate();
@@ -80,11 +82,34 @@ export function UserExpensesPage(): JSX.Element {
     <div style={{ maxWidth: 480, margin: '0 auto', paddingBottom: 80 }}>
       {/* Header */}
       <div style={{ padding: '20px 16px 0' }}>
-        <h1
-          style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-text)', margin: '0 0 16px' }}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 16,
+          }}
         >
-          Masraflarım
-        </h1>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>
+            Masraflarım
+          </h1>
+          <button
+            type="button"
+            onClick={() => navigate(`${basePath}/new`)}
+            style={{
+              padding: '7px 14px',
+              borderRadius: 8,
+              border: 'none',
+              background: 'var(--color-primary, #1e3a8a)',
+              color: '#fff',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            + Yeni Masraf
+          </button>
+        </div>
 
         {/* Tabs */}
         <div className="expense-status-tabs" role="tablist">
@@ -118,7 +143,7 @@ export function UserExpensesPage(): JSX.Element {
                 onSubmit={exp.status === 'DRAFT' ? () => setSubmitTarget(exp) : undefined}
                 onEdit={
                   exp.status === 'DRAFT'
-                    ? () => navigate(`/expenses/new?edit=${exp.id}`)
+                    ? () => navigate(`${basePath}/new?edit=${exp.id}`)
                     : undefined
                 }
                 onDelete={exp.status === 'DRAFT' ? () => handleDelete(exp) : undefined}

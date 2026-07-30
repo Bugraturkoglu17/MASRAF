@@ -244,7 +244,7 @@ export class ExpensesService {
   async submitDraft(id: string, organizationId: string, userId: string) {
     const expense = await this.prisma.expense.findFirst({
       where: { id, organizationId, userId, deletedAt: null },
-      include: { user: { select: { firstName: true, lastName: true, iban: true } } },
+      include: { user: { select: { firstName: true, lastName: true, iban: true, role: true } } },
     });
     if (!expense) throw new NotFoundAppException('Masraf');
     if (expense.status !== 'DRAFT')
@@ -350,12 +350,16 @@ export class ExpensesService {
         hour: '2-digit',
         minute: '2-digit',
       });
+      const isManagerExpense = expense.user.role === 'MANAGER' || expense.user.role === 'ADMIN';
+      const notifTitle = isManagerExpense
+        ? 'Yeni bir yönetici masrafı onay bekliyor.'
+        : 'Yeni bir masrafınız var.';
       await Promise.all(
         managers.map((m) =>
           this.notifications.create(
             organizationId,
             m.id,
-            'Yeni bir masrafınız var.',
+            notifTitle,
             `${userName} · #${expCode} · ${amtStr} · Gönderim: ${timeStr}`,
             'IN_APP',
             this.prisma,
@@ -583,7 +587,7 @@ export class ExpensesService {
         where: {
           organizationId,
           deletedAt: null,
-          status: { not: 'DRAFT' },
+          status: { in: ['PENDING', 'APPROVED'] },
           createdAt: { gte: startOfMonth },
         },
         _sum: { amount: true },
