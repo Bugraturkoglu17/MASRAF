@@ -40,7 +40,7 @@ describe('UsersService admin safeguards', () => {
     const service = new UsersService(prisma, audit);
 
     await expect(
-      service.setStatus('admin-2', 'org-1', 'INACTIVE', 'admin-1'),
+      service.setStatus('admin-2', 'org-1', 'INACTIVE', 'admin-1', 'ADMIN'),
     ).rejects.toBeInstanceOf(ConflictAppException);
   });
 });
