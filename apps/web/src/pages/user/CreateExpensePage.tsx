@@ -182,7 +182,7 @@ export function CreateExpensePage(): JSX.Element {
   }, []);
 
   // ── Geri çıkış blocker ───────────────────────────────────────────────────
-  const isFormDirty = isDirty || uploads.items.length > 0;
+  const isFormDirty = isDirty || uploads.userModified;
 
   const blocker = useBlocker(
     useCallback(

@@ -85,6 +85,7 @@ export function useAttachmentUploads({ maxFiles, maxFileSizeBytes, onError }: Op
   // güncel sonucu okur. İkisi her zaman commit() ile birlikte güncellenir.
   const [items, setItems] = useState<UploadItem[]>([]);
   const itemsRef = useRef<UploadItem[]>([]);
+  const [userModified, setUserModified] = useState(false);
 
   const expenseIdRef = useRef<string | null>(null);
   const inFlightRef = useRef(new Map<string, Promise<void>>());
@@ -271,6 +272,7 @@ export function useAttachmentUploads({ maxFiles, maxFileSizeBytes, onError }: Op
       }
 
       if (accepted.length === 0) return false;
+      setUserModified(true);
       commit([...current, ...accepted]);
       // Taslak varsa yükleme dosya seçimi anında başlar.
       if (expenseIdRef.current) {
@@ -307,6 +309,7 @@ export function useAttachmentUploads({ maxFiles, maxFileSizeBytes, onError }: Op
         URL.revokeObjectURL(item.previewUrl);
         previewUrlsRef.current.delete(item.previewUrl);
       }
+      setUserModified(true);
       commit(itemsRef.current.filter((i) => i.localId !== localId));
     },
     [commit],
@@ -370,6 +373,7 @@ export function useAttachmentUploads({ maxFiles, maxFileSizeBytes, onError }: Op
     hydrate,
     remove,
     retry,
+    userModified,
     isUploading: items.some((item) => item.status === 'uploading' || item.status === 'waiting'),
     hasFailed: items.some((item) => item.status === 'error'),
     doneCount: items.filter((item) => item.status === 'done').length,
