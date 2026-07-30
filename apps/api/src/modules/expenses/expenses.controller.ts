@@ -64,10 +64,10 @@ const createExpenseSchema = z.object({
   expenseDate,
   dueDate: isoDate.optional(),
   paymentRecipientType: z.enum(['SELF', 'THIRD_PARTY']).optional(),
-  recipientFirstName: z.string().trim().min(1).max(100).optional(),
-  recipientLastName: z.string().trim().min(1).max(100).optional(),
-  recipientIban: ibanSchema.optional(),
-  recipientCompanyName: z.string().trim().max(200).optional(),
+  recipientFirstName: z.string().trim().min(1).max(100).nullish(),
+  recipientLastName: z.string().trim().min(1).max(100).nullish(),
+  recipientIban: ibanSchema.nullish(),
+  recipientCompanyName: z.string().trim().max(200).nullish(),
 });
 
 const updateExpenseSchema = z.object({
