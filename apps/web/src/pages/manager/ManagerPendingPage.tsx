@@ -7,6 +7,8 @@ import { useToast } from '@/components/feedback/toast-context';
 import { ExpenseDetailSheet } from '@/components/ui/ExpenseDetailSheet';
 import { ApiError, apiFetch, getAccessToken } from '@/lib/api-client';
 
+const MAX_RECEIPT_SIZE = 15 * 1024 * 1024;
+
 interface PagedResult {
   items: ManagerExpense[];
   meta: { totalItems: number; page: number; totalPages: number };
@@ -42,6 +44,7 @@ export function ManagerPendingPage(): JSX.Element {
   const [search, setSearch] = useState('');
   const [receiptExpenseId, setReceiptExpenseId] = useState<string | null>(null);
   const [showReceiptUpload, setShowReceiptUpload] = useState(false);
+  // showReceiptUpload: false = prompt modal, true = upload modal
 
   const apiSort = sort === 'amount-high' || sort === 'amount-low' ? ('newest' as const) : sort;
 
@@ -117,42 +120,12 @@ export function ManagerPendingPage(): JSX.Element {
       ),
   });
 
-  const uploadReceipt = useMutation({
-    mutationFn: async ({ expenseId, file }: { expenseId: string; file: File }) => {
-      const form = new FormData();
-      form.append('file', file, file.name);
-      const token = getAccessToken();
-      const res = await fetch(
-        `${import.meta.env.VITE_API_URL as string}/expenses/${expenseId}/payment-receipts`,
-        {
-          method: 'POST',
-          credentials: 'include',
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-          body: form,
-        },
-      );
-      if (!res.ok) {
-        let msg = 'Dekont yüklenemedi.';
-        try {
-          const err = (await res.json()) as { message?: string };
-          if (err.message) msg = err.message;
-        } catch {
-          /* ignore */
-        }
-        throw new Error(msg);
-      }
-    },
-    onSuccess: () => {
-      showToast('Ödeme dekontu yüklendi.', 'success');
-      setReceiptExpenseId(null);
-      setShowReceiptUpload(false);
-    },
-    onError: (error) =>
-      showToast(
-        error instanceof Error ? error.message : 'Dekont yüklenemedi. Lütfen tekrar deneyin.',
-        'error',
-      ),
-  });
+  const handleReceiptSuccess = (expenseId: string) => {
+    showToast('Ödeme dekontu yüklendi.', 'success');
+    void qc.invalidateQueries({ queryKey: ['payment-receipts', expenseId] });
+    setReceiptExpenseId(null);
+    setShowReceiptUpload(false);
+  };
 
   return (
     <div className="manager-expenses-page">
@@ -265,8 +238,7 @@ export function ManagerPendingPage(): JSX.Element {
       {receiptExpenseId && showReceiptUpload && (
         <ReceiptUploadModal
           expenseId={receiptExpenseId}
-          busy={uploadReceipt.isPending}
-          onUpload={(file) => uploadReceipt.mutate({ expenseId: receiptExpenseId, file })}
+          onSuccess={() => handleReceiptSuccess(receiptExpenseId)}
           onClose={() => {
             setReceiptExpenseId(null);
             setShowReceiptUpload(false);
@@ -370,73 +342,326 @@ function ReceiptPromptModal({ onUpload, onSkip }: { onUpload: () => void; onSkip
   );
 }
 
+type ReceiptPhase =
+  | { tag: 'idle' }
+  | { tag: 'selected'; file: File; previewUrl: string | null }
+  | { tag: 'uploading'; progress: number }
+  | { tag: 'success' }
+  | { tag: 'error'; message: string };
+
 function ReceiptUploadModal({
-  expenseId: _expenseId,
-  busy,
-  onUpload,
+  expenseId,
+  onSuccess,
   onClose,
 }: {
   expenseId: string;
-  busy: boolean;
-  onUpload: (file: File) => void;
+  onSuccess: () => void;
   onClose: () => void;
 }) {
-  const [file, setFile] = useState<File | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [phase, setPhase] = useState<ReceiptPhase>({ tag: 'idle' });
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const photoRef = useRef<HTMLInputElement>(null);
+  const pdfRef = useRef<HTMLInputElement>(null);
+
+  const pickFile = (file: File) => {
+    if (file.size > MAX_RECEIPT_SIZE) {
+      setPhase({ tag: 'error', message: "Dosya 15 MB'dan büyük olamaz." });
+      return;
+    }
+    const previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
+    setPhase({ tag: 'selected', file, previewUrl });
+  };
+
+  const removeFile = () => {
+    if (phase.tag === 'selected' && phase.previewUrl) URL.revokeObjectURL(phase.previewUrl);
+    setPhase({ tag: 'idle' });
+  };
+
+  const startUpload = () => {
+    if (phase.tag !== 'selected') return;
+    const { file } = phase;
+    setPhase({ tag: 'uploading', progress: 0 });
+
+    const form = new FormData();
+    form.append('file', file, file.name);
+    const token = getAccessToken();
+    const apiUrl = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${apiUrl}/expenses/${expenseId}/payment-receipts`);
+    xhr.withCredentials = true;
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable)
+        setPhase({ tag: 'uploading', progress: Math.round((e.loaded / e.total) * 100) });
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        setPhase({ tag: 'success' });
+        onSuccess();
+      } else {
+        let msg = 'Dekont yüklenemedi. Lütfen tekrar deneyin.';
+        try {
+          const err = JSON.parse(xhr.responseText) as { message?: string };
+          if (err.message) msg = err.message;
+        } catch {
+          /* ignore */
+        }
+        setPhase({ tag: 'error', message: msg });
+      }
+    };
+    xhr.onerror = () =>
+      setPhase({ tag: 'error', message: 'Ağ hatası oluştu. Lütfen tekrar deneyin.' });
+    xhr.send(form);
+  };
+
+  const isUploading = phase.tag === 'uploading';
+
   return (
-    <div className="decision-backdrop" onMouseDown={onClose}>
+    <div className="decision-backdrop" onMouseDown={!isUploading ? onClose : undefined}>
       <section
         role="dialog"
         aria-modal="true"
         aria-labelledby="receipt-upload-title"
         className="decision-modal"
+        style={{ gap: 10 }}
         onMouseDown={(e) => e.stopPropagation()}
       >
+        {/* Hidden file inputs */}
+        <input
+          ref={cameraRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) pickFile(f);
+            e.target.value = '';
+          }}
+        />
+        <input
+          ref={photoRef}
+          type="file"
+          accept=".jpg,.jpeg,.png,.webp,.heic"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) pickFile(f);
+            e.target.value = '';
+          }}
+        />
+        <input
+          ref={pdfRef}
+          type="file"
+          accept=".pdf"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) pickFile(f);
+            e.target.value = '';
+          }}
+        />
+
         <span className="decision-symbol approve" />
         <h2 id="receipt-upload-title">Dekont Yükle</h2>
-        <p>JPG, PNG, WEBP, HEIC veya PDF — maks. 15 MB</p>
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".jpg,.jpeg,.png,.webp,.heic,.pdf"
-          style={{ display: 'none' }}
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-        />
-        <button
-          type="button"
-          style={{
-            width: '100%',
-            padding: '10px 14px',
-            border: '1px dashed var(--color-border)',
-            borderRadius: 8,
-            background: 'var(--color-bg)',
-            color: file ? 'var(--color-text)' : 'var(--color-text-muted)',
-            fontSize: 13,
-            cursor: 'pointer',
-            textAlign: 'left',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            margin: '4px 0 8px',
-          }}
-          onClick={() => inputRef.current?.click()}
-        >
-          {file ? file.name : 'Dosya seç…'}
-        </button>
-        <div>
-          <button type="button" onClick={onClose} disabled={busy}>
-            Vazgeç
-          </button>
-          <button
-            type="button"
-            className="approve"
-            disabled={!file || busy}
-            onClick={() => file && onUpload(file)}
+
+        {/* IDLE — dosya seçim butonları */}
+        {phase.tag === 'idle' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+            <button
+              type="button"
+              style={receiptPickBtnStyle}
+              onClick={() => cameraRef.current?.click()}
+            >
+              Fotoğraf Çek
+            </button>
+            <button
+              type="button"
+              style={receiptPickBtnStyle}
+              onClick={() => photoRef.current?.click()}
+            >
+              Fotoğraf Yükle
+            </button>
+            <button
+              type="button"
+              style={receiptPickBtnStyle}
+              onClick={() => pdfRef.current?.click()}
+            >
+              PDF Yükle
+            </button>
+            <p
+              style={{
+                fontSize: 11,
+                color: 'var(--color-text-muted)',
+                margin: '2px 0 0',
+                textAlign: 'center',
+              }}
+            >
+              JPG · PNG · WEBP · HEIC · PDF — maks. 15 MB
+            </p>
+          </div>
+        )}
+
+        {/* SELECTED — önizleme + onayla */}
+        {phase.tag === 'selected' && (
+          <div style={{ width: '100%' }}>
+            {phase.previewUrl ? (
+              <div style={{ textAlign: 'center', margin: '4px 0 8px' }}>
+                <img
+                  src={phase.previewUrl}
+                  alt="Dekont önizleme"
+                  style={{
+                    maxWidth: '100%',
+                    maxHeight: 180,
+                    borderRadius: 8,
+                    objectFit: 'contain',
+                  }}
+                />
+              </div>
+            ) : (
+              <div
+                style={{
+                  padding: '10px 12px',
+                  background: 'var(--color-bg)',
+                  borderRadius: 8,
+                  marginBottom: 8,
+                  border: '1px solid var(--color-border)',
+                  fontSize: 13,
+                  color: 'var(--color-text)',
+                  wordBreak: 'break-all',
+                }}
+              >
+                {phase.file.name}
+              </div>
+            )}
+            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '0 0 8px' }}>
+              {(phase.file.size / 1024).toFixed(0)} KB
+            </p>
+          </div>
+        )}
+
+        {/* UPLOADING — ilerleme çubuğu */}
+        {phase.tag === 'uploading' && (
+          <div style={{ width: '100%', margin: '4px 0' }}>
+            <div
+              style={{
+                height: 6,
+                background: 'var(--color-border)',
+                borderRadius: 3,
+                overflow: 'hidden',
+                marginBottom: 6,
+              }}
+            >
+              <div
+                style={{
+                  height: '100%',
+                  background: 'var(--color-primary)',
+                  borderRadius: 3,
+                  width: `${phase.progress}%`,
+                  transition: 'width 0.2s',
+                }}
+              />
+            </div>
+            <p
+              style={{
+                fontSize: 13,
+                color: 'var(--color-text-muted)',
+                textAlign: 'center',
+                margin: 0,
+              }}
+            >
+              Yükleniyor… %{phase.progress}
+            </p>
+          </div>
+        )}
+
+        {/* SUCCESS */}
+        {phase.tag === 'success' && (
+          <p
+            style={{
+              fontSize: 14,
+              color: 'var(--color-success)',
+              textAlign: 'center',
+              margin: '4px 0',
+              fontWeight: 600,
+            }}
           >
-            {busy ? 'Yükleniyor…' : 'Yükle'}
-          </button>
+            Dekont başarıyla yüklendi.
+          </p>
+        )}
+
+        {/* ERROR */}
+        {phase.tag === 'error' && (
+          <p
+            style={{
+              fontSize: 13,
+              color: 'var(--color-rejected)',
+              textAlign: 'center',
+              margin: '4px 0',
+            }}
+          >
+            {phase.message}
+          </p>
+        )}
+
+        {/* Aksiyon butonları */}
+        <div style={{ display: 'flex', gap: 8, width: '100%', marginTop: 2 }}>
+          {phase.tag === 'idle' && (
+            <button type="button" style={{ flex: 1 }} onClick={onClose}>
+              Vazgeç
+            </button>
+          )}
+          {phase.tag === 'selected' && (
+            <>
+              <button type="button" onClick={removeFile}>
+                Sil
+              </button>
+              <button type="button" className="approve" style={{ flex: 1 }} onClick={startUpload}>
+                Dekontu Onayla
+              </button>
+            </>
+          )}
+          {phase.tag === 'uploading' && (
+            <button type="button" style={{ flex: 1 }} disabled>
+              Yükleniyor…
+            </button>
+          )}
+          {phase.tag === 'success' && (
+            <button type="button" className="approve" style={{ flex: 1 }} onClick={onClose}>
+              Tamam
+            </button>
+          )}
+          {phase.tag === 'error' && (
+            <>
+              <button type="button" onClick={onClose}>
+                Kapat
+              </button>
+              <button
+                type="button"
+                className="approve"
+                style={{ flex: 1 }}
+                onClick={() => setPhase({ tag: 'idle' })}
+              >
+                Yeniden Dene
+              </button>
+            </>
+          )}
         </div>
       </section>
     </div>
   );
 }
+
+const receiptPickBtnStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '10px 14px',
+  border: '1px solid var(--color-border)',
+  borderRadius: 8,
+  background: 'var(--color-bg)',
+  color: 'var(--color-text)',
+  fontSize: 14,
+  cursor: 'pointer',
+  textAlign: 'left',
+};
