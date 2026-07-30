@@ -536,7 +536,7 @@ export class UsersService {
     return { message: 'Kullanıcının tüm oturumları kapatıldı.' };
   }
 
-  async deleteUser(id: string, organizationId: string, actorId: string) {
+  async deleteUser(id: string, organizationId: string, actorId: string, actorRole: string) {
     if (id === actorId) {
       throw new ForbiddenAppException('Kendi hesabınızı silemezsiniz.');
     }
@@ -548,6 +548,9 @@ export class UsersService {
     if (!user) throw new NotFoundAppException('Kullanıcı');
 
     if (user.role === 'ADMIN') {
+      if (actorRole !== 'ADMIN') {
+        throw new ForbiddenAppException('Admin kullanıcısı silinemez.');
+      }
       const adminCount = await this.prisma.user.count({
         where: { organizationId, role: 'ADMIN', deletedAt: null },
       });
@@ -595,16 +598,22 @@ export class UsersService {
     organizationId: string,
     status: 'ACTIVE' | 'INACTIVE',
     actorId: string,
+    actorRole: string,
   ) {
     const target = await this.findByIdInOrganization(id, organizationId);
-    if (target.role === 'ADMIN' && status === 'INACTIVE') {
-      if (id === actorId)
-        throw new ForbiddenAppException('Kendi ADMIN hesabınızı pasif yapamazsınız.');
-      const activeAdminCount = await this.prisma.user.count({
-        where: { organizationId, role: 'ADMIN', status: 'ACTIVE', deletedAt: null },
-      });
-      if (activeAdminCount <= 1) {
-        throw new ConflictAppException('Son aktif ADMIN pasif yapılamaz.');
+    if (target.role === 'ADMIN') {
+      if (actorRole !== 'ADMIN') {
+        throw new ForbiddenAppException('Admin kullanıcısı üzerinde işlem yapamazsınız.');
+      }
+      if (status === 'INACTIVE') {
+        if (id === actorId)
+          throw new ForbiddenAppException('Kendi ADMIN hesabınızı pasif yapamazsınız.');
+        const activeAdminCount = await this.prisma.user.count({
+          where: { organizationId, role: 'ADMIN', status: 'ACTIVE', deletedAt: null },
+        });
+        if (activeAdminCount <= 1) {
+          throw new ConflictAppException('Son aktif ADMIN pasif yapılamaz.');
+        }
       }
     }
     return this.prisma.$transaction(async (tx) => {

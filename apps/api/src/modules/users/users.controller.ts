@@ -218,13 +218,13 @@ export class UsersController {
 
   @Patch(':id/status')
   @UseGuards(RolesGuard)
-  @Roles('ADMIN')
+  @Roles('MANAGER', 'ADMIN')
   async setStatus(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(setStatusSchema)) body: z.infer<typeof setStatusSchema>,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.usersService.setStatus(id, user.organizationId, body.status, user.id);
+    return this.usersService.setStatus(id, user.organizationId, body.status, user.id, user.role);
   }
 
   @Post(':id/reset-password')
@@ -247,9 +247,9 @@ export class UsersController {
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   @UseGuards(RolesGuard)
-  @Roles('ADMIN')
+  @Roles('MANAGER', 'ADMIN')
   async deleteUser(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.usersService.deleteUser(id, user.organizationId, user.id);
+    return this.usersService.deleteUser(id, user.organizationId, user.id, user.role);
   }
 
   @Post(':id/revoke-sessions')
