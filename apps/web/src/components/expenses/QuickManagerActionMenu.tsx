@@ -28,7 +28,7 @@ export function QuickManagerActionMenu({
         aria-modal="true"
         aria-label="Masraf listesi seçenekleri"
         onMouseDown={(e) => e.stopPropagation()}
-        style={{ padding: '16px 12px 12px' }}
+        style={{ padding: '16px 14px 14px' }}
       >
         <p
           style={{
@@ -47,7 +47,7 @@ export function QuickManagerActionMenu({
           <ActionCard
             icon={<Clock3 size={22} />}
             label="Bekleyenler"
-            desc="Onay bekleyen talepler"
+            desc="Onay bekleyen masraflar"
             color="#d97706"
             bg="rgba(217,119,6,0.1)"
             onClick={() => go('/manager/pending')}
@@ -71,7 +71,7 @@ export function QuickManagerActionMenu({
           <ActionCard
             icon={<ReceiptText size={22} />}
             label="Masraflarım"
-            desc="Kişisel masraf girişi"
+            desc="Kişisel masraf işlemleri"
             color="#7c3aed"
             bg="rgba(124,58,237,0.1)"
             onClick={() => go('/manager/my-expenses')}
@@ -112,6 +112,8 @@ function ActionCard({
         background: bg,
         cursor: 'pointer',
         textAlign: 'left',
+        aspectRatio: '1',
+        justifyContent: 'space-between',
         transition: 'transform 0.1s, box-shadow 0.1s',
       }}
       onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.97)')}

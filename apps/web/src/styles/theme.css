@@ -1191,10 +1191,9 @@ textarea::placeholder {
   padding-bottom: calc(92px + env(safe-area-inset-bottom));
 }
 .quick-expense-menu {
-  width: min(100%, 430px);
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
+  width: min(calc(100% - 8px), 400px);
+  display: flex;
+  flex-direction: column;
   animation: quick-menu-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 .quick-expense-option {
@@ -2369,25 +2368,33 @@ textarea::placeholder {
 }
 
 .expense-status-tabs {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  display: flex;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
   margin-bottom: 16px;
   border-bottom: 1px solid var(--color-border);
 }
+.expense-status-tabs::-webkit-scrollbar {
+  display: none;
+}
 
 .expense-status-tabs button {
-  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  white-space: nowrap;
   min-height: 36px;
-  padding: 8px 3px 7px;
+  padding: 8px 12px 7px;
   border: 0;
   border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--color-text-muted);
-  font-size: clamp(10px, 2.9vw, 12px);
+  font-size: 12px;
   font-weight: 600;
   line-height: 1.2;
   cursor: pointer;
-  white-space: nowrap;
   transition:
     color 160ms ease,
     border-color 160ms ease,
@@ -2398,6 +2405,29 @@ textarea::placeholder {
   border-bottom-color: var(--color-primary);
   color: var(--color-primary);
   background: color-mix(in srgb, var(--color-primary) 5%, transparent);
+}
+
+.expense-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 100px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-muted);
+  transition:
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.expense-status-tabs button.active .expense-tab-badge {
+  background: var(--color-primary);
+  color: #fff;
 }
 
 .user-home-list {

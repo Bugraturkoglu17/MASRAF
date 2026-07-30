@@ -143,8 +143,8 @@ export function UserExpensesPage({
               className={status === activeStatus ? 'active' : ''}
             >
               {label}
-              {typeof countMap[status] === 'number' && countMap[status]! > 0 && (
-                <small>{countMap[status]}</small>
+              {typeof countMap[status] === 'number' && (
+                <span className="expense-tab-badge">{countMap[status]}</span>
               )}
             </button>
           ))}
