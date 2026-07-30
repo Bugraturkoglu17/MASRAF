@@ -22,6 +22,13 @@ interface PagedResult {
   meta: { totalItems: number; page: number; totalPages: number };
 }
 
+interface ExpenseCounts {
+  draft: number;
+  pending: number;
+  approved: number;
+  rejected: number;
+}
+
 const tabs: { status: Status; label: string }[] = [
   { status: 'DRAFT', label: 'Taslaklar' },
   { status: 'PENDING', label: 'Bekleyen' },
@@ -47,6 +54,19 @@ export function UserExpensesPage({
     queryFn: () => apiFetch(`/expenses?status=${activeStatus}&limit=50`),
     refetchInterval: 15000,
   });
+
+  const { data: counts } = useQuery<ExpenseCounts>({
+    queryKey: ['expense-counts'],
+    queryFn: () => apiFetch('/expenses/counts'),
+    refetchInterval: 30000,
+  });
+
+  const countMap: Record<Status, number | undefined> = {
+    DRAFT: counts?.draft,
+    PENDING: counts?.pending,
+    APPROVED: counts?.approved,
+    REJECTED: counts?.rejected,
+  };
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => apiFetch(`/expenses/${id}`, { method: 'DELETE' }),
@@ -123,6 +143,9 @@ export function UserExpensesPage({
               className={status === activeStatus ? 'active' : ''}
             >
               {label}
+              {typeof countMap[status] === 'number' && countMap[status]! > 0 && (
+                <small>{countMap[status]}</small>
+              )}
             </button>
           ))}
         </div>

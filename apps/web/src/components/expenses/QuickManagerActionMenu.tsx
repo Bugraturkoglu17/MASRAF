@@ -28,51 +28,122 @@ export function QuickManagerActionMenu({
         aria-modal="true"
         aria-label="Masraf listesi seçenekleri"
         onMouseDown={(e) => e.stopPropagation()}
+        style={{ padding: '16px 12px 12px' }}
       >
-        <ActionButton
-          icon={<Clock3 />}
-          label="Bekleyenler"
-          color="#d97706"
-          onClick={() => go('/manager/pending')}
-        />
-        <ActionButton
-          icon={<CheckCircle2 />}
-          label="Onaylananlar"
-          color="#16a34a"
-          onClick={() => go('/manager/approved')}
-        />
-        <ActionButton
-          icon={<XCircle />}
-          label="Reddedilenler"
-          color="#dc2626"
-          onClick={() => go('/manager/rejected')}
-        />
-        <ActionButton
-          icon={<ReceiptText />}
-          label="Masraflarım"
-          color="#7c3aed"
-          onClick={() => go('/manager/my-expenses')}
-        />
+        <p
+          style={{
+            margin: '0 0 12px',
+            fontSize: 11,
+            fontWeight: 600,
+            color: 'var(--color-text-muted)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            textAlign: 'center',
+          }}
+        >
+          Hızlı Erişim
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <ActionCard
+            icon={<Clock3 size={22} />}
+            label="Bekleyenler"
+            desc="Onay bekleyen talepler"
+            color="#d97706"
+            bg="rgba(217,119,6,0.1)"
+            onClick={() => go('/manager/pending')}
+          />
+          <ActionCard
+            icon={<CheckCircle2 size={22} />}
+            label="Onaylananlar"
+            desc="Onaylanan masraflar"
+            color="#16a34a"
+            bg="rgba(22,163,74,0.1)"
+            onClick={() => go('/manager/approved')}
+          />
+          <ActionCard
+            icon={<XCircle size={22} />}
+            label="Reddedilenler"
+            desc="Reddedilen masraflar"
+            color="#dc2626"
+            bg="rgba(220,38,38,0.1)"
+            onClick={() => go('/manager/rejected')}
+          />
+          <ActionCard
+            icon={<ReceiptText size={22} />}
+            label="Masraflarım"
+            desc="Kişisel masraf girişi"
+            color="#7c3aed"
+            bg="rgba(124,58,237,0.1)"
+            onClick={() => go('/manager/my-expenses')}
+          />
+        </div>
       </div>
     </div>
   );
 }
 
-function ActionButton({
+function ActionCard({
   icon,
   label,
+  desc,
   color,
+  bg,
   onClick,
 }: {
   icon: React.ReactNode;
   label: string;
+  desc: string;
   color: string;
+  bg: string;
   onClick: () => void;
 }) {
   return (
-    <button type="button" className="quick-expense-option" onClick={onClick}>
-      <span style={{ background: color, boxShadow: `0 13px 30px ${color}66` }}>{icon}</span>
-      <strong>{label}</strong>
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        gap: 8,
+        padding: '14px 12px',
+        borderRadius: 14,
+        border: `1px solid ${color}30`,
+        background: bg,
+        cursor: 'pointer',
+        textAlign: 'left',
+        transition: 'transform 0.1s, box-shadow 0.1s',
+      }}
+      onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.97)')}
+      onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+      onTouchStart={(e) => (e.currentTarget.style.transform = 'scale(0.97)')}
+      onTouchEnd={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+    >
+      <span
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 40,
+          height: 40,
+          borderRadius: 10,
+          background: color,
+          color: '#fff',
+          flexShrink: 0,
+        }}
+      >
+        {icon}
+      </span>
+      <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <strong
+          style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.2 }}
+        >
+          {label}
+        </strong>
+        <span style={{ fontSize: 11, color: 'var(--color-text-muted)', lineHeight: 1.3 }}>
+          {desc}
+        </span>
+      </span>
     </button>
   );
 }
