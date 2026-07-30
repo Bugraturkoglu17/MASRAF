@@ -1,6 +1,16 @@
 import { useQuery } from '@tanstack/react-query';
-import { Bell, CheckCircle, Clock, Home, Settings, XCircle } from 'lucide-react';
-import { useEffect, useMemo, useRef } from 'react';
+import {
+  Bell,
+  CheckCircle,
+  ChevronDown,
+  Clock,
+  Home,
+  Layers,
+  ReceiptText,
+  Settings,
+  XCircle,
+} from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate, useNavigation } from 'react-router-dom';
 
 import { BrandLogo } from '@/components/BrandLogo';
@@ -29,6 +39,8 @@ export function ManagerLayout(): JSX.Element {
   const mainRef = useRef<HTMLElement>(null);
   const isPending = navigation.state !== 'idle';
   const realtimeStatus = useManagerSse();
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const isPersonalWorkspace = location.pathname.startsWith('/manager/my-expenses');
 
   const { data: notifications } = useQuery<{ readAt: string | null }[]>({
     queryKey: ['notifications'],
@@ -64,6 +76,69 @@ export function ManagerLayout(): JSX.Element {
       <aside style={sidebarStyle} className="app-sidebar">
         <div style={brandStyle}>
           <BrandLogo subtitle="YÖNETİCİ PANELİ" />
+        </div>
+
+        {/* Workspace switcher */}
+        <div
+          style={{
+            padding: '8px 12px',
+            borderBottom: '1px solid rgba(255,255,255,0.06)',
+            position: 'relative',
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setWorkspaceOpen((v) => !v)}
+            aria-expanded={workspaceOpen}
+            aria-label="Çalışma alanı değiştir"
+            style={wsBtnStyle}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Layers size={13} />
+              <span>{isPersonalWorkspace ? 'Kişisel Masraflar' : 'Yönetici Paneli'}</span>
+            </span>
+            <ChevronDown
+              size={12}
+              style={{
+                transition: 'transform 0.15s',
+                transform: workspaceOpen ? 'rotate(180deg)' : 'none',
+              }}
+            />
+          </button>
+          {workspaceOpen && (
+            <>
+              <div
+                style={{ position: 'fixed', inset: 0, zIndex: 49 }}
+                onClick={() => setWorkspaceOpen(false)}
+              />
+              <div style={wsDropdownStyle}>
+                <button
+                  type="button"
+                  style={wsOptionStyle(!isPersonalWorkspace)}
+                  onClick={() => {
+                    navigate('/manager');
+                    localStorage.setItem('manager_workspace', 'manager');
+                    setWorkspaceOpen(false);
+                  }}
+                >
+                  <Clock size={13} />
+                  Yönetici Paneli
+                </button>
+                <button
+                  type="button"
+                  style={wsOptionStyle(isPersonalWorkspace)}
+                  onClick={() => {
+                    navigate('/manager/my-expenses');
+                    localStorage.setItem('manager_workspace', 'personal');
+                    setWorkspaceOpen(false);
+                  }}
+                >
+                  <ReceiptText size={13} />
+                  Kişisel Masraflar
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
         <nav style={navStyle}>
@@ -135,7 +210,12 @@ export function ManagerLayout(): JSX.Element {
           <Outlet />
         </div>
       </main>
-      <MobileBottomNavigation key={location.pathname} role="MANAGER" unreadCount={unreadCount} />
+      <MobileBottomNavigation
+        key={location.pathname}
+        role="MANAGER"
+        unreadCount={unreadCount}
+        workspace={isPersonalWorkspace ? 'personal' : 'manager'}
+      />
     </div>
   );
 }
@@ -211,3 +291,46 @@ const logoutBtnStyle: React.CSSProperties = {
   fontSize: 12,
   cursor: 'pointer',
 };
+
+const wsBtnStyle: React.CSSProperties = {
+  width: '100%',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  padding: '6px 10px',
+  borderRadius: 6,
+  border: '1px solid rgba(255,255,255,0.1)',
+  background: 'rgba(255,255,255,0.04)',
+  color: '#94a3b8',
+  fontSize: 12,
+  cursor: 'pointer',
+  gap: 6,
+};
+
+const wsDropdownStyle: React.CSSProperties = {
+  position: 'absolute',
+  top: 'calc(100% - 8px)',
+  left: 12,
+  right: 12,
+  zIndex: 50,
+  background: '#1e293b',
+  border: '1px solid rgba(255,255,255,0.12)',
+  borderRadius: 7,
+  overflow: 'hidden',
+  boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+};
+
+const wsOptionStyle = (active: boolean): React.CSSProperties => ({
+  width: '100%',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  padding: '9px 12px',
+  background: active ? 'rgba(30,58,138,0.25)' : 'transparent',
+  color: active ? '#fff' : '#94a3b8',
+  fontSize: 12,
+  fontWeight: active ? 600 : 400,
+  border: 'none',
+  cursor: 'pointer',
+  textAlign: 'left',
+});

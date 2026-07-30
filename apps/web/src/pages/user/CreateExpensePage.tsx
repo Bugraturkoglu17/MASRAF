@@ -127,7 +127,9 @@ interface UploadConfig {
 
 type SubmitPhase = 'idle' | 'uploading' | 'saving';
 
-export function CreateExpensePage(): JSX.Element {
+export function CreateExpensePage({
+  basePath = '/expenses',
+}: { basePath?: string } = {}): JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
   const [params] = useSearchParams();
@@ -410,7 +412,7 @@ export function CreateExpensePage(): JSX.Element {
     expenseIdRef.current = created.id;
     setSavedExpenseId(created.id);
     // Sayfa yenilenirse aynı taslağa devam edilsin diye kimlik URL'de tutulur.
-    navigate(`/expenses/new?saved=${created.id}`, { replace: true });
+    navigate(`${basePath}/new?saved=${created.id}`, { replace: true });
     uploads.attachExpense(created.id);
     return { id: created.id, created: true };
   };
@@ -488,7 +490,7 @@ export function CreateExpensePage(): JSX.Element {
       await clearDraft();
       allowNavRef.current = true;
       showToast(editId ? 'Masraf güncellendi.' : 'Taslak kaydedildi.', 'success');
-      navigate('/expenses?status=DRAFT');
+      navigate(`${basePath}?status=DRAFT`);
     } finally {
       submitLockRef.current = false;
       setSubmitPhase('idle');

@@ -292,6 +292,18 @@ export const router = createBrowserRouter(
                             </S>
                           ),
                         },
+                        {
+                          path: '/manager/my-expenses',
+                          element: <UserExpensesPage basePath="/manager/my-expenses" />,
+                        },
+                        {
+                          path: '/manager/my-expenses/new',
+                          element: (
+                            <S>
+                              <CreateExpensePage basePath="/manager/my-expenses" />
+                            </S>
+                          ),
+                        },
                       ],
                     },
                   ],
