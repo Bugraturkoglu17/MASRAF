@@ -2404,6 +2404,21 @@ textarea::placeholder {
   background: color-mix(in srgb, var(--color-primary) 5%, transparent);
 }
 
+.expense-status-tabs--scroll {
+  display: flex;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  grid-template-columns: none;
+}
+.expense-status-tabs--scroll::-webkit-scrollbar {
+  display: none;
+}
+.expense-status-tabs--scroll button {
+  flex-shrink: 0;
+  padding: 8px 14px 7px;
+}
+
 .expense-tab-badge {
   display: inline-flex;
   align-items: center;

@@ -132,7 +132,10 @@ export function UserExpensesPage({
         </div>
 
         {/* Tabs */}
-        <div className="expense-status-tabs" role="tablist">
+        <div
+          className={`expense-status-tabs${basePath !== '/expenses' ? ' expense-status-tabs--scroll' : ''}`}
+          role="tablist"
+        >
           {tabs.map(({ status, label }) => (
             <button
               key={status}
