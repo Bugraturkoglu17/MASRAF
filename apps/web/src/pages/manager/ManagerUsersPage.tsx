@@ -50,7 +50,7 @@ export function ManagerUsersPage(): JSX.Element {
       void qc.invalidateQueries({ queryKey: ['manager', 'users'] });
       showToast('Kullanıcı durumu güncellendi.', 'success');
     },
-    onError: (err) => showToast(getApiErrorMessage(err), 'error'),
+    onError: (err) => showToast(getApiErrorMessage(err, 'İşlem tamamlanamadı.'), 'error'),
   });
 
   const deleteMut = useMutation({
@@ -61,7 +61,7 @@ export function ManagerUsersPage(): JSX.Element {
       setDeleteTarget(null);
     },
     onError: (err) => {
-      showToast(getApiErrorMessage(err), 'error');
+      showToast(getApiErrorMessage(err, 'Kullanıcı silinemedi.'), 'error');
       setDeleteTarget(null);
     },
   });
