@@ -317,6 +317,12 @@ export function CreateExpensePage(): JSX.Element {
     }
   };
 
+  // X butonu = modalı kapat, formda kal
+  const handleStay = () => {
+    setShowExitModal(false);
+    if (blocker.state === 'blocked') blocker.reset();
+  };
+
   // "İptal Et" = taslağı sil ve çık
   const handleCancelExit = async () => {
     setDiscardingDraft(true);
@@ -913,6 +919,7 @@ export function CreateExpensePage(): JSX.Element {
         onCancel={() => {
           void handleCancelExit();
         }}
+        onStay={handleStay}
       />
     </div>
   );
@@ -924,12 +931,14 @@ function ExitConfirmModal({
   discarding,
   onSave,
   onCancel,
+  onStay,
 }: {
   open: boolean;
   saving: boolean;
   discarding: boolean;
   onSave: () => void;
   onCancel: () => void;
+  onStay: () => void;
 }): JSX.Element | null {
   if (!open) return null;
   const busy = saving || discarding;
@@ -951,10 +960,42 @@ function ExitConfirmModal({
           padding: '24px 20px',
           paddingBottom: 'calc(24px + env(safe-area-inset-bottom))',
           width: '100%',
+          position: 'relative',
         }}
       >
+        <button
+          type="button"
+          onClick={onStay}
+          disabled={busy}
+          aria-label="Kapat"
+          style={{
+            position: 'absolute',
+            top: 16,
+            right: 16,
+            width: 32,
+            height: 32,
+            borderRadius: '50%',
+            border: 'none',
+            background: 'var(--color-bg)',
+            color: 'var(--color-text-muted)',
+            fontSize: 18,
+            lineHeight: 1,
+            cursor: busy ? 'not-allowed' : 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          ✕
+        </button>
         <h3
-          style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 700, color: 'var(--color-text)' }}
+          style={{
+            margin: '0 0 8px',
+            fontSize: 17,
+            fontWeight: 700,
+            color: 'var(--color-text)',
+            paddingRight: 40,
+          }}
         >
           Çıkmak istiyor musunuz?
         </h3>
