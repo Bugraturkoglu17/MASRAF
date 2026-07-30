@@ -1,4 +1,4 @@
-import { CheckCircle2, Clock3, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock3, ReceiptText, XCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export function QuickManagerActionMenu({
@@ -46,6 +46,12 @@ export function QuickManagerActionMenu({
           label="Reddedilenler"
           color="#dc2626"
           onClick={() => go('/manager/rejected')}
+        />
+        <ActionButton
+          icon={<ReceiptText />}
+          label="Masraflarım"
+          color="#7c3aed"
+          onClick={() => go('/manager/my-expenses')}
         />
       </div>
     </div>
