@@ -28,7 +28,7 @@ export function QuickManagerActionMenu({
         aria-modal="true"
         aria-label="Masraf listesi seçenekleri"
         onMouseDown={(e) => e.stopPropagation()}
-        style={{ padding: '16px 14px 14px' }}
+        style={{ padding: '16px 14px 14px', display: 'flex', flexDirection: 'column', gap: 0 }}
       >
         <p
           style={{

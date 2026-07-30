@@ -1191,9 +1191,10 @@ textarea::placeholder {
   padding-bottom: calc(92px + env(safe-area-inset-bottom));
 }
 .quick-expense-menu {
-  width: min(calc(100% - 8px), 400px);
-  display: flex;
-  flex-direction: column;
+  width: min(100%, 430px);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
   animation: quick-menu-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 .quick-expense-option {
@@ -2368,33 +2369,29 @@ textarea::placeholder {
 }
 
 .expense-status-tabs {
-  display: flex;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-bottom: 16px;
   border-bottom: 1px solid var(--color-border);
-}
-.expense-status-tabs::-webkit-scrollbar {
-  display: none;
 }
 
 .expense-status-tabs button {
   display: flex;
   align-items: center;
-  gap: 5px;
-  flex-shrink: 0;
-  white-space: nowrap;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
   min-height: 36px;
-  padding: 8px 12px 7px;
+  padding: 8px 3px 7px;
   border: 0;
   border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--color-text-muted);
-  font-size: 12px;
+  font-size: clamp(10px, 2.9vw, 12px);
   font-weight: 600;
   line-height: 1.2;
   cursor: pointer;
+  white-space: nowrap;
   transition:
     color 160ms ease,
     border-color 160ms ease,
