@@ -150,6 +150,7 @@ export function CreateExpensePage(): JSX.Element {
   const [submitPhase, setSubmitPhase] = useState<SubmitPhase>('idle');
   const [showExitModal, setShowExitModal] = useState(false);
   const [savingOnExit, setSavingOnExit] = useState(false);
+  const [discardingDraft, setDiscardingDraft] = useState(false);
   const exitModalOpenRef = useRef(false); // çift modal koruması
   const [uploadLimits, setUploadLimits] = useState({
     maxFiles: 5,
@@ -316,10 +317,23 @@ export function CreateExpensePage(): JSX.Element {
     }
   };
 
-  // "İptal Et" = çıkışı iptal et, formda kal
-  const handleCancelExit = () => {
+  // "İptal Et" = taslağı sil ve çık
+  const handleCancelExit = async () => {
+    setDiscardingDraft(true);
+    try {
+      if (expenseIdRef.current) {
+        await apiFetch(`/expenses/${expenseIdRef.current}`, { method: 'DELETE' });
+      }
+      await clearDraft();
+    } catch {
+      // Taslak silinemese bile çıkışa izin ver
+    } finally {
+      setDiscardingDraft(false);
+    }
+    allowNavRef.current = true;
     setShowExitModal(false);
-    if (blocker.state === 'blocked') blocker.reset();
+    if (blocker.state === 'blocked') blocker.proceed();
+    else navigate(-1);
   };
 
   useEffect(() => {
@@ -892,10 +906,13 @@ export function CreateExpensePage(): JSX.Element {
       <ExitConfirmModal
         open={showExitModal}
         saving={savingOnExit}
+        discarding={discardingDraft}
         onSave={() => {
           void handleExitSave();
         }}
-        onCancel={handleCancelExit}
+        onCancel={() => {
+          void handleCancelExit();
+        }}
       />
     </div>
   );
@@ -904,15 +921,18 @@ export function CreateExpensePage(): JSX.Element {
 function ExitConfirmModal({
   open,
   saving,
+  discarding,
   onSave,
   onCancel,
 }: {
   open: boolean;
   saving: boolean;
+  discarding: boolean;
   onSave: () => void;
   onCancel: () => void;
 }): JSX.Element | null {
   if (!open) return null;
+  const busy = saving || discarding;
   return (
     <div
       style={{
@@ -945,6 +965,7 @@ function ExitConfirmModal({
           <button
             type="button"
             onClick={onCancel}
+            disabled={busy}
             style={{
               flex: 1,
               padding: '13px',
@@ -954,25 +975,25 @@ function ExitConfirmModal({
               color: 'var(--color-text)',
               fontWeight: 600,
               fontSize: 15,
-              cursor: 'pointer',
+              cursor: busy ? 'not-allowed' : 'pointer',
             }}
           >
-            İptal Et
+            {discarding ? 'Siliniyor…' : 'İptal Et'}
           </button>
           <button
             type="button"
             onClick={onSave}
-            disabled={saving}
+            disabled={busy}
             style={{
               flex: 1,
               padding: '13px',
               borderRadius: 10,
               border: 'none',
-              background: saving ? 'var(--color-border)' : 'var(--color-primary)',
+              background: busy ? 'var(--color-border)' : 'var(--color-primary)',
               color: '#fff',
               fontWeight: 700,
               fontSize: 15,
-              cursor: saving ? 'not-allowed' : 'pointer',
+              cursor: busy ? 'not-allowed' : 'pointer',
             }}
           >
             {saving ? 'Kaydediliyor…' : 'Kaydet'}
