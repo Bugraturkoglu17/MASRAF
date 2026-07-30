@@ -16,6 +16,7 @@ import { useToast } from '@/components/feedback/toast-context';
 import { NetworkRequiredDialog } from '@/components/pwa/NetworkRequiredDialog';
 import { AttachmentUploader } from '@/components/ui/AttachmentUploader';
 import { DatePickerTr } from '@/components/ui/DatePickerTr';
+import { TurkeyIbanInput } from '@/components/ui/TurkeyIbanInput';
 import { useAuth } from '@/features/auth/auth-context';
 import { useAttachmentUploads, type UploadedFile } from '@/hooks/useAttachmentUploads';
 import { useLocalExpenseDraft } from '@/hooks/useLocalExpenseDraft';
@@ -25,28 +26,78 @@ import { DEFAULT_MAX_ATTACHMENT_SIZE } from '@/lib/attachment-validation';
 import { getExpenseDateMax, toLocalIsoDate } from '@/lib/date-limits';
 import { decimalToTurkishInput, formatTurkishMoneyInput, toDecimalString } from '@/lib/money';
 
-const schema = z.object({
-  categoryId: z.string().uuid('Kategori seçiniz'),
-  title: z.string().min(1, 'Başlık zorunludur'),
-  description: z.string().optional(),
-  amount: z
-    .string()
-    .refine((value) => toDecimalString(value) !== null, 'Geçerli bir tutar giriniz'),
-  expenseDate: z
-    .string()
-    .min(1, 'Masraf tarihi zorunludur')
-    .refine(
-      (value) => !value || value <= getExpenseDateMax(),
-      'Masraf tarihi en fazla 2 ay sonrası olabilir.',
-    ),
-  dueDate: z
-    .string()
-    .optional()
-    .refine((value) => !value || value >= toLocalIsoDate(), 'Vade tarihi geçmiş bir tarih olamaz.'),
-});
+const schema = z
+  .object({
+    categoryId: z.string().uuid('Kategori seçiniz'),
+    title: z.string().min(1, 'Başlık zorunludur'),
+    description: z.string().optional(),
+    amount: z
+      .string()
+      .refine((value) => toDecimalString(value) !== null, 'Geçerli bir tutar giriniz'),
+    expenseDate: z
+      .string()
+      .min(1, 'Masraf tarihi zorunludur')
+      .refine(
+        (value) => !value || value <= getExpenseDateMax(),
+        'Masraf tarihi en fazla 2 ay sonrası olabilir.',
+      ),
+    dueDate: z
+      .string()
+      .optional()
+      .refine(
+        (value) => !value || value >= toLocalIsoDate(),
+        'Vade tarihi geçmiş bir tarih olamaz.',
+      ),
+    hasRecipient: z.boolean().optional().default(false),
+    recipientFirstName: z.string().max(100).optional(),
+    recipientLastName: z.string().max(100).optional(),
+    recipientIban: z.string().optional(),
+    recipientCompanyName: z.string().max(200).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.hasRecipient) return;
+    if (!data.recipientFirstName?.trim()) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['recipientFirstName'],
+        message: 'Alıcı adı zorunludur',
+      });
+    }
+    if (!data.recipientLastName?.trim()) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['recipientLastName'],
+        message: 'Alıcı soyadı zorunludur',
+      });
+    }
+    const iban = data.recipientIban?.replace(/\s/g, '').toUpperCase() ?? '';
+    if (!iban) {
+      ctx.addIssue({ code: 'custom', path: ['recipientIban'], message: 'Alıcı IBAN zorunludur' });
+    } else if (!/^TR\d{24}$/.test(iban)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['recipientIban'],
+        message: 'Geçerli bir Türkiye IBAN giriniz (TR + 24 rakam)',
+      });
+    }
+  });
 
 type FormValues = z.infer<typeof schema>;
-type Payload = FormValues & { amount: string };
+type Payload = Omit<
+  FormValues,
+  | 'hasRecipient'
+  | 'recipientFirstName'
+  | 'recipientLastName'
+  | 'recipientIban'
+  | 'recipientCompanyName'
+> & {
+  amount: string;
+  paymentRecipientType: 'SELF' | 'THIRD_PARTY';
+  recipientFirstName?: string | null;
+  recipientLastName?: string | null;
+  recipientIban?: string | null;
+  recipientCompanyName?: string | null;
+};
 
 interface Category {
   id: string;
@@ -63,6 +114,11 @@ interface Expense {
   expenseDate: string;
   dueDate?: string | null;
   status: string;
+  paymentRecipientType?: string;
+  recipientFirstName?: string | null;
+  recipientLastName?: string | null;
+  recipientIban?: string | null;
+  recipientCompanyName?: string | null;
 }
 
 interface UploadConfig {
@@ -128,6 +184,7 @@ export function CreateExpensePage(): JSX.Element {
     trigger,
     control,
     reset,
+    setValue,
     formState: { errors, isSubmitting, isDirty, isSubmitted },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -136,6 +193,7 @@ export function CreateExpensePage(): JSX.Element {
   });
 
   const selectedCategoryId = useWatch({ control, name: 'categoryId' });
+  const hasRecipient = useWatch({ control, name: 'hasRecipient' });
   const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
   const requiresDueDate = selectedCategory?.requiresDueDate ?? false;
 
@@ -147,6 +205,7 @@ export function CreateExpensePage(): JSX.Element {
 
   useEffect(() => {
     if (editingExpense) {
+      const isThirdParty = editingExpense.paymentRecipientType === 'THIRD_PARTY';
       reset({
         categoryId: editingExpense.categoryId,
         title: editingExpense.title,
@@ -154,6 +213,11 @@ export function CreateExpensePage(): JSX.Element {
         amount: decimalToTurkishInput(editingExpense.amount),
         expenseDate: editingExpense.expenseDate?.split('T')[0] ?? '',
         dueDate: editingExpense.dueDate?.split('T')[0] ?? '',
+        hasRecipient: isThirdParty,
+        recipientFirstName: isThirdParty ? (editingExpense.recipientFirstName ?? '') : '',
+        recipientLastName: isThirdParty ? (editingExpense.recipientLastName ?? '') : '',
+        recipientIban: isThirdParty ? (editingExpense.recipientIban ?? '') : '',
+        recipientCompanyName: isThirdParty ? (editingExpense.recipientCompanyName ?? '') : '',
       });
     }
   }, [editingExpense, reset]);
@@ -283,8 +347,34 @@ export function CreateExpensePage(): JSX.Element {
   const buildPayload = (values: FormValues): Payload | null => {
     const amount = toDecimalString(values.amount);
     if (!amount) return null;
-    const payload: Payload = { ...values, amount };
-    if (!payload.dueDate) delete (payload as Partial<FormValues>).dueDate;
+    const {
+      hasRecipient: _hr,
+      recipientFirstName,
+      recipientLastName,
+      recipientIban,
+      recipientCompanyName,
+      ...rest
+    } = values;
+    const isThirdParty = values.hasRecipient === true;
+    const payload: Payload = {
+      ...rest,
+      amount,
+      paymentRecipientType: isThirdParty ? 'THIRD_PARTY' : 'SELF',
+      ...(isThirdParty
+        ? {
+            recipientFirstName: recipientFirstName?.trim() || null,
+            recipientLastName: recipientLastName?.trim() || null,
+            recipientIban: recipientIban?.replace(/\s/g, '').toUpperCase() || null,
+            recipientCompanyName: recipientCompanyName?.trim() || null,
+          }
+        : {
+            recipientFirstName: null,
+            recipientLastName: null,
+            recipientIban: null,
+            recipientCompanyName: null,
+          }),
+    };
+    if (!payload.dueDate) delete (payload as { dueDate?: string }).dueDate;
     return payload;
   };
 
@@ -594,6 +684,150 @@ export function CreateExpensePage(): JSX.Element {
                   lineHeight: 1.5,
                 }}
               />
+            </div>
+
+            {/* Alıcı Bilgisi */}
+            <div
+              style={{
+                border: '1.5px solid var(--color-border)',
+                borderRadius: 10,
+                overflow: 'hidden',
+              }}
+            >
+              <Controller
+                control={control}
+                name="hasRecipient"
+                render={({ field }) => (
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 12,
+                      padding: '14px 14px',
+                      cursor: 'pointer',
+                      background: field.value ? 'var(--color-surface)' : 'transparent',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={field.value ?? false}
+                      onChange={(e) => {
+                        field.onChange(e.target.checked);
+                        if (!e.target.checked) {
+                          setValue('recipientFirstName', '');
+                          setValue('recipientLastName', '');
+                          setValue('recipientIban', '');
+                          setValue('recipientCompanyName', '');
+                        }
+                      }}
+                      style={{
+                        marginTop: 2,
+                        width: 16,
+                        height: 16,
+                        flexShrink: 0,
+                        accentColor: 'var(--color-primary)',
+                      }}
+                    />
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>
+                        Alıcı Bilgisi
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>
+                        Ödeme başka bir kişiye veya taşeron firmaya yapılacaksa işaretleyin.
+                      </div>
+                    </div>
+                  </label>
+                )}
+              />
+
+              {hasRecipient && (
+                <div
+                  style={{
+                    borderTop: '1px solid var(--color-border)',
+                    padding: '14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 12,
+                    background: 'var(--color-bg)',
+                  }}
+                >
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={labelSt}>Alıcı Adı *</label>
+                      <input
+                        {...register('recipientFirstName')}
+                        placeholder="Ad"
+                        style={inp(Boolean(errors.recipientFirstName))}
+                      />
+                      {errors.recipientFirstName && (
+                        <p
+                          style={{ color: 'var(--color-danger)', fontSize: 12, margin: '4px 0 0' }}
+                        >
+                          {errors.recipientFirstName.message}
+                        </p>
+                      )}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={labelSt}>Alıcı Soyadı *</label>
+                      <input
+                        {...register('recipientLastName')}
+                        placeholder="Soyad"
+                        style={inp(Boolean(errors.recipientLastName))}
+                      />
+                      {errors.recipientLastName && (
+                        <p
+                          style={{ color: 'var(--color-danger)', fontSize: 12, margin: '4px 0 0' }}
+                        >
+                          {errors.recipientLastName.message}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={labelSt}>Alıcı IBAN *</label>
+                    <Controller
+                      control={control}
+                      name="recipientIban"
+                      render={({ field }) => (
+                        <TurkeyIbanInput
+                          value={field.value ?? ''}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          style={inp(Boolean(errors.recipientIban))}
+                          placeholder="TR00 0000 0000 0000 0000 0000 00"
+                        />
+                      )}
+                    />
+                    {errors.recipientIban && (
+                      <p style={{ color: 'var(--color-danger)', fontSize: 12, margin: '4px 0 0' }}>
+                        {errors.recipientIban.message}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label style={labelSt}>
+                      Firma Adı
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 400,
+                          color: 'var(--color-text-muted)',
+                          marginLeft: 4,
+                        }}
+                      >
+                        (opsiyonel)
+                      </span>
+                    </label>
+                    <input
+                      {...register('recipientCompanyName')}
+                      placeholder="Firma / şirket adı"
+                      style={inp(false)}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Submit */}

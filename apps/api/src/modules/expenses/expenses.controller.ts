@@ -50,6 +50,11 @@ const decimalAmount = z
     return `${integer}.${fraction.padEnd(2, '0')}`;
   });
 
+const ibanSchema = z
+  .string()
+  .transform((s) => s.replace(/\s/g, '').toUpperCase())
+  .refine((s) => /^TR\d{24}$/.test(s), 'IBAN TR ile başlamalı ve 26 karakter olmalıdır.');
+
 const createExpenseSchema = z.object({
   categoryId: z.string().uuid(),
   title: z.string().trim().min(1).max(200),
@@ -58,6 +63,11 @@ const createExpenseSchema = z.object({
   currency: z.string().length(3).optional(),
   expenseDate,
   dueDate: isoDate.optional(),
+  paymentRecipientType: z.enum(['SELF', 'THIRD_PARTY']).optional(),
+  recipientFirstName: z.string().trim().min(1).max(100).optional(),
+  recipientLastName: z.string().trim().min(1).max(100).optional(),
+  recipientIban: ibanSchema.optional(),
+  recipientCompanyName: z.string().trim().max(200).optional(),
 });
 
 const updateExpenseSchema = z.object({
@@ -67,6 +77,11 @@ const updateExpenseSchema = z.object({
   amount: decimalAmount.optional(),
   expenseDate: expenseDate.optional(),
   dueDate: isoDate.optional(),
+  paymentRecipientType: z.enum(['SELF', 'THIRD_PARTY']).optional(),
+  recipientFirstName: z.string().trim().min(1).max(100).nullish(),
+  recipientLastName: z.string().trim().min(1).max(100).nullish(),
+  recipientIban: ibanSchema.nullish(),
+  recipientCompanyName: z.string().trim().max(200).nullish(),
 });
 
 const decisionReasonSchema = z.object({

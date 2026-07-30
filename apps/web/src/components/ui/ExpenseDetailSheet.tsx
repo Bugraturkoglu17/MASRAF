@@ -46,6 +46,12 @@ interface ExpenseDetail {
     iban?: string | null;
     department?: { name: string } | null;
   };
+  paymentRecipientType?: string | null;
+  recipientFirstName?: string | null;
+  recipientLastName?: string | null;
+  recipientIban?: string | null;
+  recipientCompanyName?: string | null;
+  recipientSnapshotCreatedAt?: string | null;
 }
 
 interface ExpenseDetailSheetProps {
@@ -262,6 +268,75 @@ export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetPro
                         </span>
                       }
                     />
+                  )}
+                </div>
+              )}
+
+              {/* Ödeme Alıcısı */}
+              {expense.paymentRecipientType && (
+                <div className="expense-detail-sender" style={{ marginTop: 12 }}>
+                  <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    Ödeme Alıcısı
+                    {expense.paymentRecipientType === 'THIRD_PARTY' && (
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: 99,
+                          background: 'var(--color-pending-bg)',
+                          color: 'var(--color-pending)',
+                          letterSpacing: '0.04em',
+                        }}
+                      >
+                        TAŞERON / HARİCİ ALICI
+                      </span>
+                    )}
+                  </h3>
+                  {expense.paymentRecipientType === 'SELF' ? (
+                    <>
+                      <DetailRow label="Alıcı" value="Kullanıcının Kendisi" />
+                      {expense.recipientFirstName && expense.recipientLastName && (
+                        <DetailRow
+                          label="Ad Soyad"
+                          value={`${expense.recipientFirstName} ${expense.recipientLastName}`}
+                        />
+                      )}
+                      {expense.recipientIban && (
+                        <DetailRow
+                          label="IBAN"
+                          value={
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                              {expense.recipientIban}
+                              <IbanCopyButton value={expense.recipientIban} />
+                            </span>
+                          }
+                        />
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {expense.recipientFirstName && expense.recipientLastName && (
+                        <DetailRow
+                          label="Ad Soyad"
+                          value={`${expense.recipientFirstName} ${expense.recipientLastName}`}
+                        />
+                      )}
+                      {expense.recipientCompanyName && (
+                        <DetailRow label="Firma" value={expense.recipientCompanyName} />
+                      )}
+                      {expense.recipientIban && (
+                        <DetailRow
+                          label="IBAN"
+                          value={
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                              {expense.recipientIban}
+                              <IbanCopyButton value={expense.recipientIban} />
+                            </span>
+                          }
+                        />
+                      )}
+                    </>
                   )}
                 </div>
               )}

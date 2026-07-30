@@ -5,6 +5,7 @@ import { useMemo, useRef, useState } from 'react';
 import { ManagerExpenseCard, type ManagerExpense } from '@/components/expenses/ExpenseCards';
 import { useToast } from '@/components/feedback/toast-context';
 import { ExpenseDetailSheet } from '@/components/ui/ExpenseDetailSheet';
+import { IbanCopyButton } from '@/components/ui/IbanCopyButton';
 import { ApiError, apiFetch, getAccessToken } from '@/lib/api-client';
 
 const MAX_RECEIPT_SIZE = 15 * 1024 * 1024;
@@ -349,6 +350,14 @@ type ReceiptPhase =
   | { tag: 'success' }
   | { tag: 'error'; message: string };
 
+interface ExpenseRecipientDetail {
+  paymentRecipientType?: string | null;
+  recipientFirstName?: string | null;
+  recipientLastName?: string | null;
+  recipientIban?: string | null;
+  recipientCompanyName?: string | null;
+}
+
 function ReceiptUploadModal({
   expenseId,
   onSuccess,
@@ -362,6 +371,12 @@ function ReceiptUploadModal({
   const cameraRef = useRef<HTMLInputElement>(null);
   const photoRef = useRef<HTMLInputElement>(null);
   const pdfRef = useRef<HTMLInputElement>(null);
+
+  const { data: expenseDetail } = useQuery<ExpenseRecipientDetail>({
+    queryKey: ['expense-detail', expenseId],
+    queryFn: () => apiFetch(`/expenses/${expenseId}`),
+    staleTime: 60_000,
+  });
 
   const pickFile = (file: File) => {
     if (file.size > MAX_RECEIPT_SIZE) {
@@ -466,6 +481,67 @@ function ReceiptUploadModal({
 
         <span className="decision-symbol approve" />
         <h2 id="receipt-upload-title">Dekont Yükle</h2>
+
+        {/* Ödeme alıcısı — salt okunur referans */}
+        {expenseDetail?.paymentRecipientType && (
+          <div
+            style={{
+              width: '100%',
+              background: 'var(--color-bg)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 8,
+              padding: '10px 12px',
+              fontSize: 12,
+            }}
+          >
+            <div
+              style={{
+                fontWeight: 700,
+                color: 'var(--color-text-muted)',
+                letterSpacing: '0.05em',
+                marginBottom: 6,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              ÖDEME ALICISI
+              {expenseDetail.paymentRecipientType === 'THIRD_PARTY' && (
+                <span
+                  style={{
+                    fontSize: 9,
+                    fontWeight: 700,
+                    padding: '1px 6px',
+                    borderRadius: 99,
+                    background: 'var(--color-pending-bg)',
+                    color: 'var(--color-pending)',
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  TAŞERON
+                </span>
+              )}
+            </div>
+            {expenseDetail.recipientFirstName && expenseDetail.recipientLastName && (
+              <div style={{ color: 'var(--color-text)', fontWeight: 600, marginBottom: 2 }}>
+                {expenseDetail.recipientFirstName} {expenseDetail.recipientLastName}
+              </div>
+            )}
+            {expenseDetail.recipientCompanyName && (
+              <div style={{ color: 'var(--color-text-muted)', marginBottom: 2 }}>
+                {expenseDetail.recipientCompanyName}
+              </div>
+            )}
+            {expenseDetail.recipientIban && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                <span style={{ color: 'var(--color-text)', fontFamily: 'monospace', fontSize: 11 }}>
+                  {expenseDetail.recipientIban}
+                </span>
+                <IbanCopyButton value={expenseDetail.recipientIban} />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* IDLE — dosya seçim butonları */}
         {phase.tag === 'idle' && (

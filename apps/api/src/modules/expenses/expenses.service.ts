@@ -19,6 +19,11 @@ export interface CreateExpenseInput {
   currency?: string;
   expenseDate: string;
   dueDate?: string;
+  paymentRecipientType?: 'SELF' | 'THIRD_PARTY';
+  recipientFirstName?: string;
+  recipientLastName?: string;
+  recipientIban?: string;
+  recipientCompanyName?: string;
 }
 
 export interface UpdateExpenseInput {
@@ -28,6 +33,11 @@ export interface UpdateExpenseInput {
   amount?: string;
   expenseDate?: string;
   dueDate?: string;
+  paymentRecipientType?: 'SELF' | 'THIRD_PARTY';
+  recipientFirstName?: string | null;
+  recipientLastName?: string | null;
+  recipientIban?: string | null;
+  recipientCompanyName?: string | null;
 }
 
 @Injectable()
@@ -95,6 +105,19 @@ export class ExpensesService {
           dueDate: input.dueDate ? new Date(input.dueDate) : null,
           status: 'DRAFT',
           createdBy: userId,
+          paymentRecipientType: input.paymentRecipientType ?? 'SELF',
+          recipientFirstName:
+            input.paymentRecipientType === 'THIRD_PARTY'
+              ? (input.recipientFirstName ?? null)
+              : null,
+          recipientLastName:
+            input.paymentRecipientType === 'THIRD_PARTY' ? (input.recipientLastName ?? null) : null,
+          recipientIban:
+            input.paymentRecipientType === 'THIRD_PARTY' ? (input.recipientIban ?? null) : null,
+          recipientCompanyName:
+            input.paymentRecipientType === 'THIRD_PARTY'
+              ? (input.recipientCompanyName ?? null)
+              : null,
         },
         include: {
           category: true,
@@ -150,6 +173,7 @@ export class ExpensesService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      const recipientType = input.paymentRecipientType ?? expense.paymentRecipientType;
       const updated = await tx.expense.update({
         where: { id },
         data: {
@@ -160,6 +184,27 @@ export class ExpensesService {
           ...(input.expenseDate && { expenseDate: new Date(input.expenseDate) }),
           dueDate: input.dueDate ? new Date(input.dueDate) : expense.dueDate,
           updatedBy: userId,
+          ...(input.paymentRecipientType !== undefined && {
+            paymentRecipientType: input.paymentRecipientType,
+          }),
+          ...(recipientType === 'THIRD_PARTY'
+            ? {
+                recipientFirstName:
+                  input.recipientFirstName !== undefined ? input.recipientFirstName : undefined,
+                recipientLastName:
+                  input.recipientLastName !== undefined ? input.recipientLastName : undefined,
+                recipientIban: input.recipientIban !== undefined ? input.recipientIban : undefined,
+                recipientCompanyName:
+                  input.recipientCompanyName !== undefined ? input.recipientCompanyName : undefined,
+              }
+            : input.paymentRecipientType === 'SELF'
+              ? {
+                  recipientFirstName: null,
+                  recipientLastName: null,
+                  recipientIban: null,
+                  recipientCompanyName: null,
+                }
+              : {}),
         },
         include: {
           category: true,
@@ -199,15 +244,55 @@ export class ExpensesService {
   async submitDraft(id: string, organizationId: string, userId: string) {
     const expense = await this.prisma.expense.findFirst({
       where: { id, organizationId, userId, deletedAt: null },
+      include: { user: { select: { firstName: true, lastName: true, iban: true } } },
     });
     if (!expense) throw new NotFoundAppException('Masraf');
     if (expense.status !== 'DRAFT')
       throw new ConflictAppException('Yalnızca taslak masraflar onaya gönderilebilir.');
 
+    let snapshotData: {
+      recipientFirstName: string;
+      recipientLastName: string;
+      recipientIban: string;
+      recipientCompanyName: string | null;
+      recipientSnapshotCreatedAt: Date;
+    };
+
+    if (expense.paymentRecipientType === 'SELF') {
+      if (!expense.user.iban) {
+        throw new ConflictAppException(
+          'Masrafı onaya gönderebilmek için profilinizde IBAN bilgisi bulunmalıdır.',
+        );
+      }
+      snapshotData = {
+        recipientFirstName: expense.user.firstName,
+        recipientLastName: expense.user.lastName,
+        recipientIban: expense.user.iban,
+        recipientCompanyName: null,
+        recipientSnapshotCreatedAt: new Date(),
+      };
+    } else {
+      if (!expense.recipientFirstName || !expense.recipientLastName || !expense.recipientIban) {
+        throw new ConflictAppException(
+          'Alıcı bilgileri eksik. Masrafı düzenleyip alıcı adı, soyadı ve IBAN bilgilerini ekleyin.',
+        );
+      }
+      if (!/^TR\d{24}$/.test(expense.recipientIban)) {
+        throw new ConflictAppException('Alıcı IBAN değeri geçersiz.');
+      }
+      snapshotData = {
+        recipientFirstName: expense.recipientFirstName,
+        recipientLastName: expense.recipientLastName,
+        recipientIban: expense.recipientIban,
+        recipientCompanyName: expense.recipientCompanyName ?? null,
+        recipientSnapshotCreatedAt: new Date(),
+      };
+    }
+
     const updated = await this.prisma.$transaction(async (tx) => {
       const claimed = await tx.expense.updateMany({
         where: { id, organizationId, userId, status: 'DRAFT', deletedAt: null },
-        data: { status: 'PENDING', submittedAt: new Date(), updatedBy: userId },
+        data: { status: 'PENDING', submittedAt: new Date(), updatedBy: userId, ...snapshotData },
       });
       if (claimed.count !== 1) {
         throw new ConflictAppException('Masraf başka bir işlem tarafından güncellendi.');

@@ -232,6 +232,11 @@ enum PaymentStatus {
   PAID_WITH_RECEIPT
 }
 
+enum PaymentRecipientType {
+  SELF
+  THIRD_PARTY
+}
+
 model ExpenseCategory {
   id              String   @id @default(uuid()) @db.Uuid
   organizationId  String   @db.Uuid
@@ -279,6 +284,12 @@ model Expense {
   paymentStatus        PaymentStatus @default(NOT_PAID)
   paymentReceiptUploadedAt DateTime?
   paymentReceiptUploadedBy String?   @db.Uuid
+  paymentRecipientType     PaymentRecipientType @default(SELF)
+  recipientFirstName       String?   @db.VarChar(100)
+  recipientLastName        String?   @db.VarChar(100)
+  recipientIban            String?   @db.VarChar(26)
+  recipientCompanyName     String?   @db.VarChar(200)
+  recipientSnapshotCreatedAt DateTime?
   createdAt            DateTime      @default(now())
   updatedAt            DateTime      @updatedAt
   createdBy            String?       @db.Uuid
