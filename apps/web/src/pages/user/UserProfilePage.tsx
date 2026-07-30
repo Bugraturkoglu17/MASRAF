@@ -86,19 +86,19 @@ export function UserProfilePage(): JSX.Element {
     },
   });
 
-  const isUser = user?.role === 'USER';
+  const requiresIban = user?.role === 'USER' || user?.role === 'MANAGER';
   const ibanValue = useWatch({ control, name: 'iban' });
   const ibanDigitCount = (ibanValue ?? '').replace(/\D/g, '').length;
 
   const onSubmit = handleSubmit(async (values) => {
     const normalizedIban = normalizeTurkeyIban(values.iban ?? '');
-    if (isUser && !/^TR\d{24}$/.test(normalizedIban)) {
+    if (requiresIban && !/^TR\d{24}$/.test(normalizedIban)) {
       setError('iban', { message: 'IBAN, TR ile birlikte 26 karakter olmalıdır.' });
       return;
     }
 
     try {
-      const payload = isUser
+      const payload = requiresIban
         ? { ...values, iban: normalizedIban }
         : { firstName: values.firstName, lastName: values.lastName, phone: values.phone };
       await apiFetch('/users/me/profile', { method: 'PATCH', body: payload });
@@ -154,7 +154,7 @@ export function UserProfilePage(): JSX.Element {
             <Field label="E-posta">
               <input value={user?.email ?? ''} readOnly style={readOnlyInputStyle} />
             </Field>
-            {isUser && (
+            {requiresIban && (
               <Field label="IBAN" error={errors.iban?.message}>
                 <div className="profile-iban-row">
                   <Controller
@@ -174,7 +174,7 @@ export function UserProfilePage(): JSX.Element {
                 <p style={ibanHelpStyle}>TR sonrası {ibanDigitCount}/24 rakam</p>
               </Field>
             )}
-            {!isUser && (
+            {!requiresIban && (
               <Field label="IBAN">
                 <input
                   value="Yalnızca kullanıcı hesaplarında tanımlanır"

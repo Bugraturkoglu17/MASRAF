@@ -123,10 +123,8 @@ export class UsersController {
     @Body(new ZodValidationPipe(completeProfileSchema)) body: z.infer<typeof completeProfileSchema>,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    if (user.role === 'USER' && !body.iban) {
-      throw new ValidationAppException([
-        { field: 'iban', message: 'Kullanıcı profili için IBAN zorunludur.' },
-      ]);
+    if ((user.role === 'USER' || user.role === 'MANAGER') && !body.iban) {
+      throw new ValidationAppException([{ field: 'iban', message: 'IBAN zorunludur.' }]);
     }
     return this.usersService.completeProfile(user.id, body);
   }

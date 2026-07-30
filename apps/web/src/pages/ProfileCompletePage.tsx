@@ -25,7 +25,7 @@ export function ProfileCompletePage(): JSX.Element {
   const { user, refreshUser, logout } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
-  const isUser = user?.role === 'USER';
+  const requiresIban = user?.role === 'USER' || user?.role === 'MANAGER';
 
   const {
     register,
@@ -49,13 +49,13 @@ export function ProfileCompletePage(): JSX.Element {
 
   const onSubmit = handleSubmit(async (values) => {
     const normalizedIban = normalizeTurkeyIban(values.iban ?? '');
-    if (isUser && !/^TR\d{24}$/.test(normalizedIban)) {
+    if (requiresIban && !/^TR\d{24}$/.test(normalizedIban)) {
       setError('iban', { message: 'IBAN, TR ile birlikte 26 karakter olmalıdır.' });
       return;
     }
 
     try {
-      const payload = isUser
+      const payload = requiresIban
         ? { ...values, iban: normalizedIban }
         : { firstName: values.firstName, lastName: values.lastName, phone: values.phone };
       await apiFetch('/users/me/profile', { method: 'PATCH', body: payload });
@@ -109,7 +109,7 @@ export function ProfileCompletePage(): JSX.Element {
             />
           </Field>
 
-          {isUser && (
+          {requiresIban && (
             <Field label="IBAN" error={errors.iban?.message}>
               <div className="profile-iban-row">
                 <Controller
