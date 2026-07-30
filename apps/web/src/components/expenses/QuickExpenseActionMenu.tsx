@@ -19,9 +19,11 @@ export function ManualExpenseAction({ onSelect }: ActionProps) {
 export function QuickExpenseActionMenu({
   open,
   onClose,
+  basePath = '/expenses',
 }: {
   open: boolean;
   onClose: () => void;
+  basePath?: string;
 }): JSX.Element | null {
   const navigate = useNavigate();
   const galleryRef = useRef<HTMLInputElement>(null);
@@ -31,7 +33,7 @@ export function QuickExpenseActionMenu({
   const carryFiles = (files: FileList | null) => {
     if (!files?.length) return;
     onClose();
-    navigate('/expenses/new', { state: { initialFiles: Array.from(files) } });
+    navigate(`${basePath}/new`, { state: { initialFiles: Array.from(files) } });
   };
 
   return (
@@ -70,7 +72,7 @@ export function QuickExpenseActionMenu({
         <ManualExpenseAction
           onSelect={() => {
             onClose();
-            navigate('/expenses/new');
+            navigate(`${basePath}/new`);
           }}
         />
       </div>

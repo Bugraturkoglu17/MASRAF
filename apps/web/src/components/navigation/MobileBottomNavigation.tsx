@@ -4,7 +4,6 @@ import {
   Clock3,
   Home,
   Menu,
-  Plus,
   ReceiptText,
   Settings,
   Users,
@@ -101,42 +100,48 @@ export function MobileBottomNavigation({
   if (role === 'MANAGER') {
     if (workspace === 'personal') {
       return (
-        <nav
-          className="mobile-bottom-nav mobile-bottom-nav--manager"
-          aria-label="Mobil ana navigasyon"
-        >
-          <NavigationItem
-            item={{ to: '/manager', label: 'Yönetici', icon: Home, end: true }}
-            unreadCount={0}
+        <>
+          <QuickExpenseActionMenu
+            open={quickOpen}
+            onClose={() => setQuickOpen(false)}
+            basePath="/manager/my-expenses"
           />
-          <NavigationItem
-            item={{
-              to: '/manager/my-expenses',
-              label: 'Masraflarım',
-              icon: ReceiptText,
-              end: true,
-            }}
-            unreadCount={0}
-          />
-          <button
-            type="button"
-            className="mobile-quick-action"
-            aria-label="Yeni masraf ekle"
-            onClick={() => navigate('/manager/my-expenses/new')}
+          <nav
+            className="mobile-bottom-nav mobile-bottom-nav--manager"
+            aria-label="Mobil ana navigasyon"
           >
-            <span>
-              <Plus aria-hidden="true" />
-            </span>
-          </button>
-          <NavigationItem
-            item={{ to: '/manager/notifications', label: 'Bildirimler', icon: Bell }}
-            unreadCount={unreadCount}
-          />
-          <NavigationItem
-            item={{ to: '/manager/settings', label: 'Ayarlar', icon: Settings }}
-            unreadCount={0}
-          />
-        </nav>
+            <NavigationItem
+              item={{ to: '/manager', label: 'Yönetici', icon: Home, end: true }}
+              unreadCount={0}
+            />
+            <NavigationItem
+              item={{
+                to: '/manager/my-expenses',
+                label: 'Masraflarım',
+                icon: ReceiptText,
+                end: true,
+              }}
+              unreadCount={0}
+            />
+            <button
+              type="button"
+              className={`mobile-quick-action ${quickOpen ? 'is-open' : ''}`}
+              aria-label={quickOpen ? 'Masraf menüsünü kapat' : 'Yeni masraf ekle'}
+              aria-expanded={quickOpen}
+              onClick={() => setQuickOpen((v) => !v)}
+            >
+              <span>{quickOpen ? <X aria-hidden="true" /> : '☰'}</span>
+            </button>
+            <NavigationItem
+              item={{ to: '/manager/notifications', label: 'Bildirimler', icon: Bell }}
+              unreadCount={unreadCount}
+            />
+            <NavigationItem
+              item={{ to: '/manager/settings', label: 'Ayarlar', icon: Settings }}
+              unreadCount={0}
+            />
+          </nav>
+        </>
       );
     }
 
