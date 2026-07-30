@@ -20,10 +20,10 @@ export interface CreateExpenseInput {
   expenseDate: string;
   dueDate?: string;
   paymentRecipientType?: 'SELF' | 'THIRD_PARTY';
-  recipientFirstName?: string;
-  recipientLastName?: string;
-  recipientIban?: string;
-  recipientCompanyName?: string;
+  recipientFirstName?: string | null;
+  recipientLastName?: string | null;
+  recipientIban?: string | null;
+  recipientCompanyName?: string | null;
 }
 
 export interface UpdateExpenseInput {
