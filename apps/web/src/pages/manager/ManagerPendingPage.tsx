@@ -482,96 +482,106 @@ function ReceiptUploadModal({
         <span className="decision-symbol approve" />
         <h2 id="receipt-upload-title">Dekont Yükle</h2>
 
-        {/* Ödeme alıcısı — salt okunur referans */}
-        {expenseDetail?.paymentRecipientType && (
-          <div
-            style={{
-              width: '100%',
-              background: 'var(--color-bg)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 8,
-              padding: '10px 12px',
-              fontSize: 12,
-            }}
-          >
+        {/* Ödeme alıcısı — kompakt referans */}
+        {expenseDetail?.paymentRecipientType &&
+          (expenseDetail.recipientFirstName || expenseDetail.recipientIban) && (
             <div
               style={{
-                fontWeight: 700,
-                color: 'var(--color-text-muted)',
-                letterSpacing: '0.05em',
-                marginBottom: 6,
+                width: '100%',
+                borderTop: '1px solid var(--color-border)',
+                paddingTop: 8,
                 display: 'flex',
                 alignItems: 'center',
-                gap: 6,
+                justifyContent: 'space-between',
+                gap: 8,
               }}
             >
-              ÖDEME ALICISI
-              {expenseDetail.paymentRecipientType === 'THIRD_PARTY' && (
-                <span
+              <div style={{ minWidth: 0 }}>
+                <div
                   style={{
-                    fontSize: 9,
+                    fontSize: 10,
                     fontWeight: 700,
-                    padding: '1px 6px',
-                    borderRadius: 99,
-                    background: 'var(--color-pending-bg)',
-                    color: 'var(--color-pending)',
-                    letterSpacing: '0.04em',
+                    color: 'var(--color-text-muted)',
+                    letterSpacing: '0.06em',
+                    marginBottom: 2,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 5,
                   }}
                 >
-                  TAŞERON
-                </span>
+                  ÖDEME ALICISI
+                  {expenseDetail.paymentRecipientType === 'THIRD_PARTY' && (
+                    <span
+                      style={{
+                        fontSize: 9,
+                        fontWeight: 700,
+                        padding: '1px 5px',
+                        borderRadius: 99,
+                        background: 'var(--color-pending-bg)',
+                        color: 'var(--color-pending)',
+                      }}
+                    >
+                      TAŞERON
+                    </span>
+                  )}
+                </div>
+                {expenseDetail.recipientFirstName && expenseDetail.recipientLastName && (
+                  <div
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: 'var(--color-text)',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {expenseDetail.recipientFirstName} {expenseDetail.recipientLastName}
+                  </div>
+                )}
+                {expenseDetail.recipientCompanyName && (
+                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                    {expenseDetail.recipientCompanyName}
+                  </div>
+                )}
+              </div>
+              {expenseDetail.recipientIban && (
+                <IbanCopyButton value={expenseDetail.recipientIban} />
               )}
             </div>
-            {expenseDetail.recipientFirstName && expenseDetail.recipientLastName && (
-              <div style={{ color: 'var(--color-text)', fontWeight: 600, marginBottom: 2 }}>
-                {expenseDetail.recipientFirstName} {expenseDetail.recipientLastName}
-              </div>
-            )}
-            {expenseDetail.recipientCompanyName && (
-              <div style={{ color: 'var(--color-text-muted)', marginBottom: 2 }}>
-                {expenseDetail.recipientCompanyName}
-              </div>
-            )}
-            {expenseDetail.recipientIban && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                <span style={{ color: 'var(--color-text)', fontFamily: 'monospace', fontSize: 11 }}>
-                  {expenseDetail.recipientIban}
-                </span>
-                <IbanCopyButton value={expenseDetail.recipientIban} />
-              </div>
-            )}
-          </div>
-        )}
+          )}
 
         {/* IDLE — dosya seçim butonları */}
         {phase.tag === 'idle' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
-            <button
-              type="button"
-              style={receiptPickBtnStyle}
-              onClick={() => cameraRef.current?.click()}
-            >
-              Fotoğraf Çek
-            </button>
-            <button
-              type="button"
-              style={receiptPickBtnStyle}
-              onClick={() => photoRef.current?.click()}
-            >
-              Fotoğraf Yükle
-            </button>
-            <button
-              type="button"
-              style={receiptPickBtnStyle}
-              onClick={() => pdfRef.current?.click()}
-            >
-              PDF Yükle
-            </button>
+          <div style={{ width: '100%' }}>
+            <div style={{ display: 'flex', gap: 6, width: '100%' }}>
+              <button
+                type="button"
+                style={receiptPickBtnStyle}
+                onClick={() => cameraRef.current?.click()}
+              >
+                Kamera
+              </button>
+              <button
+                type="button"
+                style={receiptPickBtnStyle}
+                onClick={() => photoRef.current?.click()}
+              >
+                Galeri
+              </button>
+              <button
+                type="button"
+                style={receiptPickBtnStyle}
+                onClick={() => pdfRef.current?.click()}
+              >
+                PDF
+              </button>
+            </div>
             <p
               style={{
                 fontSize: 11,
                 color: 'var(--color-text-muted)',
-                margin: '2px 0 0',
+                margin: '6px 0 0',
                 textAlign: 'center',
               }}
             >
@@ -731,13 +741,13 @@ function ReceiptUploadModal({
 }
 
 const receiptPickBtnStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '10px 14px',
+  flex: 1,
+  padding: '8px 10px',
   border: '1px solid var(--color-border)',
   borderRadius: 8,
   background: 'var(--color-bg)',
   color: 'var(--color-text)',
-  fontSize: 14,
+  fontSize: 13,
   cursor: 'pointer',
-  textAlign: 'left',
+  textAlign: 'center',
 };
