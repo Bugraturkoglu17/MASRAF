@@ -128,7 +128,7 @@ export class UsersController {
         { field: 'iban', message: 'Kullanıcı profili için IBAN zorunludur.' },
       ]);
     }
-    return this.usersService.completeProfile(user.id, body, user.role);
+    return this.usersService.completeProfile(user.id, body);
   }
 
   @Patch('me/password')

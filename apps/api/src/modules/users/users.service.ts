@@ -116,7 +116,7 @@ export class UsersService {
     return user;
   }
 
-  async completeProfile(id: string, input: CompleteProfileInput, role: AppRole) {
+  async completeProfile(id: string, input: CompleteProfileInput) {
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.user.update({
         where: { id },
@@ -124,7 +124,7 @@ export class UsersService {
           firstName: input.firstName,
           lastName: input.lastName,
           phone: normalizeTurkishPhone(input.phone),
-          iban: role === 'USER' ? input.iban : null,
+          iban: input.iban ?? null,
           profileCompleted: true,
         },
         select: {
@@ -429,12 +429,6 @@ export class UsersService {
   ) {
     const existing = await this.findByIdInOrganization(id, organizationId);
 
-    if (existing.role !== 'USER' && dto.iban !== undefined) {
-      throw new ValidationAppException([
-        { field: 'iban', message: 'IBAN yalnızca kullanıcı hesaplarında tanımlanabilir.' },
-      ]);
-    }
-
     const data: Prisma.UserUpdateInput = {
       ...(dto.firstName !== undefined ? { firstName: dto.firstName } : {}),
       ...(dto.lastName !== undefined ? { lastName: dto.lastName } : {}),
@@ -667,7 +661,7 @@ export class UsersService {
         data: {
           role,
           jobTitle: role === 'MANAGER' ? 'Yönetici' : role === 'ADMIN' ? 'Admin' : 'Kullanıcı',
-          ...(role === 'USER' ? (target.iban ? {} : { profileCompleted: false }) : { iban: null }),
+          ...(role === 'USER' ? (target.iban ? {} : { profileCompleted: false }) : {}),
         },
         select: { id: true, role: true },
       });
