@@ -555,7 +555,10 @@ function ReceiptUploadModal({
         {phase.tag === 'uploading' && (
           <div>
             <div className="receipt-sheet-progress">
-              <div className="receipt-sheet-progress-bar" style={{ width: `${phase.progress}%` }} />
+              <div
+                className="receipt-sheet-progress-bar"
+                style={{ transform: `scaleX(${phase.progress / 100})` }}
+              />
             </div>
             <p className="receipt-sheet-progress-label">Yükleniyor… %{phase.progress}</p>
           </div>

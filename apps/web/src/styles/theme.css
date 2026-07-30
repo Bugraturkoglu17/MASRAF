@@ -3063,9 +3063,11 @@ textarea::placeholder {
 }
 .receipt-sheet-progress-bar {
   height: 100%;
+  width: 100%;
   background: var(--color-primary);
   border-radius: 3px;
-  transition: width 0.2s;
+  transform-origin: left;
+  transition: transform 0.2s;
 }
 .receipt-sheet-progress-label {
   font-size: 12px;
