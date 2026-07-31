@@ -240,6 +240,14 @@ export class ExpensesController {
     });
   }
 
+  @Delete('manager/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(RolesGuard)
+  @Roles('MANAGER', 'ADMIN')
+  async deleteByManager(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    await this.expensesService.deleteByManager(id, user.organizationId, user.id);
+  }
+
   @Post(':id/approve')
   @UseGuards(RolesGuard)
   @Roles('MANAGER', 'ADMIN')

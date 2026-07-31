@@ -241,6 +241,29 @@ export class ExpensesService {
     });
   }
 
+  async deleteByManager(id: string, organizationId: string, actorId: string) {
+    const expense = await this.prisma.expense.findFirst({
+      where: { id, organizationId, deletedAt: null },
+    });
+    if (!expense) throw new NotFoundAppException('Masraf');
+    if (expense.status === 'DRAFT')
+      throw new ConflictAppException('Taslak masraflar bu işlemle silinemez.');
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.expense.update({ where: { id }, data: { deletedAt: new Date() } });
+      await this.auditLogs.record(
+        {
+          organizationId,
+          actorId,
+          action: 'DELETE',
+          resource: 'EXPENSE',
+          resourceId: id,
+        },
+        tx,
+      );
+    });
+  }
+
   async submitDraft(id: string, organizationId: string, userId: string) {
     const expense = await this.prisma.expense.findFirst({
       where: { id, organizationId, userId, deletedAt: null },
@@ -587,7 +610,7 @@ export class ExpensesService {
         where: {
           organizationId,
           deletedAt: null,
-          status: { in: ['PENDING', 'APPROVED'] },
+          status: 'APPROVED',
           createdAt: { gte: startOfMonth },
         },
         _sum: { amount: true },
