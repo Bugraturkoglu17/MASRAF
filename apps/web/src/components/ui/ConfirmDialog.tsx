@@ -2,6 +2,7 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel = 'Onayla',
+  cancelLabel = 'İptal',
   busy = false,
   onConfirm,
   onCancel,
@@ -9,6 +10,7 @@ export function ConfirmDialog({
   title: string;
   description: string;
   confirmLabel?: string;
+  cancelLabel?: string;
   busy?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -71,7 +73,7 @@ export function ConfirmDialog({
               fontWeight: 500,
             }}
           >
-            İptal
+            {cancelLabel}
           </button>
           <button
             type="button"
