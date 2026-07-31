@@ -147,6 +147,8 @@ export function CreateExpensePage({
   const submitLockRef = useRef(false);
   const initialFilesHandledRef = useRef(false);
   const allowNavRef = useRef(false); // kayıt sonrası blocker'ı geçer
+  // Mount anındaki mod — sonradan değişmez. ?edit= varsa mevcut taslak düzenleniyor.
+  const [isEditMode] = useState(Boolean(editId));
 
   const [showNetworkDialog, setShowNetworkDialog] = useState(false);
   const [submitPhase, setSubmitPhase] = useState<SubmitPhase>('idle');
@@ -325,8 +327,17 @@ export function CreateExpensePage({
     if (blocker.state === 'blocked') blocker.reset();
   };
 
-  // "İptal Et" = taslağı sil ve çık
+  // "İptal Et" / "Değişiklikleri İptal Et"
   const handleCancelExit = async () => {
+    if (isEditMode) {
+      // Mevcut taslak düzenleniyordu — yalnızca bu oturumdaki değişiklikleri at, taslağı silme.
+      allowNavRef.current = true;
+      setShowExitModal(false);
+      if (blocker.state === 'blocked') blocker.proceed();
+      else navigate(-1);
+      return;
+    }
+    // Yeni oluşturma modu — bu oturumda oluşturulan taslağı sil.
     setDiscardingDraft(true);
     try {
       if (expenseIdRef.current) {
@@ -915,6 +926,7 @@ export function CreateExpensePage({
         open={showExitModal}
         saving={savingOnExit}
         discarding={discardingDraft}
+        isEditMode={isEditMode}
         onSave={() => {
           void handleExitSave();
         }}
@@ -931,6 +943,7 @@ function ExitConfirmModal({
   open,
   saving,
   discarding,
+  isEditMode,
   onSave,
   onCancel,
   onStay,
@@ -938,12 +951,18 @@ function ExitConfirmModal({
   open: boolean;
   saving: boolean;
   discarding: boolean;
+  isEditMode: boolean;
   onSave: () => void;
   onCancel: () => void;
   onStay: () => void;
 }): JSX.Element | null {
   if (!open) return null;
   const busy = saving || discarding;
+  const cancelLabel = isEditMode ? 'Değişiklikleri İptal Et' : 'İptal Et';
+  const title = isEditMode ? 'Değişiklikler kaydedilmedi' : 'Çıkmak istiyor musunuz?';
+  const description = isEditMode
+    ? 'Yaptığınız değişiklikleri kaydetmek ister misiniz?'
+    : 'Kaydedilmemiş değişiklikleriniz var.';
   return (
     <div
       style={{
@@ -1002,10 +1021,10 @@ function ExitConfirmModal({
             paddingRight: 40,
           }}
         >
-          Çıkmak istiyor musunuz?
+          {title}
         </h3>
         <p style={{ margin: '0 0 20px', fontSize: 14, color: 'var(--color-text-muted)' }}>
-          Kaydedilmemiş değişiklikleriniz var.
+          {description}
         </p>
         <div style={{ display: 'flex', gap: 10 }}>
           <button
@@ -1024,7 +1043,7 @@ function ExitConfirmModal({
               cursor: busy ? 'not-allowed' : 'pointer',
             }}
           >
-            {discarding ? 'Siliniyor…' : 'İptal Et'}
+            {discarding ? 'Siliniyor…' : cancelLabel}
           </button>
           <button
             type="button"
