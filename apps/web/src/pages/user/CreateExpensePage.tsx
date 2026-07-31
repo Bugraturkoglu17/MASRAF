@@ -958,7 +958,7 @@ function ExitConfirmModal({
 }): JSX.Element | null {
   if (!open) return null;
   const busy = saving || discarding;
-  const cancelLabel = isEditMode ? 'Değişiklikleri İptal Et' : 'İptal Et';
+  const cancelLabel = 'İptal Et';
   const title = isEditMode ? 'Değişiklikler kaydedilmedi' : 'Çıkmak istiyor musunuz?';
   const description = isEditMode
     ? 'Yaptığınız değişiklikleri kaydetmek ister misiniz?'
