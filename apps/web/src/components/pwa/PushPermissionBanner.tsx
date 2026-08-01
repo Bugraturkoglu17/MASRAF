@@ -24,7 +24,7 @@ export function PushPermissionBanner(): JSX.Element | null {
     setDismissed(true);
   }, []);
 
-  if (!visible || permission === 'unsupported' || permission === 'denied') return null;
+  if (!visible) return null;
 
   return (
     <div

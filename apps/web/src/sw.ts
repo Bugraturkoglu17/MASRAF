@@ -47,7 +47,6 @@ self.addEventListener('push', (event: PushEvent) => {
     badge: '/icons/icon-96.png',
     tag: `masraf-${data.timestamp ?? Date.now()}`,
     data: { url: data.url ?? '/' },
-    vibrate: [200, 100, 200],
     requireInteraction: false,
   };
 
