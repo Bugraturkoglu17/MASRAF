@@ -23,6 +23,9 @@ export default defineConfig({
     VitePWA({
       registerType: 'prompt',
       injectRegister: 'auto',
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       includeAssets: [
         'offline.html',
         'robots.txt',
@@ -101,36 +104,9 @@ export default defineConfig({
           },
         ],
       },
-      workbox: {
-        cacheId: `masraf-${buildVersion}`,
-        cleanupOutdatedCaches: true,
-        clientsClaim: false,
-        skipWaiting: false,
-        navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api\//],
-        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
-        runtimeCaching: [
-          {
-            // Yalnızca aynı origin'deki statik uygulama varlıkları cache edilir.
-            urlPattern: ({ request, url }) =>
-              url.origin === location.origin &&
-              ['style', 'script', 'worker', 'image', 'font'].includes(request.destination),
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: `masraf-static-${buildVersion}`,
-              expiration: { maxEntries: 80, maxAgeSeconds: 30 * 24 * 60 * 60 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            // Login, profil, masraf, rapor, signed URL ve tüm diğer API cevapları asla cache edilmez.
-            urlPattern: /\/api\//,
-            handler: 'NetworkOnly',
-          },
-        ],
-      },
       devOptions: {
-        enabled: false,
+        enabled: true,
+        type: 'module',
       },
     }),
   ],

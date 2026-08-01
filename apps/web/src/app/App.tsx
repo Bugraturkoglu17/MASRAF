@@ -9,6 +9,7 @@ import { ToastProvider } from '@/components/feedback/toast-context';
 import { ToastViewport } from '@/components/feedback/ToastViewport';
 import { IosInstallGuide } from '@/components/pwa/IosInstallGuide';
 import { OnlineRestoredToast } from '@/components/pwa/OnlineRestoredToast';
+import { PushPermissionBanner } from '@/components/pwa/PushPermissionBanner';
 import { PwaInstallBanner } from '@/components/pwa/PwaInstallBanner';
 import { AuthProvider } from '@/features/auth/auth-context';
 import { useKeyboardAware } from '@/hooks/useKeyboardAware';
@@ -39,6 +40,7 @@ export function App(): JSX.Element {
                 <PwaInstallBanner />
                 <IosInstallGuide />
                 <PwaUpdatePrompt />
+                <PushPermissionBanner />
               </AuthProvider>
             </PwaInstallProvider>
           </NetworkStatusProvider>

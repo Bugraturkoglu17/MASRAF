@@ -77,6 +77,11 @@ export const envSchema = z
     // ── Hata izleme (opsiyonel) ───────────────────────────────────────────────
     SENTRY_DSN: z.string().optional(),
 
+    // ── Web Push (VAPID) ─────────────────────────────────────────────────────
+    VAPID_PUBLIC_KEY: z.string().min(1).optional(),
+    VAPID_PRIVATE_KEY: z.string().min(1).optional(),
+    VAPID_SUBJECT: z.string().default('mailto:admin@masraf.app'),
+
     // ── Release ve işletim ───────────────────────────────────────────────────
     APP_VERSION: z.string().default('0.1.0-dev'),
     APP_COMMIT_SHA: z.string().default('local'),
