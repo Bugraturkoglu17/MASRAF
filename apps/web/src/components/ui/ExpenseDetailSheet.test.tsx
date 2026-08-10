@@ -5,9 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ExpenseDetailSheet } from './ExpenseDetailSheet';
 
 import { ToastProvider } from '@/components/feedback/toast-context';
+import { AuthProvider } from '@/features/auth/auth-context';
 import { apiFetch } from '@/lib/api-client';
 
-vi.mock('@/lib/api-client', () => ({ apiFetch: vi.fn() }));
+vi.mock('@/lib/api-client', () => ({ apiFetch: vi.fn(), setAccessToken: vi.fn() }));
 
 describe('ExpenseDetailSheet', () => {
   beforeEach(() => {
@@ -40,9 +41,11 @@ describe('ExpenseDetailSheet', () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={queryClient}>
-        <ToastProvider>
-          <ExpenseDetailSheet expenseId="expense-1" onClose={vi.fn()} />
-        </ToastProvider>
+        <AuthProvider>
+          <ToastProvider>
+            <ExpenseDetailSheet expenseId="expense-1" onClose={vi.fn()} />
+          </ToastProvider>
+        </AuthProvider>
       </QueryClientProvider>,
     );
 
