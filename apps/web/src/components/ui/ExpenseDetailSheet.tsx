@@ -489,7 +489,7 @@ export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetPro
                       <Receipt size={12} />
                       ÖDEME DEKONTU {paymentReceipts && `(${paymentReceipts.length})`}
                     </div>
-                    {canUploadReceipt && (
+                    {canUploadReceipt && paymentReceipts && paymentReceipts.length === 0 && (
                       <button
                         type="button"
                         onClick={() => setShowUpload(true)}
