@@ -1,12 +1,14 @@
-import { useQuery } from '@tanstack/react-query';
-import { Download, Eye, FileText, Receipt, X } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Download, Eye, FileText, Receipt, Upload, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { DueDateBadge } from './DueDateBadge';
 import { IbanCopyButton } from './IbanCopyButton';
 import { StatusBadge } from './StatusBadge';
 
+import { ReceiptUploadModal } from '@/components/expenses/ReceiptUploadModal';
 import { useToast } from '@/components/feedback/toast-context';
+import { useAuth } from '@/features/auth/auth-context';
 import { apiFetch } from '@/lib/api-client';
 import { formatTry } from '@/lib/money';
 
@@ -68,9 +70,13 @@ function formatDate(d?: string | null) {
 
 export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetProps): JSX.Element {
   const { showToast } = useToast();
+  const { user } = useAuth();
+  const qc = useQueryClient();
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [viewingId, setViewingId] = useState<string | null>(null);
+  const [showUpload, setShowUpload] = useState(false);
+  const canUploadReceipt = user?.role === 'MANAGER' || user?.role === 'ADMIN';
   const { data: expense, isLoading } = useQuery<ExpenseDetail>({
     queryKey: ['expense-detail', expenseId],
     queryFn: () => apiFetch(`/expenses/${expenseId}`),
@@ -463,18 +469,48 @@ export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetPro
                 <div style={{ marginTop: 16 }}>
                   <div
                     style={{
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: 'var(--color-text-muted)',
-                      marginBottom: 8,
-                      letterSpacing: '0.05em',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 6,
+                      justifyContent: 'space-between',
+                      marginBottom: 8,
                     }}
                   >
-                    <Receipt size={12} />
-                    ÖDEME DEKONTU {paymentReceipts && `(${paymentReceipts.length})`}
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: 'var(--color-text-muted)',
+                        letterSpacing: '0.05em',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}
+                    >
+                      <Receipt size={12} />
+                      ÖDEME DEKONTU {paymentReceipts && `(${paymentReceipts.length})`}
+                    </div>
+                    {canUploadReceipt && (
+                      <button
+                        type="button"
+                        onClick={() => setShowUpload(true)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          padding: '5px 10px',
+                          borderRadius: 8,
+                          border: '1px solid var(--color-primary)',
+                          background: 'transparent',
+                          color: 'var(--color-primary)',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <Upload size={12} />
+                        Dekont Yükle
+                      </button>
+                    )}
                   </div>
                   {!paymentReceipts || paymentReceipts.length === 0 ? (
                     <div
@@ -521,6 +557,17 @@ export function ExpenseDetailSheet({ expenseId, onClose }: ExpenseDetailSheetPro
           )}
         </div>
       </div>
+      {showUpload && (
+        <ReceiptUploadModal
+          expenseId={expenseId}
+          onSuccess={() => {
+            showToast('Ödeme dekontu yüklendi.', 'success');
+            void qc.invalidateQueries({ queryKey: ['payment-receipts', expenseId] });
+            setShowUpload(false);
+          }}
+          onClose={() => setShowUpload(false)}
+        />
+      )}
       {lightboxUrl && (
         <div
           className="img-lightbox-backdrop"

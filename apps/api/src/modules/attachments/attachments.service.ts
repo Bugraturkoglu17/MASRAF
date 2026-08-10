@@ -332,7 +332,7 @@ export class AttachmentsService {
           organizationId,
           expense.userId,
           'Ödeme Dekontu',
-          'Masrafınıza ödeme dekontu eklendi.',
+          `#${expense.expenseCode} numaralı masrafın dekontu yüklendi.`,
           'IN_APP',
           this.prisma,
           { expenseId },
