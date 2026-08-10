@@ -132,10 +132,7 @@ export function UserExpensesPage({
         </div>
 
         {/* Tabs */}
-        <div
-          className={`expense-status-tabs${basePath !== '/expenses' ? ' expense-status-tabs--scroll' : ''}`}
-          role="tablist"
-        >
+        <div className="expense-status-tabs expense-status-tabs--scroll" role="tablist">
           {tabs.map(({ status, label }) => (
             <button
               key={status}
@@ -193,9 +190,10 @@ export function UserExpensesPage({
       {/* Delete confirmation dialog */}
       {deleteTarget && (
         <ConfirmDialog
-          title="Masrafı Sil"
-          description={`"${deleteTarget.title}" masrafını silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`}
-          confirmLabel={deleteMut.isPending ? 'Siliniyor...' : 'Evet, Sil'}
+          title="Taslağı Sil"
+          description="Bu taslağı kalıcı olarak silmek istediğinize emin misiniz?"
+          confirmLabel={deleteMut.isPending ? 'Siliniyor...' : 'Taslağı Sil'}
+          cancelLabel="Vazgeç"
           busy={deleteMut.isPending}
           onConfirm={() => {
             deleteMut.mutate(deleteTarget.id, { onSettled: () => setDeleteTarget(null) });

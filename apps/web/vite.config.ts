@@ -109,6 +109,7 @@ export default defineConfig({
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
+        importScripts: ['push-sw-handler.js'],
         runtimeCaching: [
           {
             // Yalnızca aynı origin'deki statik uygulama varlıkları cache edilir.

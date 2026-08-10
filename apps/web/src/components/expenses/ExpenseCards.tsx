@@ -272,6 +272,7 @@ export function ManagerExpenseCard({
   onApprove,
   onReject,
   onCancel,
+  onDelete,
   busy,
 }: {
   expense: ManagerExpense;
@@ -280,6 +281,7 @@ export function ManagerExpenseCard({
   onApprove?: () => void;
   onReject?: () => void;
   onCancel?: () => void;
+  onDelete?: () => void;
   busy?: boolean;
 }) {
   const initials =
@@ -350,6 +352,18 @@ export function ManagerExpenseCard({
         {onCancel && (
           <button type="button" disabled={busy} onClick={onCancel} className="cancel">
             İptal
+          </button>
+        )}
+        {onDelete && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onDelete}
+            className="mec-delete"
+            aria-label="Sil"
+            title="Masrafı Sil"
+          >
+            <Trash2 size={14} />
           </button>
         )}
       </div>

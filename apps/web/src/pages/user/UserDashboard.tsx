@@ -222,9 +222,10 @@ export function UserDashboard(): JSX.Element {
 
       {deleteTarget && (
         <ConfirmDialog
-          title="Masrafı Sil"
-          description={`"${deleteTarget.title}" masrafını silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`}
-          confirmLabel={deleteMut.isPending ? 'Siliniyor...' : 'Evet, Sil'}
+          title="Taslağı Sil"
+          description="Bu taslağı kalıcı olarak silmek istediğinize emin misiniz?"
+          confirmLabel={deleteMut.isPending ? 'Siliniyor...' : 'Taslağı Sil'}
+          cancelLabel="Vazgeç"
           busy={deleteMut.isPending}
           onConfirm={() => {
             deleteMut.mutate(deleteTarget.id, { onSettled: () => setDeleteTarget(null) });
