@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, CheckCheck } from 'lucide-react';
+import { Bell, CheckCheck, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { useToast } from '@/components/feedback/toast-context';
@@ -22,10 +22,14 @@ export function NotificationsPage(): JSX.Element {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const { data: items = [], isLoading } = useQuery<NotificationItem[]>({
+  const {
+    data: items = [],
+    isLoading,
+    isFetching,
+    refetch,
+  } = useQuery<NotificationItem[]>({
     queryKey: ['notifications'],
     queryFn: () => apiFetch('/notifications'),
-    refetchInterval: 30_000,
   });
 
   const markRead = useMutation({
@@ -64,29 +68,55 @@ export function NotificationsPage(): JSX.Element {
             {unread.length > 0 ? `${unread.length} okunmamış bildirim` : 'Tüm bildirimler okundu'}
           </p>
         </div>
-        {unread.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             type="button"
-            disabled={markAllRead.isPending}
-            onClick={() => markAllRead.mutate()}
+            aria-label="Yenile"
+            disabled={isFetching}
+            onClick={() => void refetch()}
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: 6,
-              padding: '8px 14px',
+              justifyContent: 'center',
+              width: 34,
+              height: 34,
               borderRadius: 8,
               border: '1px solid var(--color-border)',
               background: 'var(--color-surface)',
               color: 'var(--color-text-muted)',
-              fontSize: 13,
-              fontWeight: 500,
-              cursor: 'pointer',
+              cursor: isFetching ? 'not-allowed' : 'pointer',
+              opacity: isFetching ? 0.6 : 1,
             }}
           >
-            <CheckCheck size={15} />
-            Tümünü okundu işaretle
+            <RefreshCw
+              size={15}
+              style={isFetching ? { animation: 'spin 0.8s linear infinite' } : undefined}
+            />
           </button>
-        )}
+          {unread.length > 0 && (
+            <button
+              type="button"
+              disabled={markAllRead.isPending}
+              onClick={() => markAllRead.mutate()}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 14px',
+                borderRadius: 8,
+                border: '1px solid var(--color-border)',
+                background: 'var(--color-surface)',
+                color: 'var(--color-text-muted)',
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: 'pointer',
+              }}
+            >
+              <CheckCheck size={15} />
+              Tümünü okundu işaretle
+            </button>
+          )}
+        </div>
       </div>
 
       {isLoading && (

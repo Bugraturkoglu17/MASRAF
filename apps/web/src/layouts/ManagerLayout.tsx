@@ -45,7 +45,6 @@ export function ManagerLayout(): JSX.Element {
   const { data: notifications } = useQuery<{ readAt: string | null }[]>({
     queryKey: ['notifications'],
     queryFn: () => apiFetch('/notifications'),
-    refetchInterval: 30_000,
   });
   const unreadCount = useMemo(
     () => (notifications ?? []).filter((n) => !n.readAt).length,

@@ -54,7 +54,6 @@ export function UserDashboard(): JSX.Element {
   const { data: notifications = [] } = useQuery<NotificationSummary[]>({
     queryKey: ['notifications'],
     queryFn: () => apiFetch('/notifications'),
-    refetchInterval: 30_000,
   });
   const unreadCount = useMemo(
     () => notifications.filter((notification) => !notification.readAt).length,
@@ -156,7 +155,10 @@ export function UserDashboard(): JSX.Element {
             type="button"
             aria-label="Yenile"
             disabled={isFetching}
-            onClick={() => void refetch()}
+            onClick={() => {
+              void refetch();
+              void qc.refetchQueries({ queryKey: ['notifications'], type: 'active' });
+            }}
             style={{ opacity: isFetching ? 0.6 : 1 }}
           >
             <RefreshCw

@@ -87,7 +87,6 @@ export function ManagerDashboard(): JSX.Element {
   const { data: notifications = [] } = useQuery<NotificationSummary[]>({
     queryKey: ['notifications'],
     queryFn: () => apiFetch('/notifications'),
-    refetchInterval: 30_000,
   });
   const unreadCount = useMemo(
     () => notifications.filter((notification) => !notification.readAt).length,
