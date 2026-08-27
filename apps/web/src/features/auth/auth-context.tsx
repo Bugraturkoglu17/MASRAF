@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import { apiFetch, setAccessToken } from '@/lib/api-client';
+import { ApiError, apiFetch, setAccessToken } from '@/lib/api-client';
 import { queryClient } from '@/lib/query-client';
 
 export type AppRole = 'USER' | 'MANAGER' | 'ADMIN';
@@ -47,6 +47,15 @@ async function fetchCurrentUser(signal?: AbortSignal): Promise<CurrentUser> {
   return apiFetch<CurrentUser>('/users/me', { signal });
 }
 
+const SESSION_RETRY_DELAY_MS = 300;
+
+// Ağ hatası (statusCode 0) veya sunucu hatası (5xx) — Neon scale-to-zero'dan
+// uyanırken oluşabilecek geçici arızalarla eşleşir. 401 burada YOK: geçersiz/
+// olmayan bir oturum anlamına gelir, tekrar denemek sonucu değiştirmez.
+function isTransientAuthError(error: unknown): boolean {
+  return error instanceof ApiError && (error.statusCode === 0 || error.statusCode >= 500);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }): JSX.Element {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
@@ -55,18 +64,38 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
     let cancelled = false;
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 8_000);
+
+    const attemptSession = async (): Promise<CurrentUser> => {
+      const tokens = await apiFetch<LoginResponse>('/auth/refresh', {
+        method: 'POST',
+        skipAuthRetry: true,
+        signal: controller.signal,
+      });
+      setAccessToken(tokens.accessToken);
+      return fetchCurrentUser(controller.signal);
+    };
+
     (async () => {
       try {
-        const tokens = await apiFetch<LoginResponse>('/auth/refresh', {
-          method: 'POST',
-          skipAuthRetry: true,
-          signal: controller.signal,
-        });
-        setAccessToken(tokens.accessToken);
-        const me = await fetchCurrentUser(controller.signal);
+        const me = await attemptSession();
         if (!cancelled) setUser(me);
-      } catch {
-        if (!cancelled) setAccessToken(null);
+      } catch (error) {
+        // Sonsuz döngü yok: yalnızca 1 tekrar deneme, yalnızca geçici
+        // ağ/sunucu hatalarında. Gerçek "oturum yok" (401) durumunda
+        // doğrudan giriş ekranına düşülür.
+        if (isTransientAuthError(error) && !cancelled) {
+          await new Promise((resolve) => window.setTimeout(resolve, SESSION_RETRY_DELAY_MS));
+        }
+        if (isTransientAuthError(error) && !cancelled) {
+          try {
+            const me = await attemptSession();
+            if (!cancelled) setUser(me);
+          } catch {
+            if (!cancelled) setAccessToken(null);
+          }
+        } else if (!cancelled) {
+          setAccessToken(null);
+        }
       } finally {
         window.clearTimeout(timeout);
         if (!cancelled) setIsInitializing(false);
