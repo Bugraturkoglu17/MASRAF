@@ -65,10 +65,22 @@ describe('HealthController', () => {
   });
 
   describe('GET /health/ready', () => {
-    it('readiness check sonucunu döner', async () => {
+    it('DB sorgusu atmadan status ok ve timestamp döner (Northflank probe hedefi)', () => {
+      const result = controller.ready();
+
+      expect(result.status).toBe('ok');
+      expect(result.timestamp).toBeDefined();
+      expect(new Date(result.timestamp).toISOString()).toBe(result.timestamp);
+      expect(healthCheckService.check).not.toHaveBeenCalled();
+      expect(databaseIndicator.check).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /health/db', () => {
+    it('veritabanı erişilebilirlik sonucunu döner', async () => {
       healthCheckService.check.mockResolvedValueOnce(healthResult() as never);
 
-      const result = await controller.ready();
+      const result = await controller.db();
 
       expect(result.status).toBe('ok');
       expect(healthCheckService.check).toHaveBeenCalledTimes(1);
@@ -80,7 +92,7 @@ describe('HealthController', () => {
         new Error('Veritabanı bağlantısı sağlanamadı'),
       );
 
-      await expect(controller.ready()).rejects.toThrow('Veritabanı bağlantısı sağlanamadı');
+      await expect(controller.db()).rejects.toThrow('Veritabanı bağlantısı sağlanamadı');
     });
   });
 

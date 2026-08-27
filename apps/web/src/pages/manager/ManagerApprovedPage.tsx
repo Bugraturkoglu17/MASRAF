@@ -22,7 +22,6 @@ export function ManagerApprovedPage(): JSX.Element {
   const { data, isLoading } = useQuery<PagedResult>({
     queryKey: ['manager-approved'],
     queryFn: () => apiFetch('/expenses/manager/approved?limit=50'),
-    refetchInterval: 30000,
   });
 
   const deleteMut = useMutation({

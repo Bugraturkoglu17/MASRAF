@@ -100,7 +100,6 @@ export function ManagerDashboard(): JSX.Element {
   const { data: counts, refetch: refetchCounts } = useQuery<ManagerCounts>({
     queryKey: ['manager-counts'],
     queryFn: () => apiFetch('/expenses/manager/counts'),
-    refetchInterval: 30_000,
   });
 
   const {
@@ -111,7 +110,6 @@ export function ManagerDashboard(): JSX.Element {
   } = useQuery<PagedResult>({
     queryKey: ['manager-pending', apiSort],
     queryFn: () => apiFetch(`/expenses/manager/pending?limit=100&sort=${apiSort}`),
-    refetchInterval: 15_000,
   });
 
   const categories = useMemo(() => {

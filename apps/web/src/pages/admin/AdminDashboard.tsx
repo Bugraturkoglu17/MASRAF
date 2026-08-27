@@ -33,7 +33,6 @@ export function AdminDashboard(): JSX.Element {
   const { data: stats, isLoading } = useQuery<AdminStats>({
     queryKey: ['admin', 'stats'],
     queryFn: () => apiFetch('/users/admin-stats'),
-    refetchInterval: 30000,
   });
 
   const cards = [

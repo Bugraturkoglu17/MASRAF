@@ -52,13 +52,11 @@ export function UserExpensesPage({
   const { data, isLoading } = useQuery<PagedResult>({
     queryKey: ['expenses', activeStatus],
     queryFn: () => apiFetch(`/expenses?status=${activeStatus}&limit=50`),
-    refetchInterval: 15000,
   });
 
   const { data: counts } = useQuery<ExpenseCounts>({
     queryKey: ['expense-counts'],
     queryFn: () => apiFetch('/expenses/counts'),
-    refetchInterval: 30000,
   });
 
   const countMap: Record<Status, number | undefined> = {

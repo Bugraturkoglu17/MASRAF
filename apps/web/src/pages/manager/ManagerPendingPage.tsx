@@ -50,7 +50,6 @@ export function ManagerPendingPage(): JSX.Element {
   const { data, isLoading } = useQuery<PagedResult>({
     queryKey: ['manager-pending', apiSort],
     queryFn: () => apiFetch(`/expenses/manager/pending?limit=100&sort=${apiSort}`),
-    refetchInterval: 10000,
   });
 
   const filtered = useMemo(() => {

@@ -22,7 +22,6 @@ export function ManagerRejectedPage(): JSX.Element {
   const { data, isLoading } = useQuery<PagedResult>({
     queryKey: ['manager-rejected'],
     queryFn: () => apiFetch('/expenses/manager/rejected?limit=50'),
-    refetchInterval: 30000,
   });
 
   const deleteMut = useMutation({

@@ -13,7 +13,13 @@ import type { AppConfig } from './config/configuration';
 
 const API_PREFIX = 'api/v1';
 // Health check'ler platform prob'ları (Northflank vb.) için prefix dışında kalır.
-const PREFIX_EXCLUDED_ROUTES = ['health', 'health/live', 'health/ready', 'health/storage'];
+const PREFIX_EXCLUDED_ROUTES = [
+  'health',
+  'health/live',
+  'health/ready',
+  'health/db',
+  'health/storage',
+];
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });

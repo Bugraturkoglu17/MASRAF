@@ -62,16 +62,14 @@ export function UserDashboard(): JSX.Element {
 
   const activeDetailId = detailId ?? params.get('expense');
 
-  const { data: counts } = useQuery<Counts>({
+  const { data: counts, refetch: refetchCounts } = useQuery<Counts>({
     queryKey: ['expense-counts'],
     queryFn: () => apiFetch('/expenses/counts'),
-    refetchInterval: 10000,
   });
 
   const { data, isLoading, isFetching, refetch } = useQuery<PagedResult>({
     queryKey: ['expenses-home', activeStatus],
     queryFn: () => apiFetch(`/expenses?status=${activeStatus}&limit=30`),
-    refetchInterval: 15000,
   });
 
   const deleteMut = useMutation({
@@ -157,6 +155,7 @@ export function UserDashboard(): JSX.Element {
             disabled={isFetching}
             onClick={() => {
               void refetch();
+              void refetchCounts();
               void qc.refetchQueries({ queryKey: ['notifications'], type: 'active' });
             }}
             style={{ opacity: isFetching ? 0.6 : 1 }}

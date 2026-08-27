@@ -12,7 +12,7 @@ Bu adımlar kullanıcı tarafından panelde uygulanmalıdır; repository hazırl
 2. Build context `.`, Dockerfile `apps/api/Dockerfile`, internal port `4000`.
 3. Public endpoint kapalı; web ile aynı project/network kullanılır.
 4. Secret Group'u bağla; non-secret `NODE_ENV`, `APP_ENVIRONMENT`, `PORT`, `APP_VERSION`, `APP_COMMIT_SHA`, `APP_BUILD_DATE`, `LOG_LEVEL` ekle.
-5. Liveness `/health/live`; readiness `/health/ready`; R2 alarmı `/health/storage`.
+5. Liveness `/health/live`; readiness `/health/ready` (DB sorgusu ATMAZ — bkz. not); R2 alarmı `/health/storage`. Gerçek PostgreSQL erişilebilirliğini kontrol eden `/health/db` yalnızca manuel/monitoring amaçlıdır, Northflank probe'una bağlanmaz (sürekli DB sorgusu Neon'un scale-to-zero yapmasını engeller).
 6. Başlangıç 0.5 vCPU/512 MB, 10 dakika deployment timeout, failure restart.
 
 ## masraf-web

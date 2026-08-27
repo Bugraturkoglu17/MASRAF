@@ -33,7 +33,6 @@ export function UserApprovalsPage(): JSX.Element {
   const { data, isLoading } = useQuery<PagedResult>({
     queryKey: ['expenses', active],
     queryFn: () => apiFetch(`/expenses?status=${active}&limit=50`),
-    refetchInterval: 15000,
   });
   const { data: counts } = useQuery<Counts>({
     queryKey: ['expense-counts'],
